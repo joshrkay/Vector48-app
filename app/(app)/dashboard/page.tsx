@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 
 const stats = [
-  { label: "Calls Handled", value: "24", sub: "This week" },
-  { label: "Leads Contacted", value: "12", sub: "This week" },
-  { label: "Reviews Sent", value: "8", sub: "This week" },
-  { label: "Bookings Confirmed", value: "6", sub: "This week" },
+  { label: "Calls Handled", value: "0" },
+  { label: "Leads Contacted", value: "0" },
+  { label: "Reviews Sent", value: "0" },
+  { label: "Bookings Confirmed", value: "0" },
 ];
 
 function getGreeting(): string {
@@ -54,7 +54,7 @@ export default async function DashboardPage() {
               {stat.value}
             </p>
             <p className="text-[12px] text-[var(--text-secondary)] mt-1">
-              {stat.sub}
+              This week
             </p>
           </div>
         ))}
@@ -63,7 +63,7 @@ export default async function DashboardPage() {
       {/* Activity feed placeholder */}
       <div className="bg-gray-50 rounded-2xl p-8 mt-6 flex items-center justify-center min-h-[200px]">
         <p className="text-[var(--text-secondary)] text-sm">
-          Activity feed coming soon
+          No activity yet. Activate a recipe to get started.
         </p>
       </div>
     </div>
