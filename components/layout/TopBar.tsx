@@ -16,18 +16,29 @@ const pageTitles: Record<string, string> = {
 };
 
 function getPageTitle(pathname: string): string {
-  // Exact match first
   if (pageTitles[pathname]) return pageTitles[pathname];
-  // Check prefix matches (e.g., /crm/contacts/[id])
   const match = Object.entries(pageTitles).find(([path]) =>
     pathname.startsWith(path + "/")
   );
   return match ? match[1] : "Vector 48";
 }
 
-export function TopBar() {
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase() || "V8";
+}
+
+interface TopBarProps {
+  businessName: string;
+}
+
+export function TopBar({ businessName }: TopBarProps) {
   const pathname = usePathname();
   const title = getPageTitle(pathname);
+  const initials = businessName ? getInitials(businessName) : "V8";
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-[var(--v48-border)] px-6">
@@ -36,9 +47,9 @@ export function TopBar() {
         <button className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
           <Bell size={20} strokeWidth={1.5} />
         </button>
-        <Avatar className="h-8 w-8">
+        <Avatar className="h-8 w-8" title={businessName}>
           <AvatarFallback className="bg-[var(--v48-accent)] text-white text-xs font-medium">
-            V8
+            {getInitials(businessName)}
           </AvatarFallback>
         </Avatar>
       </div>
