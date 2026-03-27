@@ -1,5 +1,5 @@
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
-import { SignOutButton } from "@/components/SignOutButton";
 
 const stats = [
   { label: "Calls Handled", value: "0" },
@@ -9,9 +9,9 @@ const stats = [
 ];
 
 function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
+  const hour = new Date().getUTCHours();
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
   return "Good evening";
 }
 
@@ -22,28 +22,23 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let businessName = "";
-  if (user) {
-    const { data: account } = await supabase
-      .from("accounts")
-      .select("business_name")
-      .single();
-    businessName = account?.business_name ?? "";
+  if (!user) {
+    redirect("/login");
   }
 
-  const greeting = getGreeting();
-  const displayGreeting = businessName
-    ? `${greeting}, ${businessName}`
-    : greeting;
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("business_name")
+    .eq("owner_user_id", user.id)
+    .single();
+
+  const businessName = account?.business_name || "your business";
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="font-heading font-bold text-[28px]">
-          {displayGreeting}
-        </h1>
-        <SignOutButton />
-      </div>
+      <h1 className="font-heading font-bold text-[28px]">
+        {getGreeting()}, {businessName}
+      </h1>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">

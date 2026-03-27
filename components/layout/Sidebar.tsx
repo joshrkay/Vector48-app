@@ -38,11 +38,6 @@ const bottomNavItems: NavItem[] = [
   { label: "Billing", href: "/billing", icon: CreditCard },
 ];
 
-interface SidebarProps {
-  planSlug: string;
-  trialDaysLeft: number;
-}
-
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   const isActive =
     pathname === item.href || pathname.startsWith(item.href + "/");
@@ -64,8 +59,22 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   );
 }
 
-export function Sidebar({ planSlug, trialDaysLeft }: SidebarProps) {
+interface SidebarProps {
+  planSlug: string;
+  trialEndsAt: string | null;
+}
+
+export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
   const pathname = usePathname();
+
+  const isTrial = planSlug === "trial";
+  let daysLeft = 0;
+  if (isTrial && trialEndsAt) {
+    daysLeft = Math.max(
+      0,
+      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86_400_000)
+    );
+  }
 
   return (
     <aside className="hidden md:flex md:w-60 md:flex-col fixed left-0 top-0 h-screen bg-[var(--brand)] text-white z-40">
@@ -100,10 +109,17 @@ export function Sidebar({ planSlug, trialDaysLeft }: SidebarProps) {
         <div className="flex-1" />
 
         {/* Trial badge */}
-        {planSlug === "trial" && (
+        {isTrial && (
           <div className="mx-4 mb-3">
-            <div className="rounded-full bg-amber-500/20 px-3 py-1.5 text-center text-[12px] text-amber-400">
-              {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in trial
+            <div
+              className={cn(
+                "rounded-full px-3 py-1.5 text-center text-[12px]",
+                daysLeft <= 3
+                  ? "bg-amber-500/20 text-amber-400"
+                  : "bg-white/10 text-white/70"
+              )}
+            >
+              {daysLeft} days left in trial
             </div>
           </div>
         )}
