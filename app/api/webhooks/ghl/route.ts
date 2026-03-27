@@ -26,13 +26,16 @@ function verifyToken(provided: string | null, expected: string): boolean {
 }
 
 export async function POST(req: Request) {
-  // 1. Verify webhook token
+  // 1. Verify webhook token — secret must be configured
   const webhookSecret = process.env.GHL_WEBHOOK_SECRET;
-  if (webhookSecret) {
-    const signature = req.headers.get("x-ghl-signature");
-    if (!verifyToken(signature, webhookSecret)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!webhookSecret) {
+    console.error("[ghl-webhook] GHL_WEBHOOK_SECRET is not set. Rejecting request.");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const signature = req.headers.get("x-ghl-signature");
+  if (!verifyToken(signature, webhookSecret)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   // 2. Parse body
@@ -57,7 +60,7 @@ export async function POST(req: Request) {
   const { data: account, error: accountError } = await supabase
     .from("accounts")
     .select("id")
-    .or(`ghl_location_id.eq.${locationId},ghl_sub_account_id.eq.${locationId}`)
+    .or(`ghl_location_id.eq."${locationId}",ghl_sub_account_id.eq."${locationId}"`)
     .single();
 
   if (accountError || !account) {

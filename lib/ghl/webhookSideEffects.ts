@@ -142,7 +142,7 @@ async function handleCallCompleted(
     event_type: "alert",
     ghl_event_type: event.ghl_event_type,
     contact_id: event.contact_id,
-    summary: `Flagged call: potential complaint from ${event.summary.split("with ")[1]?.split(" —")[0] ?? "contact"}`,
+    summary: `Flagged call: potential complaint from contact ${event.contact_id ?? "(unknown)"}`,
     detail: {
       reason: "negative_sentiment_detected",
       keywords: matchedKeywords,
