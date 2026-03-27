@@ -92,15 +92,14 @@ const STATE_TIMEZONE: Record<string, string> = {
   ME: "America/New_York",
 };
 
+const STATE_REGEX = new RegExp(
+  `\\b(${Object.keys(STATE_TIMEZONE).join("|")})\\b`,
+);
+
 function inferTimezone(serviceArea: string | null): string {
   if (!serviceArea) return "America/New_York";
-  // Try to find a US state abbreviation in the service area string
-  const upper = serviceArea.toUpperCase();
-  for (const [abbr, tz] of Object.entries(STATE_TIMEZONE)) {
-    // Match state abbreviation as a whole word
-    const regex = new RegExp(`\\b${abbr}\\b`);
-    if (regex.test(upper)) return tz;
-  }
+  const match = serviceArea.toUpperCase().match(STATE_REGEX);
+  if (match) return STATE_TIMEZONE[match[1]] ?? "America/New_York";
   return "America/New_York";
 }
 

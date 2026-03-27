@@ -10,7 +10,11 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12; // 96-bit IV recommended for GCM
 const AUTH_TAG_LENGTH = 16;
 
+let keyCache: Buffer | undefined;
+
 function getKey(): Buffer {
+  if (keyCache) return keyCache;
+
   const hex = process.env.GHL_ENCRYPTION_KEY;
   if (!hex) {
     throw new Error(
@@ -23,7 +27,8 @@ function getKey(): Buffer {
       `GHL_ENCRYPTION_KEY must be 32 bytes (64 hex chars). Got ${buf.length} bytes.`,
     );
   }
-  return buf;
+  keyCache = buf;
+  return keyCache;
 }
 
 /**
