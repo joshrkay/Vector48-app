@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const AUTH_ROUTES = ["/login", "/signup"];
+const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
 const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding"];
 const TRIAL_ALLOWED_ROUTES = ["/billing", "/settings"];
 
@@ -9,9 +9,7 @@ export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    // NEXT_PUBLIC_SUPABASE_URL
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    // NEXT_PUBLIC_SUPABASE_ANON_KEY
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
@@ -19,7 +17,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({ request });
@@ -37,6 +35,11 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+
+  // Allow API routes through — they handle their own auth
+  if (pathname.startsWith("/api")) {
+    return supabaseResponse;
+  }
 
   // Not authenticated — redirect to login for protected routes
   if (!user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
@@ -79,6 +82,7 @@ export async function middleware(request: NextRequest) {
       if (trialExpired && isTrialPlan && !isAllowedRoute) {
         const url = request.nextUrl.clone();
         url.pathname = "/billing";
+        url.searchParams.set("reason", "trial_expired");
         return NextResponse.redirect(url);
       }
     }
