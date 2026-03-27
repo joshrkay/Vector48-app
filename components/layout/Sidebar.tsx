@@ -13,75 +13,107 @@ import {
   CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
 
-const navItems = [
+interface NavItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+}
+
+const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Recipes", href: "/recipes", icon: Zap },
-  { label: "Contacts", href: "/crm/contacts", icon: Users, group: "CRM" },
-  { label: "Inbox", href: "/crm/inbox", icon: MessageSquare, group: "CRM" },
-  { label: "Pipeline", href: "/crm/pipeline", icon: Kanban, group: "CRM" },
-  { label: "Calendar", href: "/crm/calendar", icon: CalendarDays, group: "CRM" },
+];
+
+const crmNavItems: NavItem[] = [
+  { label: "Contacts", href: "/crm/contacts", icon: Users },
+  { label: "Inbox", href: "/crm/inbox", icon: MessageSquare },
+  { label: "Pipeline", href: "/crm/pipeline", icon: Kanban },
+  { label: "Calendar", href: "/crm/calendar", icon: CalendarDays },
+];
+
+const bottomNavItems: NavItem[] = [
   { label: "Settings", href: "/settings", icon: Settings },
   { label: "Billing", href: "/billing", icon: CreditCard },
 ];
 
+// Placeholder trial data — will be replaced with real data later
+const trialDaysLeft = 14;
+const planSlug = "trial";
+
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const isActive =
+    pathname === item.href || pathname.startsWith(item.href + "/");
+  const Icon = item.icon;
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-3 rounded-lg px-4 py-2.5 mx-2 text-sm transition-colors",
+        isActive
+          ? "border-l-2 border-[var(--v48-accent)] bg-[var(--v48-accent)]/15 text-[var(--v48-accent)] font-medium"
+          : "text-white/70 hover:bg-white/5 hover:text-white"
+      )}
+    >
+      <Icon size={18} strokeWidth={1.5} />
+      {item.label}
+    </Link>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
 
-  let currentGroup: string | undefined;
-
   return (
-    <aside className="hidden lg:flex lg:w-60 lg:flex-col bg-brand text-white h-screen sticky top-0">
-      {/* Logo */}
+    <aside className="hidden md:flex md:w-60 md:flex-col fixed left-0 top-0 h-screen bg-[var(--brand)] text-white z-40">
+      {/* Wordmark */}
       <div className="flex h-16 items-center px-6">
-        <span className="font-heading text-xl font-bold tracking-tight">
+        <span className="font-heading text-lg font-bold tracking-tight">
           Vector 48
         </span>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {navItems.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(item.href + "/");
-          const Icon = item.icon;
-
-          // Render group label if this is a new group
-          const showGroupLabel =
-            item.group && item.group !== currentGroup;
-          if (item.group) currentGroup = item.group;
-
-          return (
-            <div key={item.href}>
-              {showGroupLabel && (
-                <p className="mt-6 mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-white/50">
-                  {item.group}
-                </p>
-              )}
-              <Link
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "border-l-2 border-accent bg-accent/10 text-white"
-                    : "text-white/70 hover:bg-white/5 hover:text-white"
-                )}
-              >
-                <Icon size={20} strokeWidth={1.5} />
-                {item.label}
-              </Link>
-            </div>
-          );
-        })}
-      </nav>
-
-      {/* Trial badge — placeholder, will be wired to account data */}
-      <div className="px-4 pb-6">
-        <div className="rounded-lg bg-white/10 px-4 py-3 text-center text-sm">
-          <p className="text-white/60">Trial</p>
-          <p className="font-semibold text-accent">14 days remaining</p>
+      {/* Main nav */}
+      <nav className="flex-1 flex flex-col py-2">
+        <div className="space-y-1">
+          {mainNavItems.map((item) => (
+            <NavLink key={item.href} item={item} pathname={pathname} />
+          ))}
         </div>
-      </div>
+
+        {/* CRM section */}
+        <div className="mt-4">
+          <p className="mx-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+            CRM
+          </p>
+          <div className="space-y-1">
+            {crmNavItems.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} />
+            ))}
+          </div>
+        </div>
+
+        {/* Spacer to push bottom items down */}
+        <div className="flex-1" />
+
+        {/* Trial badge */}
+        {planSlug === "trial" && (
+          <div className="mx-4 mb-3">
+            <div className="rounded-full bg-amber-500/20 px-3 py-1.5 text-center text-[12px] text-amber-400">
+              {trialDaysLeft} days left in trial
+            </div>
+          </div>
+        )}
+
+        {/* Bottom nav */}
+        <div className="space-y-1 pb-4">
+          {bottomNavItems.map((item) => (
+            <NavLink key={item.href} item={item} pathname={pathname} />
+          ))}
+        </div>
+      </nav>
     </aside>
   );
 }

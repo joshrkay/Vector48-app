@@ -52,14 +52,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Trial expiry check for authenticated users
+  // Consolidated account checks for authenticated users
   if (user) {
     const { data: account } = await supabase
       .from("accounts")
-      .select("trial_ends_at, plan_slug")
+      .select("trial_ends_at, plan_slug, onboarding_done_at")
       .single();
 
     if (account) {
+      // Onboarding gate — force incomplete onboarding to /onboarding
+      if (!account.onboarding_done_at && !pathname.startsWith("/onboarding")) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/onboarding";
+        return NextResponse.redirect(url);
+      }
+
+      // Trial expiry check
       const trialExpired =
         account.trial_ends_at &&
         new Date(account.trial_ends_at) < new Date();
