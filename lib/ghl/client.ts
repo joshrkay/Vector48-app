@@ -4,37 +4,38 @@
 // ---------------------------------------------------------------------------
 
 import type { GHLErrorBody } from "./types";
+import { acquireRateLimit } from "./rateLimiter";
 
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = "2021-07-28";
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1_000;
 
-// ── Rate-limiter (token bucket: 100 req / 10 s) ───────────────────────────
+// ── Fallback rate-limiter for requests without an accountId ───────────────
+// Uses a simple token bucket (60 req / 60 s) matching the "low" tier budget.
 
-const BUCKET_SIZE = 100;
-const REFILL_INTERVAL_MS = 10_000;
+const FALLBACK_BUCKET_SIZE = 60;
+const FALLBACK_WINDOW_MS = 60_000;
 
-let tokens = BUCKET_SIZE;
-let lastRefill = Date.now();
+let fallbackTokens = FALLBACK_BUCKET_SIZE;
+let fallbackWindowStart = Date.now();
 
-function consumeToken(): boolean {
+function consumeFallbackToken(): boolean {
   const now = Date.now();
-  const elapsed = now - lastRefill;
-  if (elapsed >= REFILL_INTERVAL_MS) {
-    tokens = BUCKET_SIZE;
-    lastRefill = now;
+  if (now - fallbackWindowStart >= FALLBACK_WINDOW_MS) {
+    fallbackTokens = FALLBACK_BUCKET_SIZE;
+    fallbackWindowStart = now;
   }
-  if (tokens > 0) {
-    tokens--;
+  if (fallbackTokens > 0) {
+    fallbackTokens--;
     return true;
   }
   return false;
 }
 
-async function waitForToken(): Promise<void> {
-  while (!consumeToken()) {
-    const waitMs = REFILL_INTERVAL_MS - (Date.now() - lastRefill);
+async function waitForFallbackToken(): Promise<void> {
+  while (!consumeFallbackToken()) {
+    const waitMs = FALLBACK_WINDOW_MS - (Date.now() - fallbackWindowStart);
     await new Promise((r) => setTimeout(r, Math.max(waitMs, 100)));
   }
 }
@@ -63,6 +64,8 @@ export interface GHLClientOptions {
   locationId?: string;
   /** Override base URL (useful for testing). */
   baseUrl?: string;
+  /** Account ID for tier-aware rate limiting. If omitted, uses fallback budget. */
+  accountId?: string;
 }
 
 // ── Core request function ──────────────────────────────────────────────────
@@ -93,7 +96,11 @@ async function request<T>(
     params?: Record<string, string | number | boolean | undefined>;
   },
 ): Promise<T> {
-  await waitForToken();
+  if (opts?.accountId) {
+    await acquireRateLimit(opts.accountId);
+  } else {
+    await waitForFallbackToken();
+  }
 
   const baseUrl = resolveBaseUrl(opts);
   const url = new URL(path, baseUrl);
