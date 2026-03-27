@@ -85,11 +85,27 @@ CREATE TABLE account_users (
 
 ALTER TABLE account_users ENABLE ROW LEVEL SECURITY;
 
+-- Recipes — shared catalog of automation recipes
+CREATE TABLE recipes (
+  slug        text PRIMARY KEY,
+  name        text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  category    text NOT NULL DEFAULT 'general',
+  vertical    vertical,  -- NULL = available to all verticals
+  is_active   boolean NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "recipes_public_read" ON recipes
+  FOR SELECT USING (true);
+
 -- Recipe activations — per-customer recipe state
 CREATE TABLE recipe_activations (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id        uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  recipe_slug       text NOT NULL,
+  recipe_slug       text NOT NULL REFERENCES recipes(slug),
   status            recipe_status NOT NULL DEFAULT 'active',
   config            jsonb,
   n8n_workflow_id   text,
@@ -100,7 +116,7 @@ CREATE TABLE recipe_activations (
 ALTER TABLE recipe_activations ENABLE ROW LEVEL SECURITY;
 
 -- Automation events — activity feed
-CREATE TABLE automation_events (
+CREATE TABLE event_log (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id    uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   recipe_slug   text NOT NULL,
@@ -110,7 +126,7 @@ CREATE TABLE automation_events (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
-ALTER TABLE automation_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_log ENABLE ROW LEVEL SECURITY;
 
 -- Integrations — third-party connections
 CREATE TABLE integrations (
@@ -180,12 +196,12 @@ CREATE POLICY "recipe_activations_delete" ON recipe_activations FOR DELETE USING
   auth.uid() IN (SELECT user_id FROM account_users WHERE account_id = recipe_activations.account_id)
 );
 
--- automation_events
-CREATE POLICY "automation_events_select" ON automation_events FOR SELECT USING (
-  auth.uid() IN (SELECT user_id FROM account_users WHERE account_id = automation_events.account_id)
+-- event_log
+CREATE POLICY "event_log_select" ON event_log FOR SELECT USING (
+  auth.uid() IN (SELECT user_id FROM account_users WHERE account_id = event_log.account_id)
 );
-CREATE POLICY "automation_events_insert" ON automation_events FOR INSERT WITH CHECK (
-  auth.uid() IN (SELECT user_id FROM account_users WHERE account_id = automation_events.account_id)
+CREATE POLICY "event_log_insert" ON event_log FOR INSERT WITH CHECK (
+  auth.uid() IN (SELECT user_id FROM account_users WHERE account_id = event_log.account_id)
 );
 
 -- integrations
@@ -209,15 +225,15 @@ CREATE POLICY "integrations_delete" ON integrations FOR DELETE USING (
 CREATE INDEX idx_accounts_owner ON accounts(owner_user_id);
 CREATE INDEX idx_account_users_user ON account_users(user_id);
 CREATE INDEX idx_recipe_activations_account ON recipe_activations(account_id);
-CREATE INDEX idx_automation_events_account ON automation_events(account_id);
-CREATE INDEX idx_automation_events_created ON automation_events(account_id, created_at DESC);
+CREATE INDEX idx_event_log_account ON event_log(account_id);
+CREATE INDEX idx_event_log_created ON event_log(account_id, created_at DESC);
 CREATE INDEX idx_integrations_account ON integrations(account_id);
 
 -- =============================================================================
 -- REALTIME
 -- =============================================================================
 
-ALTER PUBLICATION supabase_realtime ADD TABLE automation_events;
+ALTER PUBLICATION supabase_realtime ADD TABLE event_log;
 
 -- =============================================================================
 -- SEED DATA — pricing tiers
