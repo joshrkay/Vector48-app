@@ -2,45 +2,8 @@
 // GoHighLevel API v2 — Typed Client (server-only)
 // ---------------------------------------------------------------------------
 
-import "server-only";
-
-import {
-  GHLRateLimitError,
-  GHLAuthError,
-  toGHLError,
-  type GHLApiError,
-} from "./errors";
-import type {
-  GHLContact,
-  GHLContactsListParams,
-  GHLContactsSearchParams,
-  GHLCreateContactPayload,
-  GHLUpdateContactPayload,
-  GHLNote,
-  GHLCustomField,
-  GHLConversation,
-  GHLConversationsListParams,
-  GHLMessage,
-  GHLMessagesListParams,
-  GHLSendMessagePayload,
-  GHLOpportunity,
-  GHLOpportunitiesListParams,
-  GHLCreateOpportunityPayload,
-  GHLPipeline,
-  GHLAppointment,
-  GHLAppointmentsListParams,
-  GHLCreateAppointmentPayload,
-  GHLUpdateAppointmentPayload,
-  GHLCalendar,
-  GHLCampaign,
-  GHLLocation,
-  GHLCreateLocationPayload,
-  GHLWebhook,
-  GHLCreateWebhookPayload,
-  GHLPaginatedResponse,
-} from "./types";
-
-// ── Constants ──────────────────────────────────────────────────────────────
+import type { GHLErrorBody } from "./types";
+import { acquireRateLimit } from "./rateLimiter";
 
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = "2021-07-28";
@@ -49,22 +12,32 @@ const RETRY_BACKOFF_MS = [1_000, 2_000, 4_000];
 const RATE_LIMIT_PER_MIN = 120;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
-// ── Per-location rate limiter ──────────────────────────────────────────────
+// ── Fallback rate-limiter for requests without an accountId ───────────────
+// Uses a simple token bucket (60 req / 60 s) matching the "low" tier budget.
 
-interface RateBucket {
-  count: number;
-  resetAt: number;
+const FALLBACK_BUCKET_SIZE = 60;
+const FALLBACK_WINDOW_MS = 60_000;
+
+let fallbackTokens = FALLBACK_BUCKET_SIZE;
+let fallbackWindowStart = Date.now();
+
+function consumeFallbackToken(): boolean {
+  const now = Date.now();
+  if (now - fallbackWindowStart >= FALLBACK_WINDOW_MS) {
+    fallbackTokens = FALLBACK_BUCKET_SIZE;
+    fallbackWindowStart = now;
+  }
+  if (fallbackTokens > 0) {
+    fallbackTokens--;
+    return true;
+  }
+  return false;
 }
 
-const rateBuckets = new Map<string, RateBucket>();
-
-function checkRateLimit(key: string): void {
-  const now = Date.now();
-  let bucket = rateBuckets.get(key);
-
-  if (!bucket || now >= bucket.resetAt) {
-    bucket = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
-    rateBuckets.set(key, bucket);
+async function waitForFallbackToken(): Promise<void> {
+  while (!consumeFallbackToken()) {
+    const waitMs = FALLBACK_WINDOW_MS - (Date.now() - fallbackWindowStart);
+    await new Promise((r) => setTimeout(r, Math.max(waitMs, 100)));
   }
 
   if (bucket.count >= RATE_LIMIT_PER_MIN) {
@@ -78,9 +51,15 @@ function checkRateLimit(key: string): void {
 
 // ── Client options ─────────────────────────────────────────────────────────
 
-interface LocationClientOpts {
-  locationId: string;
-  token: string;
+export interface GHLClientOptions {
+  /** Private Integration Token. Falls back to GHL_AGENCY_API_KEY env var. */
+  apiKey?: string;
+  /** Location ID. Falls back to GHL_AGENCY_ID env var. */
+  locationId?: string;
+  /** Override base URL (useful for testing). */
+  baseUrl?: string;
+  /** Account ID for tier-aware rate limiting. If omitted, uses fallback budget. */
+  accountId?: string;
 }
 
 interface AgencyClientOpts {
@@ -99,20 +78,24 @@ function log(
   level: "info" | "warn" | "error",
   method: string,
   path: string,
-  extra?: Record<string, unknown>,
-): void {
-  const entry = {
-    ts: new Date().toISOString(),
-    level,
-    service: "ghl",
-    method,
-    path,
-    ...extra,
-  };
-  if (level === "error") {
-    console.error(JSON.stringify(entry));
+  opts?: GHLClientOptions & {
+    body?: unknown;
+    params?: Record<string, string | number | boolean | undefined>;
+  },
+): Promise<T> {
+  if (opts?.accountId) {
+    await acquireRateLimit(opts.accountId);
   } else {
-    console.log(JSON.stringify(entry));
+    await waitForFallbackToken();
+  }
+
+  const baseUrl = resolveBaseUrl(opts);
+  const url = new URL(path, baseUrl);
+
+  if (opts?.params) {
+    for (const [k, v] of Object.entries(opts.params)) {
+      if (v !== undefined) url.searchParams.set(k, String(v));
+    }
   }
 }
 

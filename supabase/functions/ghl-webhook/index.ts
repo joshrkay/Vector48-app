@@ -85,6 +85,29 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Notify the Next.js app to bust its in-memory cache for this account.
+    const nextAppUrl = Deno.env.get("NEXT_APP_URL");
+    const cacheSecret = Deno.env.get("GHL_CACHE_INVALIDATE_SECRET");
+
+    if (nextAppUrl && cacheSecret) {
+      try {
+        await fetch(`${nextAppUrl}/api/ghl/cache-invalidate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-cache-invalidate-secret": cacheSecret,
+          },
+          body: JSON.stringify({
+            accountId: account.id,
+            eventType,
+          }),
+        });
+      } catch (cacheErr) {
+        // Non-fatal: cache will expire on its own via TTL
+        console.error("Cache invalidation call failed:", cacheErr);
+      }
+    }
+
     return new Response(
       JSON.stringify({ received: true, account_id: account.id, event_type: eventType }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
