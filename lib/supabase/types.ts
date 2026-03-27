@@ -42,6 +42,14 @@ export type Database = {
           provisioning_status: "pending" | "complete" | "error";
           provisioning_error: string | null;
           created_at: string;
+          service_area: string | null;
+          business_hours: Record<string, unknown> | null;
+          voice_gender: string | null;
+          voice_greeting: string | null;
+          notification_sms: boolean;
+          notification_email: boolean;
+          notification_contact: string | null;
+          onboarding_step: number;
         };
         Insert: {
           id?: string;
@@ -58,6 +66,14 @@ export type Database = {
           provisioning_status?: "pending" | "complete" | "error";
           provisioning_error?: string | null;
           created_at?: string;
+          service_area?: string | null;
+          business_hours?: Record<string, unknown> | null;
+          voice_gender?: string | null;
+          voice_greeting?: string | null;
+          notification_sms?: boolean;
+          notification_email?: boolean;
+          notification_contact?: string | null;
+          onboarding_step?: number;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;
       };
