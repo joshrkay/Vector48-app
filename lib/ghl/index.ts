@@ -2,12 +2,21 @@
 // GoHighLevel API v2 — Barrel Export
 // ---------------------------------------------------------------------------
 
-export { GHLApiError, type GHLClientOptions } from "./client";
-export { ghlGet, ghlPost, ghlPut, ghlDelete } from "./client";
+// Client
+export { GHLClient } from "./client";
 
+// Token & factory
+export { getGHLClient } from "./token";
+
+// Errors
+export {
+  GHLApiError,
+  GHLRateLimitError,
+  GHLAuthError,
+  GHLNotFoundError,
+  GHLValidationError,
+  GHLServerError,
+} from "./errors";
+
+// Types
 export * from "./types";
-
-export * from "./contacts";
-export * from "./conversations";
-export * from "./opportunities";
-export * from "./calendars";
