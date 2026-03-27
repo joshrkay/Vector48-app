@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #0f1e35;
+  --accent: #00b4a6;
+  --accent-light: #e6f7f5;
+  --surface: #ffffff;
+  --bg: #f4f6f8;
+  --border: #e2e8f0;
+  --text-primary: #0f1923;
+  --text-secondary: #64748b;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+}
+
+body {
+  font-family: var(--font-dm-sans), sans-serif;
+  color: var(--text-primary);
+  background-color: var(--bg);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-syne), sans-serif;
+}
