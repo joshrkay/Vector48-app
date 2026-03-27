@@ -2,16 +2,14 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_ROUTES = ["/login", "/signup"];
-const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding"];
-const TRIAL_ALLOWED_ROUTES = ["/billing", "/settings"];
+const PUBLIC_ROUTES = [...AUTH_ROUTES, "/forgot-password"];
+const TRIAL_ALLOWED_ROUTES = ["/billing", "/login", "/signup"];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    // NEXT_PUBLIC_SUPABASE_URL
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    // NEXT_PUBLIC_SUPABASE_ANON_KEY
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
@@ -19,7 +17,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({ request });
@@ -38,8 +36,17 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
+  // Allow API routes through
+  if (pathname.startsWith("/api/")) {
+    return supabaseResponse;
+  }
+
   // Not authenticated — redirect to login for protected routes
-  if (!user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
+  if (
+    !user &&
+    !PUBLIC_ROUTES.some((r) => pathname.startsWith(r)) &&
+    !pathname.startsWith("/onboarding")
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
@@ -52,8 +59,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Consolidated account checks for authenticated users
-  if (user) {
+  // Consolidated account checks for authenticated users on app routes
+  if (user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
     const { data: account } = await supabase
       .from("accounts")
       .select("trial_ends_at, plan_slug, onboarding_done_at")
@@ -76,9 +83,15 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith(r)
       );
 
-      if (trialExpired && isTrialPlan && !isAllowedRoute) {
+      if (
+        trialExpired &&
+        isTrialPlan &&
+        !isAllowedRoute &&
+        !pathname.startsWith("/onboarding")
+      ) {
         const url = request.nextUrl.clone();
         url.pathname = "/billing";
+        url.searchParams.set("reason", "trial_expired");
         return NextResponse.redirect(url);
       }
     }
@@ -89,6 +102,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
