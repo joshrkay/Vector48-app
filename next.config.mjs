@@ -4,7 +4,6 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        // NEXT_PUBLIC_SUPABASE_URL — replace hostname with your Supabase project
         hostname: "*.supabase.co",
       },
     ],

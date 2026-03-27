@@ -74,6 +74,27 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["account_users"]["Insert"]>;
       };
+      recipes: {
+        Row: {
+          slug: string;
+          name: string;
+          description: string;
+          category: string;
+          vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          slug: string;
+          name: string;
+          description?: string;
+          category?: string;
+          vertical?: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["recipes"]["Insert"]>;
+      };
       recipe_activations: {
         Row: {
           id: string;
@@ -97,7 +118,7 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["recipe_activations"]["Insert"]>;
       };
-      automation_events: {
+      event_log: {
         Row: {
           id: string;
           account_id: string;
@@ -116,7 +137,7 @@ export type Database = {
           detail?: Record<string, unknown> | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["automation_events"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["event_log"]["Insert"]>;
       };
       integrations: {
         Row: {
