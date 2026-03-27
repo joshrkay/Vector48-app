@@ -126,6 +126,19 @@ function extractEventId(
     str(payload.conversationId);
 
   if (!entityId) return null;
+
+  // Include a timestamp when available so legitimate re-fires of the same
+  // event type for the same entity aren't silently dropped as duplicates.
+  // E.g., two ContactUpdate webhooks for the same contact with different
+  // dateUpdated values are distinct events that should both be recorded.
+  const timestamp =
+    str(payload.dateUpdated) ??
+    str(payload.dateAdded) ??
+    str(payload.timestamp);
+
+  if (timestamp) {
+    return `${ghlEventType}:${entityId}:${timestamp}`;
+  }
   // Composite key ensures uniqueness across event types for the same entity
   return `${ghlEventType}:${entityId}`;
 }

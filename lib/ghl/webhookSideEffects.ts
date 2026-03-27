@@ -125,7 +125,9 @@ async function handleCallCompleted(
     searchText.includes(kw)
   );
 
-  if (matchedKeywords.length === 0) return;
+  // Require 2+ keyword matches to reduce false positives — a single
+  // "cancel" in a normal appointment call shouldn't trigger an alert
+  if (matchedKeywords.length < 2) return;
 
   // Flag call for review — this shows as an alert in the dashboard
   await supabase.from("event_log").insert({

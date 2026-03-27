@@ -38,24 +38,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // 3. Extract location ID (casing varies across GHL events)
+  // 3. Extract and validate location ID (casing varies across GHL events)
+  const rawLocationId = body.locationId ?? body.location_id;
   const locationId =
-    (body.locationId as string) ?? (body.location_id as string) ?? null;
+    typeof rawLocationId === "string" && rawLocationId.length > 0
+      ? rawLocationId
+      : null;
 
   if (!locationId) {
     console.warn("[ghl-webhook] Payload missing locationId:", body.type ?? body.event);
     return NextResponse.json({ received: true });
   }
 
+  // GHL location IDs are alphanumeric — reject anything unexpected
+  // to prevent PostgREST filter injection via special characters
+  if (!/^[\w-]+$/.test(locationId)) {
+    console.warn("[ghl-webhook] Invalid locationId format:", locationId);
+    return NextResponse.json({ received: true });
+  }
+
   // 4. Look up account by GHL location ID
+  // Use .limit(1) instead of .single() to avoid errors when multiple rows
+  // match (e.g., same ID in ghl_location_id and ghl_sub_account_id columns)
   const supabase = getSupabaseAdmin();
-  const { data: account, error: accountError } = await supabase
+  const { data: accounts } = await supabase
     .from("accounts")
     .select("id")
     .or(`ghl_location_id.eq."${locationId}",ghl_sub_account_id.eq."${locationId}"`)
-    .single();
+    .limit(1);
 
-  if (accountError || !account) {
+  const account = accounts?.[0] ?? null;
+  if (!account) {
     // Don't retry — likely a deleted or unlinked account
     console.warn("[ghl-webhook] No account for locationId:", locationId);
     return NextResponse.json({ received: true });
