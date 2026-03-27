@@ -52,6 +52,7 @@ export type Database = {
           notification_email: boolean;
           notification_contact: string | null;
           onboarding_step: number;
+          provisioning_step: number;
         };
         Insert: {
           id?: string;
@@ -78,6 +79,7 @@ export type Database = {
           notification_email?: boolean;
           notification_contact?: string | null;
           onboarding_step?: number;
+          provisioning_step?: number;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;
       };
