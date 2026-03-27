@@ -142,8 +142,11 @@ export type Database = {
         Row: {
           id: string;
           account_id: string;
-          recipe_slug: string;
+          recipe_slug: string | null;
           event_type: string;
+          ghl_event_type: string | null;
+          contact_id: string | null;
+          ghl_event_id: string | null;
           summary: string;
           detail: Record<string, unknown> | null;
           created_at: string;
@@ -151,8 +154,11 @@ export type Database = {
         Insert: {
           id?: string;
           account_id: string;
-          recipe_slug: string;
+          recipe_slug?: string | null;
           event_type: string;
+          ghl_event_type?: string | null;
+          contact_id?: string | null;
+          ghl_event_id?: string | null;
           summary: string;
           detail?: Record<string, unknown> | null;
           created_at?: string;
