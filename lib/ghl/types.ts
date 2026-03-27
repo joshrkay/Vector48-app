@@ -360,6 +360,106 @@ export interface GHLCreateAppointmentPayload {
 export interface GHLUpdateAppointmentPayload
   extends Partial<Omit<GHLCreateAppointmentPayload, "calendarId" | "locationId">> {}
 
+// ── Locations ─────────────────────────────────────────────────────────────
+
+export interface GHLCreateLocationPayload {
+  companyId: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  timezone?: string;
+  website?: string;
+  email?: string;
+}
+
+export interface GHLLocation {
+  id: string;
+  companyId: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  timezone: string | null;
+  website: string | null;
+  email: string | null;
+  apiKey: string;
+  dateAdded: string;
+}
+
+export interface GHLCreateLocationResponse {
+  location: GHLLocation;
+}
+
+export interface GHLUpdateLocationPayload {
+  name?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  timezone?: string;
+  website?: string;
+  email?: string;
+  settings?: {
+    businessName?: string;
+    businessHours?: GHLBusinessHours[];
+  };
+}
+
+export interface GHLBusinessHours {
+  dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+  openHour: number;
+  openMinute: number;
+  closeHour: number;
+  closeMinute: number;
+  isOpen: boolean;
+}
+
+// ── Webhooks ──────────────────────────────────────────────────────────────
+
+export type GHLWebhookEvent =
+  | "ContactCreate"
+  | "ContactUpdate"
+  | "ConversationUnreadUpdate"
+  | "OpportunityCreate"
+  | "OpportunityStageUpdate"
+  | "AppointmentCreate"
+  | "AppointmentStatusUpdate"
+  | "InboundMessage"
+  | "CallCompleted";
+
+export interface GHLCreateWebhookPayload {
+  locationId: string;
+  url: string;
+  events: GHLWebhookEvent[];
+  secret?: string;
+}
+
+export interface GHLWebhook {
+  id: string;
+  locationId: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  dateAdded: string;
+}
+
+export interface GHLWebhookResponse {
+  webhook: GHLWebhook;
+}
+
+export interface GHLWebhooksListResponse {
+  webhooks: GHLWebhook[];
+}
+
 // ── Error ──────────────────────────────────────────────────────────────────
 
 export interface GHLErrorBody {

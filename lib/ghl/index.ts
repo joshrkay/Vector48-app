@@ -11,3 +11,6 @@ export * from "./contacts";
 export * from "./conversations";
 export * from "./opportunities";
 export * from "./calendars";
+export * from "./locations";
+export * from "./webhooks";
+export * from "./token";
