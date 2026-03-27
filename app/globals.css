@@ -2,31 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --brand: #0f1e35;
-  --accent: #00b4a6;
-  --accent-light: #e6f7f5;
-  --surface: #ffffff;
-  --bg: #f4f6f8;
-  --border: #e2e8f0;
-  --text-primary: #0f1923;
-  --text-secondary: #64748b;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
+@layer base {
+  :root {
+    /* shadcn semantic tokens (HSL, mapped to Vector 48 palette) */
+    --background: 210 20% 97%;
+    --foreground: 210 50% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 50% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 50% 10%;
+    --primary: 174 100% 35%;
+    --primary-foreground: 170 55% 93%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 210 50% 10%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 210 50% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 174 100% 35%;
+    --radius: 0.5rem;
+
+    /* Vector 48 design tokens */
+    --brand: #0f1e35;
+    --v48-accent: #00b4a6;
+    --v48-accent-light: #e6f7f5;
+    --surface: #ffffff;
+    --bg: #f4f6f8;
+    --v48-border: #e2e8f0;
+    --text-primary: #0f1923;
+    --text-secondary: #64748b;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+  }
+
+  .dark {
+    --background: 222 84% 5%;
+    --foreground: 210 40% 98%;
+    --card: 222 84% 5%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 84% 5%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 174 100% 35%;
+    --primary-foreground: 170 55% 93%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 174 100% 35%;
+  }
 }
 
-body {
-  font-family: var(--font-dm-sans), sans-serif;
-  color: var(--text-primary);
-  background-color: var(--bg);
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: var(--font-syne), sans-serif;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-dm-sans), sans-serif;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-syne), sans-serif;
+  }
+  .font-heading {
+    font-family: var(--font-syne), sans-serif;
+  }
 }
