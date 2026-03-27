@@ -6,7 +6,7 @@ export type Database = {
           plan_slug: string;
           display_name: string;
           monthly_price_cents: number;
-          max_active_recipes: number;
+          max_active_recipes: number | null;
           webhooks_enabled: boolean;
           ghl_cache_ttl_secs: number;
           rate_limit_priority: "low" | "standard" | "high";
@@ -17,7 +17,7 @@ export type Database = {
           plan_slug: string;
           display_name: string;
           monthly_price_cents: number;
-          max_active_recipes: number;
+          max_active_recipes?: number | null;
           webhooks_enabled?: boolean;
           ghl_cache_ttl_secs?: number;
           rate_limit_priority?: "low" | "standard" | "high";
@@ -33,11 +33,13 @@ export type Database = {
           business_name: string;
           phone: string | null;
           vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";
+          ghl_sub_account_id: string | null;
           ghl_location_id: string | null;
           ghl_token_encrypted: string | null;
           onboarding_done_at: string | null;
           trial_ends_at: string | null;
           stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
           plan_slug: string;
           provisioning_status: "pending" | "complete" | "error";
           provisioning_error: string | null;
@@ -49,11 +51,13 @@ export type Database = {
           business_name: string;
           phone?: string | null;
           vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";
+          ghl_sub_account_id?: string | null;
           ghl_location_id?: string | null;
           ghl_token_encrypted?: string | null;
           onboarding_done_at?: string | null;
           trial_ends_at?: string | null;
           stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
           plan_slug?: string;
           provisioning_status?: "pending" | "complete" | "error";
           provisioning_error?: string | null;
