@@ -37,6 +37,9 @@ import type {
   GHLCreateLocationPayload,
   GHLWebhook,
   GHLCreateWebhookPayload,
+  GHLCalendarSlot,
+  GHLCalendarSlotsParams,
+  GHLOpportunityStatus,
   GHLPaginatedResponse,
 } from "./types";
 
@@ -318,6 +321,10 @@ class ContactsResource {
     );
   }
 
+  delete(contactId: string) {
+    return this.client._delete(`/contacts/${contactId}`);
+  }
+
   /** GHL contacts search uses POST, not GET. */
   search(params: GHLContactsSearchParams) {
     return this.client._post<GHLPaginatedResponse<GHLContact>>(
@@ -330,6 +337,14 @@ class ContactsResource {
     return this.client._post<{ contact: GHLContact }>(
       `/contacts/${contactId}/tags`,
       { tags },
+    );
+  }
+
+  removeTag(contactId: string, tags: string[]) {
+    return this.client._request<{ contact: GHLContact }>(
+      "DELETE",
+      `/contacts/${contactId}/tags`,
+      { body: { tags } },
     );
   }
 
@@ -404,11 +419,29 @@ class OpportunitiesResource {
     );
   }
 
+  update(opportunityId: string, data: Partial<GHLCreateOpportunityPayload>) {
+    return this.client._put<{ opportunity: GHLOpportunity }>(
+      `/opportunities/${opportunityId}`,
+      data,
+    );
+  }
+
   updateStage(opportunityId: string, pipelineStageId: string) {
     return this.client._put<{ opportunity: GHLOpportunity }>(
       `/opportunities/${opportunityId}`,
       { pipelineStageId },
     );
+  }
+
+  updateStatus(opportunityId: string, status: GHLOpportunityStatus) {
+    return this.client._put<{ opportunity: GHLOpportunity }>(
+      `/opportunities/${opportunityId}/status`,
+      { status },
+    );
+  }
+
+  delete(opportunityId: string) {
+    return this.client._delete(`/opportunities/${opportunityId}`);
   }
 }
 
@@ -440,6 +473,12 @@ class AppointmentsResource {
     );
   }
 
+  get(eventId: string) {
+    return this.client._get<{ event: GHLAppointment }>(
+      `/calendars/events/${eventId}`,
+    );
+  }
+
   create(data: GHLCreateAppointmentPayload) {
     return this.client._post<{ event: GHLAppointment }>(
       "/calendars/events",
@@ -467,6 +506,10 @@ class AppointmentsResource {
       { status: "cancelled" },
     );
   }
+
+  delete(eventId: string) {
+    return this.client._delete(`/calendars/events/${eventId}`);
+  }
 }
 
 // ── Resource: Calendars ────────────────────────────────────────────────────
@@ -476,6 +519,20 @@ class CalendarsResource {
 
   list() {
     return this.client._get<{ calendars: GHLCalendar[] }>("/calendars/");
+  }
+
+  get(calendarId: string) {
+    return this.client._get<{ calendar: GHLCalendar }>(
+      `/calendars/${calendarId}`,
+    );
+  }
+
+  getSlots(params: GHLCalendarSlotsParams) {
+    const { calendarId, ...rest } = params;
+    return this.client._get<{ slots: Record<string, GHLCalendarSlot[]> }>(
+      `/calendars/${calendarId}/free-slots`,
+      spreadParams(rest as Record<string, unknown>),
+    );
   }
 }
 
