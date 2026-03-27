@@ -38,7 +38,7 @@ export function TopBar() {
         </button>
         <Avatar className="h-8 w-8">
           <AvatarFallback className="bg-[var(--v48-accent)] text-white text-xs font-medium">
-            JK
+            V8
           </AvatarFallback>
         </Avatar>
       </div>
