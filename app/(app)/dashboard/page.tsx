@@ -40,7 +40,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Activity feed placeholder */}
-      <div className="bg-gray-100 rounded-2xl p-6 mt-6 flex items-center justify-center min-h-[200px]">
+      <div className="bg-gray-50 rounded-2xl p-8 mt-6 flex items-center justify-center min-h-[200px]">
         <p className="text-[var(--text-secondary)] text-sm">
           Activity feed coming soon
         </p>

@@ -39,7 +39,7 @@ const bottomNavItems: NavItem[] = [
 ];
 
 // Placeholder trial data — will be replaced with real data later
-const trialDaysLeft = 14;
+const trialDaysLeft = 7;
 const planSlug = "trial";
 
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {

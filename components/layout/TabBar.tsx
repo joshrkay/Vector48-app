@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Zap,
-  Grid3X3 as Grid,
+  Grid2X2 as Grid,
   Settings,
   User,
   Users,
