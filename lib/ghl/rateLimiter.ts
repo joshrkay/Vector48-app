@@ -17,6 +17,7 @@ const DEFAULT_BUDGET = 60; // fallback if tier lookup hasn't resolved yet
 // ── Per-account bucket state ──────────────────────────────────────────────
 
 interface Bucket {
+  accountId: string;
   tokens: number;
   budget: number;
   windowStart: number;
@@ -71,6 +72,7 @@ async function getBucket(accountId: string): Promise<Bucket> {
   }
 
   bucket = {
+    accountId,
     tokens: budget,
     budget,
     windowStart: Date.now(),
@@ -88,6 +90,15 @@ async function getBucket(accountId: string): Promise<Bucket> {
 // ── Refill tokens and drain queued requests ───────────────────────────────
 
 function refill(bucket: Bucket) {
+  // Re-read tier config to pick up plan changes (getTierConfig is cached 60s)
+  getTierConfig(bucket.accountId)
+    .then((config) => {
+      bucket.budget = config.rateLimitBudget;
+    })
+    .catch(() => {
+      // Keep existing budget on error
+    });
+
   bucket.tokens = bucket.budget;
   bucket.windowStart = Date.now();
   bucket.refillTimer = null;

@@ -63,18 +63,24 @@ import type {
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value !== "object") return String(value);
-  const sorted = Object.keys(value as Record<string, unknown>)
-    .sort()
-    .reduce(
-      (acc, key) => {
-        const v = (value as Record<string, unknown>)[key];
-        if (v !== undefined) acc[key] = v;
-        return acc;
-      },
-      {} as Record<string, unknown>,
-    );
+  const obj = value as Record<string, unknown>;
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(obj).sort()) {
+    const v = obj[key];
+    if (v !== undefined) {
+      // Recursively sort nested objects
+      sorted[key] =
+        v !== null && typeof v === "object" && !Array.isArray(v)
+          ? JSON.parse(stableStringify(v))
+          : v;
+    }
+  }
   return JSON.stringify(sorted);
 }
+
+// ── In-flight request dedup (prevents cache stampede) ─────────────────────
+
+const inflight = new Map<string, Promise<unknown>>();
 
 function buildCacheKey(
   accountId: string,
@@ -100,16 +106,31 @@ async function withCache<T>(
     return cached.data as T;
   }
 
-  const config = await getTierConfig(accountId);
-  const data = await fetcher();
+  // Deduplicate concurrent requests for the same key (cache stampede protection)
+  const pending = inflight.get(key);
+  if (pending) {
+    return pending as Promise<T>;
+  }
 
-  cacheStore.set(key, {
-    data,
-    expiresAt: Date.now() + config.cacheTTL * 1_000,
-  });
-  ensureSweep();
+  const promise = (async () => {
+    try {
+      const config = await getTierConfig(accountId);
+      const data = await fetcher();
 
-  return data;
+      cacheStore.set(key, {
+        data,
+        expiresAt: Date.now() + config.cacheTTL * 1_000,
+      });
+      ensureSweep();
+
+      return data;
+    } finally {
+      inflight.delete(key);
+    }
+  })();
+
+  inflight.set(key, promise);
+  return promise;
 }
 
 // ── Cached client type ────────────────────────────────────────────────────

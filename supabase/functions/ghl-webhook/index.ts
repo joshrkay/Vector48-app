@@ -89,11 +89,13 @@ Deno.serve(async (req) => {
       try {
         await fetch(`${nextAppUrl}/api/ghl/cache-invalidate`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-cache-invalidate-secret": cacheSecret,
+          },
           body: JSON.stringify({
             accountId: account.id,
             eventType,
-            secret: cacheSecret,
           }),
         });
       } catch (cacheErr) {
