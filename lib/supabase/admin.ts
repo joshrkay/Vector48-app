@@ -1,29 +1,19 @@
 // ---------------------------------------------------------------------------
-// Supabase Admin Client (service-role)
-// Server-only: uses SUPABASE_SERVICE_ROLE_KEY — never import in client code.
-// Use this when cookie-based auth is unavailable (e.g., webhooks, cron jobs).
+// Supabase Admin Client — Service role singleton for server-side operations
+// that don't have a user session (webhooks, background jobs, etc.).
+// Bypasses RLS — use only in trusted server contexts.
 // ---------------------------------------------------------------------------
 
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "./types";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-let adminClient: ReturnType<typeof createClient<Database>> | null = null;
+let _client: SupabaseClient | null = null;
 
-export function createAdminClient() {
-  if (adminClient) return adminClient;
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !key) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars.",
+export function getSupabaseAdmin(): SupabaseClient {
+  if (!_client) {
+    _client = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
   }
-
-  adminClient = createClient<Database>(url, key, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  return adminClient;
+  return _client;
 }

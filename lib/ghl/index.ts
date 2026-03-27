@@ -11,6 +11,6 @@ export * from "./conversations";
 export * from "./opportunities";
 export * from "./calendars";
 
-export { cachedGHLClient, type CachedGHLClient } from "./cache";
-export { invalidateGHLCache, invalidateAllForAccount } from "./cacheInvalidation";
-export { getTierConfig, type TierConfig } from "./tierConfig";
+export * from "./webhookTypes";
+export { parseGHLWebhook } from "./webhookParser";
+export { processSideEffects } from "./webhookSideEffects";

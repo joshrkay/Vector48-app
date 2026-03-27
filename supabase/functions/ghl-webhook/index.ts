@@ -1,4 +1,8 @@
-// Vector 48 — GHL Webhook Receiver (Supabase Edge Function)
+// DEPRECATED: This Supabase Edge Function is replaced by the Next.js API route
+// at /app/api/webhooks/ghl/route.ts which provides full type safety, idempotency,
+// plain-English summaries, and async side effects.
+//
+// Original: Vector 48 — GHL Webhook Receiver (Supabase Edge Function)
 // Receives inbound webhooks from GoHighLevel and logs them as automation_events.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
