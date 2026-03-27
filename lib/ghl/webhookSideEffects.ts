@@ -4,7 +4,8 @@
 // Must never throw — all errors are caught and logged.
 // ---------------------------------------------------------------------------
 
-import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { AutomationEventInsert } from "./webhookTypes";
 
 // Negative sentiment keywords that flag a call for review
@@ -21,13 +22,6 @@ const NEGATIVE_SENTIMENT_KEYWORDS = [
   "disappointed",
 ];
 
-function getAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
-
 interface RecipeActivation {
   id: string;
   recipe_slug: string;
@@ -38,9 +32,9 @@ interface RecipeActivation {
 // ── Side-effect handlers per event type ───────────────────────────────────
 
 async function handleMessageReceived(
+  supabase: SupabaseClient,
   accountId: string,
   event: AutomationEventInsert,
-  _rawPayload: Record<string, unknown>,
   activeRecipes: RecipeActivation[]
 ): Promise<void> {
   // Check for active follow-up or nurture recipes
@@ -55,7 +49,6 @@ async function handleMessageReceived(
 
   // A human replied — log that we detected it for the follow-up sequence.
   // Future: pause the n8n workflow via API using followUpRecipe.n8n_workflow_id
-  const supabase = getAdminClient();
   await supabase.from("event_log").insert({
     account_id: accountId,
     recipe_slug: followUpRecipe.recipe_slug,
@@ -72,6 +65,7 @@ async function handleMessageReceived(
 }
 
 async function handleAppointmentUpdated(
+  supabase: SupabaseClient,
   accountId: string,
   event: AutomationEventInsert,
   rawPayload: Record<string, unknown>,
@@ -97,7 +91,6 @@ async function handleAppointmentUpdated(
   if (!rebookRecipe) return;
 
   // Future: invoke n8n re-booking workflow
-  const supabase = getAdminClient();
   await supabase.from("event_log").insert({
     account_id: accountId,
     recipe_slug: rebookRecipe.recipe_slug,
@@ -114,10 +107,10 @@ async function handleAppointmentUpdated(
 }
 
 async function handleCallCompleted(
+  supabase: SupabaseClient,
   accountId: string,
   event: AutomationEventInsert,
-  rawPayload: Record<string, unknown>,
-  _activeRecipes: RecipeActivation[]
+  rawPayload: Record<string, unknown>
 ): Promise<void> {
   // Check notes and transcription for negative sentiment
   const notes =
@@ -135,7 +128,6 @@ async function handleCallCompleted(
   if (matchedKeywords.length === 0) return;
 
   // Flag call for review — this shows as an alert in the dashboard
-  const supabase = getAdminClient();
   await supabase.from("event_log").insert({
     account_id: accountId,
     recipe_slug: null,
@@ -163,7 +155,7 @@ export async function processSideEffects(
   rawPayload: Record<string, unknown>
 ): Promise<void> {
   try {
-    const supabase = getAdminClient();
+    const supabase = getSupabaseAdmin();
 
     // Fetch active recipe activations for this account
     const { data: recipes, error } = await supabase
@@ -182,13 +174,13 @@ export async function processSideEffects(
     // Dispatch to event-specific handlers
     switch (event.event_type) {
       case "message_received":
-        await handleMessageReceived(accountId, event, rawPayload, activeRecipes);
+        await handleMessageReceived(supabase, accountId, event, activeRecipes);
         break;
       case "appointment_updated":
-        await handleAppointmentUpdated(accountId, event, rawPayload, activeRecipes);
+        await handleAppointmentUpdated(supabase, accountId, event, rawPayload, activeRecipes);
         break;
       case "call_completed":
-        await handleCallCompleted(accountId, event, rawPayload, activeRecipes);
+        await handleCallCompleted(supabase, accountId, event, rawPayload);
         break;
       // Other event types: no side effects yet.
       // Add new cases here as recipes are built.

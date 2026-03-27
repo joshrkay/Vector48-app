@@ -1,24 +1,16 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
 
-// Supabase admin client — bypasses RLS (no user session on webhooks)
-function getAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
-
-// Timing-safe token comparison to prevent timing attacks
+// Timing-safe token comparison — hash both sides to fixed length so
+// timingSafeEqual never leaks the secret's length via early return.
 function verifyToken(provided: string | null, expected: string): boolean {
   if (!provided) return false;
   try {
-    const a = Buffer.from(provided);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length) return false;
+    const a = crypto.createHash("sha256").update(provided).digest();
+    const b = crypto.createHash("sha256").update(expected).digest();
     return crypto.timingSafeEqual(a, b);
   } catch {
     return false;
@@ -56,7 +48,7 @@ export async function POST(req: Request) {
   }
 
   // 4. Look up account by GHL location ID
-  const supabase = getAdminClient();
+  const supabase = getSupabaseAdmin();
   const { data: account, error: accountError } = await supabase
     .from("accounts")
     .select("id")

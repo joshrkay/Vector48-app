@@ -29,6 +29,15 @@ function num(val: unknown): number | undefined {
   return typeof val === "number" ? val : undefined;
 }
 
+function nestedStr(obj: unknown, ...keys: string[]): string | undefined {
+  let current: unknown = obj;
+  for (const key of keys) {
+    if (typeof current !== "object" || current === null) return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return str(current);
+}
+
 function formatContactName(payload: Record<string, unknown>): string {
   const contact =
     typeof payload.contact === "object" && payload.contact !== null
@@ -170,11 +179,7 @@ function buildSummary(
         str(payload.currentStage) ??
         str(payload.pipelineStage) ??
         str(payload.stageName) ??
-        str(
-          (payload.pipeline as Record<string, unknown> | undefined)?.stage
-            ? ((payload.pipeline as Record<string, unknown>).stage as Record<string, unknown>)?.name
-            : undefined
-        ) ??
+        nestedStr(payload, "pipeline", "stage", "name") ??
         "unknown stage";
       const oppName = str(payload.name) ?? "opportunity";
       const contactName = formatContactName(payload);
