@@ -26,7 +26,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${syne.variable} ${dmSans.variable}`}>
-      <body>{children}</body>
+      <body className="font-body bg-bg text-text-primary antialiased">{children}</body>
     </html>
   );
 }

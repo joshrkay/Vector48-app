@@ -151,8 +151,13 @@ CREATE POLICY "account_users_select" ON account_users FOR SELECT USING (
   OR auth.uid() IN (SELECT user_id FROM account_users au WHERE au.account_id = account_users.account_id)
 );
 CREATE POLICY "account_users_insert" ON account_users FOR INSERT WITH CHECK (
+  -- Account owner can always add members (bootstraps first row)
+  auth.uid() IN (SELECT owner_user_id FROM accounts WHERE id = account_users.account_id)
+  OR
+  -- Existing admins can add members
   auth.uid() IN (
-    SELECT user_id FROM account_users WHERE account_id = account_users.account_id AND role = 'admin'
+    SELECT user_id FROM account_users au
+    WHERE au.account_id = account_users.account_id AND au.role = 'admin'
   )
 );
 CREATE POLICY "account_users_delete" ON account_users FOR DELETE USING (
