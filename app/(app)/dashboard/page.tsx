@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createServerClient } from "@/lib/supabase/server";
+import { getSessionData } from "@/lib/data/session";
 
 const stats = [
   { label: "Calls Handled", value: "0" },
@@ -16,28 +16,16 @@ function getGreeting(): string {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createServerClient();
+  const { user, account } = await getSessionData();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  if (!user || !account) {
     redirect("/login");
   }
-
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("business_name")
-    .eq("owner_user_id", user.id)
-    .single();
-
-  const businessName = account?.business_name || "your business";
 
   return (
     <div>
       <h1 className="font-heading font-bold text-[28px]">
-        {getGreeting()}, {businessName}
+        {getGreeting()}, {account.business_name}
       </h1>
 
       {/* Stat cards */}

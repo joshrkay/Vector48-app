@@ -15,6 +15,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
+const MS_PER_DAY = 86_400_000;
+
 interface NavItem {
   label: string;
   href: string;
@@ -72,7 +74,7 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
   if (isTrial && trialEndsAt) {
     daysLeft = Math.max(
       0,
-      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86_400_000)
+      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / MS_PER_DAY)
     );
   }
 

@@ -41,7 +41,7 @@ export default function LoginPage() {
         password: data.password,
       });
 
-    if (authError) {
+    if (authError || !authData.user) {
       setServerError("Invalid email or password");
       return;
     }
@@ -77,7 +77,7 @@ export default function LoginPage() {
             {...register("email")}
           />
           {errors.email && (
-            <p className="text-[13px] text-[#EF4444]">{errors.email.message}</p>
+            <p className="text-[13px] text-destructive">{errors.email.message}</p>
           )}
         </div>
 
@@ -110,13 +110,13 @@ export default function LoginPage() {
             </button>
           </div>
           {errors.password && (
-            <p className="text-[13px] text-[#EF4444]">{errors.password.message}</p>
+            <p className="text-[13px] text-destructive">{errors.password.message}</p>
           )}
         </div>
 
         {/* Server error */}
         {serverError && (
-          <p className="text-[13px] text-[#EF4444]">{serverError}</p>
+          <p className="text-[13px] text-destructive">{serverError}</p>
         )}
 
         {/* Submit */}
