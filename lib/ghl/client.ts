@@ -48,7 +48,9 @@ import type {
 const GHL_BASE_URL = "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = "2021-07-28";
 const MAX_RETRIES = 3;
-const RETRY_BASE_MS = 1_000;
+const RETRY_BACKOFF_MS = [1_000, 2_000, 4_000];
+const RATE_LIMIT_PER_MIN = 120;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 // ── Per-location rate limiter (120 req / 60 s) ─────────────────────────────
 
@@ -262,6 +264,7 @@ export class GHLClient {
     // All retries exhausted
     throw lastError ?? new GHLRateLimitError("All retries exhausted");
   }
+}
 
   private get<T>(
     path: string,
