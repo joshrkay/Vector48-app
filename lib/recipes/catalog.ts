@@ -12,6 +12,32 @@ import type { RecipeDefinition } from "@/types/recipes";
 export const RECIPE_CATALOG: RecipeDefinition[] = [
   // ── CAPTURE ────────────────────────────────────────────────────────────────
 
+import type { RecipeCatalogEntry } from "./types";
+
+export const RECIPE_CATALOG: RecipeCatalogEntry[] = [
+  // ── Awareness (2) ─────────────────────────────────────────
+  {
+    slug: "google-review-booster",
+    name: "Google Review Booster",
+    description:
+      "Automatically request Google reviews after completed jobs to build your online reputation and attract new customers.",
+    icon: "star",
+    funnelStage: "awareness",
+    vertical: null,
+    releasePhase: "ga",
+  },
+  {
+    slug: "seasonal-campaign",
+    name: "Seasonal Campaign",
+    description:
+      "Send targeted seasonal promotions to past customers — AC tune-ups in spring, furnace checks in fall, and more.",
+    icon: "megaphone",
+    funnelStage: "awareness",
+    vertical: "hvac",
+    releasePhase: "coming_soon",
+  },
+
+  // ── Capture (4) ────────────────────────────────────────────
   {
     slug: "ai-phone-answering",
     name: "AI Phone Answering",
