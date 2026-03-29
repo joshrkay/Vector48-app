@@ -21,7 +21,7 @@ export interface RecipeCatalogEntry {
   releasePhase: ReleasePhase;
 }
 
-export type RecipeStatus = "active" | "available" | "coming_soon";
+export type RecipeStatus = "active" | "paused" | "available" | "coming_soon";
 
 export interface RecipeWithStatus extends RecipeCatalogEntry {
   status: RecipeStatus;

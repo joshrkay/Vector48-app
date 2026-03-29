@@ -21,10 +21,15 @@ export function RecipeFilterTabs({
   ];
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-full bg-gray-100 p-1">
+    <div
+      role="tablist"
+      className="inline-flex items-center gap-1 rounded-full bg-gray-100 p-1"
+    >
       {tabs.map((tab) => (
         <button
           key={tab.key}
+          role="tab"
+          aria-selected={value === tab.key}
           onClick={() => onChange(tab.key)}
           className={cn(
             "rounded-full px-4 py-1.5 text-sm font-medium transition-all",

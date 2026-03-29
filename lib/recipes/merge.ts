@@ -9,14 +9,16 @@ import type {
  * Merge the static recipe catalog with the customer's activation rows.
  *
  * Status logic:
- *  - activation exists with status "active" → "active" (overrides releasePhase)
- *  - no activation + releasePhase "ga"          → "available"
- *  - no activation + releasePhase "coming_soon" → "coming_soon"
+ *  - activation exists with status "active"        → "active" (overrides releasePhase)
+ *  - activation exists with status "paused"/"error" → "paused"
+ *  - no activation + releasePhase "ga"              → "available"
+ *  - no activation + releasePhase "coming_soon"     → "coming_soon"
  *
  * Sort order:
  *  1. Active — by last_triggered_at desc (nulls last)
- *  2. Available — vertical-matched ("recommended") first, then universal, then non-matching
- *  3. Coming soon
+ *  2. Paused — previously activated, now paused or errored
+ *  3. Available — vertical-matched ("recommended") first, then universal, then non-matching
+ *  4. Coming soon
  */
 export function mergeRecipesWithActivations(
   catalog: RecipeCatalogEntry[],
@@ -33,6 +35,8 @@ export function mergeRecipesWithActivations(
     let status: RecipeWithStatus["status"];
     if (activation && activation.status === "active") {
       status = "active";
+    } else if (activation && (activation.status === "paused" || activation.status === "error")) {
+      status = "paused";
     } else if (entry.releasePhase === "ga") {
       status = "available";
     } else {
@@ -51,8 +55,9 @@ export function mergeRecipesWithActivations(
   // Sort priority: active (0), available (1), coming_soon (2)
   const statusOrder: Record<RecipeWithStatus["status"], number> = {
     active: 0,
-    available: 1,
-    coming_soon: 2,
+    paused: 1,
+    available: 2,
+    coming_soon: 3,
   };
 
   return merged.sort((a, b) => {

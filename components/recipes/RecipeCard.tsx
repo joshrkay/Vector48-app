@@ -22,6 +22,7 @@ import {
   Star,
   Megaphone,
   Clock,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -44,8 +45,10 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 function formatLastTriggered(iso: string): string {
   const date = new Date(iso);
+  if (isNaN(date.getTime())) return "Recently";
+
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = Math.max(0, now.getTime() - date.getTime());
   const diffMins = Math.floor(diffMs / 60_000);
 
   if (diffMins < 1) return "Just now";
@@ -54,13 +57,20 @@ function formatLastTriggered(iso: string): string {
   if (diffHrs < 24) return `${diffHrs}h ago`;
   const diffDays = Math.floor(diffHrs / 24);
   if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const sixMonthsMs = 180 * 24 * 60 * 60_000;
+  const opts: Intl.DateTimeFormatOptions =
+    diffMs > sixMonthsMs
+      ? { month: "short", day: "numeric", year: "numeric" }
+      : { month: "short", day: "numeric" };
+  return date.toLocaleDateString("en-US", opts);
 }
 
 export function RecipeCard({ recipe }: { recipe: RecipeWithStatus }) {
-  const Icon = ICON_MAP[recipe.icon];
+  const Icon = ICON_MAP[recipe.icon] ?? Sparkles;
   const stageStyle = STAGE_STYLES[recipe.funnelStage];
   const isActive = recipe.status === "active";
+  const isPaused = recipe.status === "paused";
   const isComingSoon = recipe.status === "coming_soon";
 
   return (
@@ -69,6 +79,7 @@ export function RecipeCard({ recipe }: { recipe: RecipeWithStatus }) {
         "relative flex flex-col rounded-2xl border border-[var(--v48-border)] bg-white shadow-sm transition-shadow hover:shadow-md",
         "md:min-h-[280px]",
         isActive && "border-t-4 border-t-[var(--v48-accent)]",
+        isPaused && "border-t-4 border-t-amber-400",
         isComingSoon && "opacity-50",
       )}
     >
@@ -81,15 +92,14 @@ export function RecipeCard({ recipe }: { recipe: RecipeWithStatus }) {
               stageStyle.bg,
             )}
           >
-            {Icon && (
-              <Icon className={cn("h-6 w-6", stageStyle.icon)} strokeWidth={1.5} />
-            )}
+            <Icon className={cn("h-6 w-6", stageStyle.icon)} strokeWidth={1.5} />
           </div>
 
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
               isActive && "bg-[var(--v48-accent)] text-white",
+              isPaused && "bg-amber-100 text-amber-700",
               recipe.status === "available" && "bg-gray-100 text-gray-600",
               isComingSoon && "bg-gray-50 text-gray-400",
             )}
@@ -100,7 +110,13 @@ export function RecipeCard({ recipe }: { recipe: RecipeWithStatus }) {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
               </span>
             )}
-            {isActive ? "Active" : recipe.status === "available" ? "Available" : "Coming Soon"}
+            {isActive
+              ? "Active"
+              : isPaused
+                ? "Paused"
+                : recipe.status === "available"
+                  ? "Available"
+                  : "Coming Soon"}
           </span>
         </div>
 
@@ -137,10 +153,15 @@ export function RecipeCard({ recipe }: { recipe: RecipeWithStatus }) {
               <Link href={`/dashboard?recipe=${recipe.slug}`}>View Activity</Link>
             </Button>
           )}
+          {isPaused && (
+            <Button variant="outline" size="sm" className="w-full">
+              Resume
+            </Button>
+          )}
           {recipe.status === "available" && (
             <Button
               size="sm"
-              className="w-full bg-[var(--v48-accent)] text-white hover:bg-[var(--v48-accent)]/90"
+              className="w-full bg-[var(--v48-accent)] text-white hover:opacity-90"
             >
               Activate
             </Button>
