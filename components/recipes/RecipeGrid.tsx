@@ -5,10 +5,9 @@ import type { RecipeWithStatus } from "@/lib/recipes/types";
 import { RecipeFilterTabs } from "./RecipeFilterTabs";
 import { RecipeCard } from "./RecipeCard";
 
-export function RecipeGrid({ recipes }: { recipes: RecipeWithStatus[] }) {
+export function RecipeGrid({ recipes, activeCount }: { recipes: RecipeWithStatus[]; activeCount: number }) {
   const [filter, setFilter] = useState<"all" | "active">("all");
 
-  const activeCount = recipes.filter((r) => r.status === "active").length;
   const filtered =
     filter === "active"
       ? recipes.filter((r) => r.status === "active")

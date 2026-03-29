@@ -25,6 +25,14 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { RecipeStatus } from "@/lib/recipes/types";
+
+const STATUS_LABELS: Record<RecipeStatus, string> = {
+  active: "Active",
+  paused: "Paused",
+  available: "Available",
+  coming_soon: "Coming Soon",
+};
 
 const ICON_MAP: Record<string, LucideIcon> = {
   phone: Phone,
@@ -110,13 +118,7 @@ export function RecipeCard({ recipe }: { recipe: RecipeWithStatus }) {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
               </span>
             )}
-            {isActive
-              ? "Active"
-              : isPaused
-                ? "Paused"
-                : recipe.status === "available"
-                  ? "Available"
-                  : "Coming Soon"}
+            {STATUS_LABELS[recipe.status]}
           </span>
         </div>
 

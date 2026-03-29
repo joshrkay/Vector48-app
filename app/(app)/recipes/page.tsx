@@ -47,7 +47,7 @@ export default async function RecipesPage() {
       </p>
 
       <div className="mt-6">
-        <RecipeGrid recipes={recipes} />
+        <RecipeGrid recipes={recipes} activeCount={activeCount} />
       </div>
     </div>
   );
