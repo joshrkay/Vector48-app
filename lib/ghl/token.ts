@@ -8,7 +8,6 @@ import { createClient } from "@supabase/supabase-js";
 import crypto from "node:crypto";
 import type { Database } from "@/lib/supabase/types";
 import { GHLClient } from "./client";
-import { GHLApiError } from "./errors";
 
 // ── AES-256-GCM decryption ─────────────────────────────────────────────────
 
@@ -23,11 +22,7 @@ const TAG_LENGTH = 16;
 function decryptToken(encrypted: string): string {
   const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
   if (!key) {
-    throw new GHLApiError(
-      500,
-      "GHL_TOKEN_ENCRYPTION_KEY is not configured",
-      "CONFIG_ERROR",
-    );
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
   }
 
   const keyBuffer = Buffer.from(key, "hex");
@@ -54,11 +49,7 @@ function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
-    throw new GHLApiError(
-      500,
-      "Supabase URL or service role key is not configured",
-      "CONFIG_ERROR",
-    );
+    throw new Error("Supabase URL or service role key is not configured");
   }
   return createClient<Database>(url, serviceKey);
 }
@@ -81,18 +72,12 @@ export async function getGHLClient(accountId: string): Promise<GHLClient> {
     .single();
 
   if (error || !account) {
-    throw new GHLApiError(
-      404,
-      `Account not found: ${accountId}`,
-      "NOT_FOUND",
-    );
+    throw new Error(`Account not found: ${accountId}`);
   }
 
   if (!account.ghl_token_encrypted || !account.ghl_location_id) {
-    throw new GHLApiError(
-      400,
+    throw new Error(
       `Account ${accountId} is not connected to GoHighLevel`,
-      "NOT_CONFIGURED",
     );
   }
 

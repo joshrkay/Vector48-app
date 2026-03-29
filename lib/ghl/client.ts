@@ -63,9 +63,23 @@ interface RateBucket {
 /** One bucket per locationId. Agency calls use "__agency__". */
 const rateBuckets = new Map<string, RateBucket>();
 
+/** Evict buckets idle for longer than 2 rate windows to prevent memory leaks. */
+const STALE_THRESHOLD_MS = RATE_WINDOW_MS * 2;
+
+function evictStaleBuckets() {
+  const now = Date.now();
+  rateBuckets.forEach((bucket, key) => {
+    if (now - bucket.lastRefill > STALE_THRESHOLD_MS) {
+      rateBuckets.delete(key);
+    }
+  });
+}
+
 function getBucket(key: string): RateBucket {
   let bucket = rateBuckets.get(key);
   if (!bucket) {
+    // Good time to clean up stale entries when creating new ones
+    if (rateBuckets.size > 100) evictStaleBuckets();
     bucket = { tokens: RATE_LIMIT, lastRefill: Date.now() };
     rateBuckets.set(key, bucket);
   }
@@ -154,10 +168,8 @@ export class GHLClient {
   static forAgency(apiKey?: string): GHLClient {
     const key = apiKey ?? process.env.GHL_AGENCY_API_KEY;
     if (!key) {
-      throw new GHLApiError(
-        500,
+      throw new Error(
         "GHL agency API key is required. Set GHL_AGENCY_API_KEY or pass apiKey.",
-        "CONFIG_ERROR",
       );
     }
     return new GHLClient(key, null);
@@ -192,7 +204,7 @@ export class GHLClient {
 
     let lastError: GHLApiError | undefined;
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
         const backoff = RETRY_BASE_MS * Math.pow(2, attempt - 1);
         await new Promise((r) => setTimeout(r, backoff));

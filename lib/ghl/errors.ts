@@ -53,10 +53,11 @@ export class GHLNotFoundError extends GHLApiError {
 /** 400 / 422 — Bad request or validation failure. Never retryable. */
 export class GHLValidationError extends GHLApiError {
   constructor(
+    statusCode: number,
     message: string,
     public readonly fields?: Record<string, string>,
   ) {
-    super(422, message, "VALIDATION_ERROR", false);
+    super(statusCode, message, "VALIDATION_ERROR", false);
     this.name = "GHLValidationError";
   }
 }
@@ -91,6 +92,7 @@ export function classifyGHLError(
   }
   if (status === 400 || status === 422) {
     return new GHLValidationError(
+      status,
       msg || "Validation failed",
       extractFieldErrors(body),
     );
