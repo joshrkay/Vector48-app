@@ -1,148 +1,86 @@
 // ---------------------------------------------------------------------------
-// GoHighLevel — Token Retrieval, Encryption & Client Factory (server-only)
+// GoHighLevel — Token Decryption & Client Factory
+// Server-only: never import this file in client components.
 // ---------------------------------------------------------------------------
-
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 import crypto from "node:crypto";
-
-import { GHLClient } from "./client";
-import { GHLAuthError } from "./errors";
 import type { Database } from "@/lib/supabase/types";
+import { GHLClient } from "./client";
 
-// ── Encryption config ──────────────────────────────────────────────────────
+// ── AES-256-GCM decryption ─────────────────────────────────────────────────
 
 const ALGORITHM = "aes-256-gcm";
-const IV_BYTES = 12;
-const TAG_BYTES = 16;
-const SEPARATOR = ":";
-
-function getEncryptionKey(): Buffer {
-  const raw = process.env.GHL_TOKEN_ENCRYPTION_KEY;
-  if (!raw) {
-    throw new Error(
-      "GHL_TOKEN_ENCRYPTION_KEY is required. Must be a 32-byte key, base64-encoded.",
-    );
-  }
-  const key = Buffer.from(raw, "base64");
-  if (key.length !== 32) {
-    throw new Error(
-      `GHL_TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes (got ${key.length}).`,
-    );
-  }
-  return key;
-}
-
-// ── Encrypt / Decrypt ──────────────────────────────────────────────────────
+const IV_LENGTH = 12;
+const TAG_LENGTH = 16;
 
 /**
- * Encrypt a plaintext token using AES-256-GCM.
- * Output format: base64(iv):base64(ciphertext):base64(authTag)
+ * Decrypt a token that was encrypted with AES-256-GCM.
+ * Expected format: base64(iv + ciphertext + authTag)
  */
-export function encryptToken(plaintext: string): string {
-  const key = getEncryptionKey();
-  const iv = crypto.randomBytes(IV_BYTES);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-
-  const encrypted = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
-  const tag = cipher.getAuthTag();
-
-  return [
-    iv.toString("base64"),
-    encrypted.toString("base64"),
-    tag.toString("base64"),
-  ].join(SEPARATOR);
-}
-
-/**
- * Decrypt an encrypted token string produced by `encryptToken`.
- */
-export function decryptToken(encrypted: string): string {
-  const key = getEncryptionKey();
-  const parts = encrypted.split(SEPARATOR);
-  if (parts.length !== 3) {
-    throw new Error("Invalid encrypted token format");
+function decryptToken(encrypted: string): string {
+  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
   }
 
-  const iv = Buffer.from(parts[0], "base64");
-  const ciphertext = Buffer.from(parts[1], "base64");
-  const tag = Buffer.from(parts[2], "base64");
+  const keyBuffer = Buffer.from(key, "hex");
+  const data = Buffer.from(encrypted, "base64");
 
-  if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
-    throw new Error("Invalid encrypted token format");
-  }
+  const iv = data.subarray(0, IV_LENGTH);
+  const tag = data.subarray(data.length - TAG_LENGTH);
+  const ciphertext = data.subarray(IV_LENGTH, data.length - TAG_LENGTH);
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  const decipher = crypto.createDecipheriv(ALGORITHM, keyBuffer, iv);
   decipher.setAuthTag(tag);
 
-  return Buffer.concat([
+  const decrypted = Buffer.concat([
     decipher.update(ciphertext),
     decipher.final(),
-  ]).toString("utf8");
+  ]);
+
+  return decrypted.toString("utf8");
 }
 
-// ── Supabase admin client ──────────────────────────────────────────────────
+// ── Supabase admin client (service role, bypasses RLS) ──────────────────────
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required",
-    );
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    throw new Error("Supabase URL or service role key is not configured");
   }
-  return createClient<Database>(url, key, {
-    auth: { persistSession: false },
-  });
+  return createClient<Database>(url, serviceKey);
 }
 
-// ── Client factories ───────────────────────────────────────────────────────
+// ── Main export ─────────────────────────────────────────────────────────────
 
 /**
- * Fetch the encrypted GHL token for an account, decrypt it,
- * and return an initialized GHLClient scoped to that location.
+ * Fetch the GHL token for an account, decrypt it, and return an initialized
+ * GHLClient scoped to that account's location.
+ *
+ * This is the primary way application code should obtain a GHL client.
  */
 export async function getGHLClient(accountId: string): Promise<GHLClient> {
   const supabase = getAdminClient();
 
-  const { data, error } = await supabase
+  const { data: account, error } = await supabase
     .from("accounts")
-    .select("ghl_token_encrypted, ghl_location_id")
+    .select("ghl_location_id, ghl_token_encrypted")
     .eq("id", accountId)
     .single();
 
-  if (error || !data) {
-    throw new GHLAuthError(`Account not found: ${accountId}`);
+  if (error || !account) {
+    throw new Error(`Account not found: ${accountId}`);
   }
 
-  if (!data.ghl_token_encrypted || !data.ghl_location_id) {
-    throw new GHLAuthError(
-      `GHL credentials not configured for account ${accountId}`,
-    );
-  }
-
-  const token = decryptToken(data.ghl_token_encrypted);
-
-  return new GHLClient({
-    locationId: data.ghl_location_id,
-    token,
-  });
-}
-
-/**
- * Return an agency-level GHLClient using the GHL_API_KEY env var.
- * Used for sub-account creation and webhook management.
- */
-export function getAgencyClient(): GHLClient {
-  const apiKey = process.env.GHL_API_KEY ?? process.env.GHL_AGENCY_API_KEY;
-  if (!apiKey) {
+  if (!account.ghl_token_encrypted || !account.ghl_location_id) {
     throw new Error(
-      "GHL_API_KEY or GHL_AGENCY_API_KEY env var is required for agency operations",
+      `Account ${accountId} is not connected to GoHighLevel`,
     );
   }
-  return new GHLClient({ agencyApiKey: apiKey });
+
+  const token = decryptToken(account.ghl_token_encrypted);
+  return GHLClient.forLocation(account.ghl_location_id, token);
 }

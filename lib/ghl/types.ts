@@ -1,15 +1,25 @@
 // ---------------------------------------------------------------------------
 // GoHighLevel API v2 — Type Definitions
 // Base URL: https://services.leadconnectorhq.com
+// Server-only types. Safe to import anywhere (no runtime side-effects).
 // ---------------------------------------------------------------------------
 
-// ── Generic helpers ────────────────────────────────────────────────────────
+// ── Generic Pagination ──────────────────────────────────────────────────────
 
+/** Cursor-based pagination meta used by most GHL v2 list endpoints. */
+export interface GHLPaginationMeta {
+  total: number;
+  count: number;
+  currentPage: number;
+  nextPage: number | null;
+  prevPage: number | null;
+}
+
+/** Generic paginated wrapper. Some endpoints use startAfterId cursors. */
 export interface GHLPaginatedResponse<T> {
   data: T[];
   meta: {
     startAfterId: string | null;
-    startAfter: number | null;
     total: number;
   };
 }
@@ -21,51 +31,14 @@ export interface GHLListParams {
   locationId?: string;
 }
 
+/** Normalized error shape returned from the client (not thrown). */
 export interface GHLError {
   code: string;
   message: string;
   retryable: boolean;
 }
 
-// ── Custom Fields ──────────────────────────────────────────────────────────
-
-export interface GHLCustomFieldValue {
-  id: string;
-  fieldValue: string | string[] | number | boolean | null;
-}
-
-export interface GHLCustomField {
-  id: string;
-  name: string;
-  fieldKey: string;
-  dataType: "TEXT" | "NUMBER" | "PHONE" | "EMAIL" | "DATE" | "TEXTAREA"
-    | "CHECKBOX" | "RADIO" | "DROPDOWN" | "MULTIPLE_OPTIONS" | "FILE_UPLOAD"
-    | "MONETARY" | "TEXTBOX_LIST" | "SIGNATURE";
-  placeholder: string | null;
-  position: number;
-  isRequired: boolean;
-  options: string[];
-  locationId: string;
-}
-
-// ── Tags ───────────────────────────────────────────────────────────────────
-
-export interface GHLTag {
-  name: string;
-  locationId: string;
-}
-
-// ── Notes ──────────────────────────────────────────────────────────────────
-
-export interface GHLNote {
-  id: string;
-  body: string;
-  contactId: string;
-  userId: string | null;
-  dateAdded: string;
-}
-
-// ── Contacts ───────────────────────────────────────────────────────────────
+// ── Contacts ────────────────────────────────────────────────────────────────
 
 export interface GHLContact {
   id: string;
@@ -92,6 +65,25 @@ export interface GHLContact {
   dnd: boolean;
   type: string | null;
   assignedTo: string | null;
+}
+
+export interface GHLCustomFieldValue {
+  id: string;
+  fieldValue: string | string[] | number | boolean | null;
+}
+
+/**
+ * Standalone custom field definition (from GET /locations/{id}/customFields).
+ * Distinct from GHLCustomFieldValue which is a contact-level key-value pair.
+ */
+export interface GHLCustomField {
+  id: string;
+  name: string;
+  fieldKey: string;
+  dataType: string;
+  placeholder: string | null;
+  position: number;
+  isMultipleFile: boolean;
 }
 
 export interface GHLContactsListParams extends GHLListParams {
@@ -134,7 +126,25 @@ export interface GHLCreateContactPayload {
 export interface GHLUpdateContactPayload
   extends Partial<Omit<GHLCreateContactPayload, "locationId">> {}
 
-// ── Conversations ──────────────────────────────────────────────────────────
+// ── Notes ───────────────────────────────────────────────────────────────────
+
+export interface GHLNote {
+  id: string;
+  body: string;
+  contactId: string;
+  userId: string | null;
+  dateAdded: string;
+}
+
+// ── Tags ────────────────────────────────────────────────────────────────────
+
+export interface GHLTag {
+  id: string;
+  name: string;
+  locationId: string;
+}
+
+// ── Conversations ───────────────────────────────────────────────────────────
 
 export type GHLMessageType =
   | "TYPE_SMS"
@@ -204,7 +214,7 @@ export interface GHLSendMessagePayload {
   emailBcc?: string[];
 }
 
-// ── Opportunities / Pipeline ───────────────────────────────────────────────
+// ── Opportunities / Pipeline ────────────────────────────────────────────────
 
 export type GHLOpportunityStatus = "open" | "won" | "lost" | "abandoned";
 
@@ -253,12 +263,8 @@ export interface GHLCreateOpportunityPayload {
   customFields?: GHLCustomFieldValue[];
 }
 
-export interface GHLPipeline {
-  id: string;
-  name: string;
-  locationId: string;
-  stages: GHLPipelineStage[];
-}
+export interface GHLUpdateOpportunityPayload
+  extends Partial<Omit<GHLCreateOpportunityPayload, "locationId">> {}
 
 export interface GHLPipelineStage {
   id: string;
@@ -266,7 +272,25 @@ export interface GHLPipelineStage {
   position: number;
 }
 
-// ── Calendar / Appointments ────────────────────────────────────────────────
+export interface GHLPipeline {
+  id: string;
+  name: string;
+  locationId: string;
+  stages: GHLPipelineStage[];
+}
+
+export interface GHLPipelinesListResponse {
+  pipelines: GHLPipeline[];
+}
+
+// ── Calendar / Appointments ─────────────────────────────────────────────────
+
+export interface GHLCalendarTeamMember {
+  userId: string;
+  priority: number;
+  meetingLocationType: string | null;
+  meetingLocation: string | null;
+}
 
 export type GHLAppointmentStatus =
   | "confirmed"
@@ -288,9 +312,13 @@ export interface GHLCalendar {
     | "class_booking"
     | "collective"
     | "service_booking";
-  teamMembers: { userId: string; priority: number }[];
+  teamMembers: GHLCalendarTeamMember[];
   isActive: boolean;
   dateUpdated: string;
+}
+
+export interface GHLCalendarsListResponse {
+  calendars: GHLCalendar[];
 }
 
 export interface GHLAppointment {
@@ -314,7 +342,12 @@ export interface GHLAppointmentsListParams extends GHLListParams {
   contactId?: string;
   startDate?: string;
   endDate?: string;
-  status?: GHLAppointmentStatus;
+  status?: GHLAppointment["status"];
+}
+
+export interface GHLAppointmentsListResponse {
+  /** GHL returns appointments under the "events" key, not "appointments". */
+  events: GHLAppointment[];
 }
 
 export interface GHLCreateAppointmentPayload {
@@ -335,7 +368,82 @@ export interface GHLUpdateAppointmentPayload
     Omit<GHLCreateAppointmentPayload, "calendarId" | "locationId">
   > {}
 
-// ── Campaigns ──────────────────────────────────────────────────────────────
+// ── Campaigns ───────────────────────────────────────────────────────────────
+
+export interface GHLCampaign {
+  id: string;
+  name: string;
+  locationId: string;
+  status: "draft" | "published" | "archived";
+  type: string;
+  dateAdded: string;
+  dateUpdated: string;
+}
+
+export interface GHLCampaignsListResponse {
+  campaigns: GHLCampaign[];
+}
+
+// ── Locations (Sub-account creation — agency-level) ─────────────────────────
+
+export interface GHLLocation {
+  id: string;
+  companyId: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  website: string | null;
+  timezone: string | null;
+  settings: Record<string, unknown>;
+  dateAdded: string;
+}
+
+export interface GHLCreateLocationPayload {
+  companyId: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  website?: string;
+  timezone?: string;
+  settings?: Record<string, unknown>;
+}
+
+export interface GHLLocationResponse {
+  location: GHLLocation;
+}
+
+// ── Webhooks (agency-level) ─────────────────────────────────────────────────
+
+export interface GHLWebhook {
+  id: string;
+  locationId: string;
+  url: string;
+  events: string[];
+  verified: boolean;
+  dateAdded: string;
+}
+
+export interface GHLCreateWebhookPayload {
+  locationId: string;
+  url: string;
+  events: string[];
+}
+
+export interface GHLWebhookResponse {
+  webhook: GHLWebhook;
+}
+
+// ── Error Body (raw GHL response shape) ─────────────────────────────────────
 
 export type GHLCampaignStatus = "draft" | "published" | "archived";
 
