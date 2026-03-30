@@ -10,73 +10,57 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type { AccountRow } from "./types";
 
-function looksLikeEmail(s: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
-}
-
-const prefsSchema = z.object({
+const alertsSchema = z.object({
   new_lead: z.boolean(),
-  missed_call_transcript: z.boolean(),
+  missed_call: z.boolean(),
   negative_sentiment: z.boolean(),
-  appointment_cancellation: z.boolean(),
+  appointment_cancel: z.boolean(),
   recipe_error: z.boolean(),
 });
 
 const schema = z.object({
   notification_contact_name: z.string().max(200),
-  notification_contact: z.string().max(200),
-  notification_alert_email: z.union([z.string().email(), z.literal("")]),
-  notification_sms: z.boolean(),
-  notification_email: z.boolean(),
-  prefs: prefsSchema,
+  notification_contact_phone: z.string().max(200),
+  sms: z.boolean(),
+  email: z.boolean(),
+  alerts: alertsSchema,
 });
 
 type FormValues = z.infer<typeof schema>;
 
-const DEFAULT_PREFS = {
+const DEFAULT_ALERTS = {
   new_lead: true,
-  missed_call_transcript: true,
+  missed_call: true,
   negative_sentiment: true,
-  appointment_cancellation: true,
+  appointment_cancel: true,
   recipe_error: true,
 } as const;
 
 function buildDefaults(account: AccountRow): FormValues {
-  let phone = account.notification_contact ?? "";
-  let alertEmail = account.notification_alert_email ?? "";
-  const rawContact = account.notification_contact ?? "";
+  const prefs =
+    account.notification_preferences &&
+    typeof account.notification_preferences === "object"
+      ? (account.notification_preferences as Record<string, unknown>)
+      : {};
 
-  if (!alertEmail && account.notification_email && looksLikeEmail(rawContact)) {
-    alertEmail = rawContact;
-    phone = "";
-  }
-
-  if (!phone && account.notification_sms && !looksLikeEmail(rawContact)) {
-    phone = rawContact;
-  }
-
-  const rawPrefs =
-    account.notification_alert_prefs &&
-    typeof account.notification_alert_prefs === "object"
-      ? (account.notification_alert_prefs as Record<string, boolean>)
+  const alerts =
+    prefs.alerts && typeof prefs.alerts === "object"
+      ? (prefs.alerts as Record<string, boolean>)
       : {};
 
   return {
     notification_contact_name: account.notification_contact_name ?? "",
-    notification_contact: phone,
-    notification_alert_email: alertEmail,
-    notification_sms: account.notification_sms,
-    notification_email: account.notification_email,
-    prefs: {
-      new_lead: rawPrefs.new_lead ?? DEFAULT_PREFS.new_lead,
-      missed_call_transcript:
-        rawPrefs.missed_call_transcript ?? DEFAULT_PREFS.missed_call_transcript,
+    notification_contact_phone: account.notification_contact_phone ?? "",
+    sms: prefs.sms === true,
+    email: prefs.email === true,
+    alerts: {
+      new_lead: alerts.new_lead ?? DEFAULT_ALERTS.new_lead,
+      missed_call: alerts.missed_call ?? DEFAULT_ALERTS.missed_call,
       negative_sentiment:
-        rawPrefs.negative_sentiment ?? DEFAULT_PREFS.negative_sentiment,
-      appointment_cancellation:
-        rawPrefs.appointment_cancellation ??
-        DEFAULT_PREFS.appointment_cancellation,
-      recipe_error: rawPrefs.recipe_error ?? DEFAULT_PREFS.recipe_error,
+        alerts.negative_sentiment ?? DEFAULT_ALERTS.negative_sentiment,
+      appointment_cancel:
+        alerts.appointment_cancel ?? DEFAULT_ALERTS.appointment_cancel,
+      recipe_error: alerts.recipe_error ?? DEFAULT_ALERTS.recipe_error,
     },
   };
 }
@@ -96,7 +80,7 @@ export function NotificationSettings({ account }: { account: AccountRow }) {
       if (serialized === prevSerialized.current) return;
       prevSerialized.current = serialized;
       const v = form.getValues();
-      if (!v.notification_sms && !v.notification_email) {
+      if (!v.sms && !v.email) {
         return;
       }
       const res = await fetch("/api/settings/notifications", {
@@ -104,11 +88,12 @@ export function NotificationSettings({ account }: { account: AccountRow }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           notification_contact_name: v.notification_contact_name || null,
-          notification_contact: v.notification_contact || null,
-          notification_alert_email: v.notification_alert_email || null,
-          notification_sms: v.notification_sms,
-          notification_email: v.notification_email,
-          notification_alert_prefs: v.prefs,
+          notification_contact_phone: v.notification_contact_phone || null,
+          notification_preferences: {
+            sms: v.sms,
+            email: v.email,
+            alerts: v.alerts,
+          },
         }),
       });
       if (!res.ok) {
@@ -132,28 +117,18 @@ export function NotificationSettings({ account }: { account: AccountRow }) {
           {...form.register("notification_contact_name")}
         />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="notification_contact">SMS number</Label>
-          <Input
-            id="notification_contact"
-            {...form.register("notification_contact")}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="notification_alert_email">Alert email</Label>
-          <Input
-            id="notification_alert_email"
-            type="email"
-            {...form.register("notification_alert_email")}
-          />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="notification_contact_phone">SMS number</Label>
+        <Input
+          id="notification_contact_phone"
+          {...form.register("notification_contact_phone")}
+        />
       </div>
       <div className="flex flex-wrap gap-6">
         <div className="flex items-center gap-2">
           <Controller
             control={form.control}
-            name="notification_sms"
+            name="sms"
             render={({ field }) => (
               <Switch checked={field.value} onCheckedChange={field.onChange} />
             )}
@@ -163,7 +138,7 @@ export function NotificationSettings({ account }: { account: AccountRow }) {
         <div className="flex items-center gap-2">
           <Controller
             control={form.control}
-            name="notification_email"
+            name="email"
             render={({ field }) => (
               <Switch checked={field.value} onCheckedChange={field.onChange} />
             )}
@@ -176,9 +151,9 @@ export function NotificationSettings({ account }: { account: AccountRow }) {
         {(
           [
             ["new_lead", "New lead"],
-            ["missed_call_transcript", "Missed call transcript"],
+            ["missed_call", "Missed call"],
             ["negative_sentiment", "Negative sentiment"],
-            ["appointment_cancellation", "Appointment cancellation"],
+            ["appointment_cancel", "Appointment cancellation"],
             ["recipe_error", "Recipe error"],
           ] as const
         ).map(([key, label]) => (
@@ -186,7 +161,7 @@ export function NotificationSettings({ account }: { account: AccountRow }) {
             <span className="text-sm">{label}</span>
             <Controller
               control={form.control}
-              name={`prefs.${key}`}
+              name={`alerts.${key}`}
               render={({ field }) => (
                 <Switch checked={field.value} onCheckedChange={field.onChange} />
               )}

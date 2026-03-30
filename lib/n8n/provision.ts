@@ -99,7 +99,7 @@ export async function provisionRecipe(
 
   const { data: account, error: accErr } = await supabase
     .from("accounts")
-    .select("business_name, phone, vertical, notification_contact")
+    .select("business_name, phone, vertical, notification_contact_phone")
     .eq("id", accountId)
     .single();
 
@@ -123,7 +123,7 @@ export async function provisionRecipe(
 
     const notificationPhone =
       stringFromConfig(config, "notification_sms_number") ||
-      account.notification_contact ||
+      account.notification_contact_phone ||
       account.phone ||
       "";
 

@@ -14,14 +14,13 @@ import { saveOnboardingStep, completeOnboarding } from "../actions";
 import { BusinessNameStep } from "./BusinessNameStep";
 import { VerticalStep } from "./VerticalStep";
 import { PhoneStep } from "./PhoneStep";
-import { ServiceAreaStep } from "./ServiceAreaStep";
 import { BusinessHoursStep } from "./BusinessHoursStep";
 import { VoiceAIStep } from "./VoiceAIStep";
 import { NotificationsStep } from "./NotificationsStep";
 import { ActivateRecipeStep } from "./ActivateRecipeStep";
 import { CompletionScreen } from "./CompletionScreen";
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 7;
 
 interface WizardShellProps {
   accountId: string;
@@ -72,7 +71,7 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
           (data.activateRecipe1 as boolean) ?? true,
           {
             voiceGender: store.voiceGender,
-            voiceGreeting: store.voiceGreeting,
+            greetingText: store.greetingText,
           }
         );
       }
@@ -214,14 +213,12 @@ function StepRenderer({
     case 2:
       return <PhoneStep {...props} />;
     case 3:
-      return <ServiceAreaStep {...props} />;
-    case 4:
       return <BusinessHoursStep {...props} />;
-    case 5:
+    case 4:
       return <VoiceAIStep {...props} />;
-    case 6:
+    case 5:
       return <NotificationsStep {...props} />;
-    case 7:
+    case 6:
       return <ActivateRecipeStep {...props} />;
     default:
       return null;

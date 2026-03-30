@@ -8,7 +8,7 @@ import { getTierConfig } from "@/lib/ghl/tierConfig";
 
 export type AccountProfileSlice = Pick<
   Database["public"]["Tables"]["accounts"]["Row"],
-  "phone" | "voice_gender" | "voice_greeting" | "business_hours"
+  "phone" | "voice_gender" | "greeting_text" | "business_hours"
 >;
 
 export function getRecipeDefinitionOrThrow(

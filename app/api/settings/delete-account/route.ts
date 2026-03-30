@@ -48,7 +48,7 @@ export async function POST(req: Request) {
 
   const { error: accErr } = await admin
     .from("accounts")
-    .update({ account_status: "deleted" })
+    .delete()
     .eq("id", session.accountId);
 
   if (accErr) {
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   if (delAuthErr) {
     console.error("[delete-account] auth delete", delAuthErr.message);
     return NextResponse.json(
-      { error: "Account marked deleted; auth cleanup failed — contact support" },
+      { error: "Account deleted; auth cleanup failed — contact support" },
       { status: 502 },
     );
   }
