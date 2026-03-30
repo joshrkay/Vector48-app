@@ -1,9 +1,5 @@
-import type {
-  RecipeCatalogEntry,
-  RecipeActivationRow,
-  RecipeWithStatus,
-  Vertical,
-} from "./types";
+import type { RecipeDefinition } from "@/types/recipes";
+import type { RecipeActivationRow, RecipeWithStatus, Vertical } from "./types";
 
 /**
  * Merge the static recipe catalog with the customer's activation rows.
@@ -11,7 +7,7 @@ import type {
  * Status logic:
  *  - activation exists with status "active"        → "active" (overrides releasePhase)
  *  - activation exists with status "paused"/"error" → "paused"
- *  - no activation + releasePhase "ga"              → "available"
+ *  - no activation + releasePhase "ga" / "v1" / "v2" / "v3" → "available"
  *  - no activation + releasePhase "coming_soon"     → "coming_soon"
  *
  * Sort order:
@@ -21,7 +17,7 @@ import type {
  *  4. Coming soon
  */
 export function mergeRecipesWithActivations(
-  catalog: RecipeCatalogEntry[],
+  catalog: RecipeDefinition[],
   activations: RecipeActivationRow[],
   accountVertical: Vertical,
 ): RecipeWithStatus[] {
@@ -37,10 +33,10 @@ export function mergeRecipesWithActivations(
       status = "active";
     } else if (activation && (activation.status === "paused" || activation.status === "error")) {
       status = "paused";
-    } else if (entry.releasePhase === "ga") {
-      status = "available";
-    } else {
+    } else if (entry.releasePhase === "coming_soon") {
       status = "coming_soon";
+    } else {
+      status = "available";
     }
 
     return {

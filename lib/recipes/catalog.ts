@@ -10,31 +10,66 @@
 import type { RecipeDefinition } from "@/types/recipes";
 
 export const RECIPE_CATALOG: RecipeDefinition[] = [
-  // ── CAPTURE ────────────────────────────────────────────────────────────────
-
-import type { RecipeCatalogEntry } from "./types";
-
-export const RECIPE_CATALOG: RecipeCatalogEntry[] = [
   // ── Awareness (2) ─────────────────────────────────────────
   {
     slug: "google-review-booster",
     name: "Google Review Booster",
     description:
       "Automatically request Google reviews after completed jobs to build your online reputation and attract new customers.",
-    icon: "star",
+    detailedDescription:
+      "After jobs are marked complete, customers receive a timely, polite request to leave a Google review with a direct link.",
     funnelStage: "awareness",
-    vertical: null,
     releasePhase: "ga",
+    icon: "star",
+    stageColor: "sky-100",
+    trigger: "Job or appointment marked complete in your connected systems.",
+    output: "Customer receives a review request with a link to your Google Business profile.",
+    requiredIntegrations: [],
+    optionalIntegrations: [],
+    configFields: [],
+    vertical: null,
+    verticalMessages: {
+      hvac: "Thanks for choosing {{business_name}}! We'd love a quick Google review if you're happy with our work.",
+      plumbing:
+        "Thanks for trusting {{business_name}} with your plumbing needs. A short Google review helps neighbors find us.",
+      electrical:
+        "We appreciate your business at {{business_name}}. If we did well, a Google review means a lot.",
+      roofing:
+        "Thank you from {{business_name}}! A Google review helps other homeowners choose a roofer they can trust.",
+      landscaping:
+        "Thanks for working with {{business_name}}! A quick Google review helps us grow.",
+    },
+    estimatedROI: "More 5-star reviews improve local search visibility",
   },
   {
     slug: "seasonal-campaign",
     name: "Seasonal Campaign",
     description:
       "Send targeted seasonal promotions to past customers — AC tune-ups in spring, furnace checks in fall, and more.",
-    icon: "megaphone",
+    detailedDescription:
+      "Scheduled campaigns text or email past customers with seasonal offers (e.g. AC tune-ups, furnace checks) based on rules you configure.",
     funnelStage: "awareness",
-    vertical: "hvac",
     releasePhase: "coming_soon",
+    icon: "megaphone",
+    stageColor: "sky-100",
+    trigger: "Seasonal schedule or list segment reaches campaign send window.",
+    output: "Customers receive the configured seasonal promotion message.",
+    requiredIntegrations: [],
+    optionalIntegrations: [],
+    configFields: [],
+    vertical: "hvac",
+    verticalMessages: {
+      hvac: "Seasonal special from {{business_name}} — book your tune-up before peak season fills up.",
+      plumbing:
+        "A quick note from {{business_name}}: seasonal maintenance offer for past customers.",
+      electrical:
+        "{{business_name}} — limited-time seasonal offer for customers like you.",
+      roofing:
+        "{{business_name}} — schedule a seasonal roof check before storm season.",
+      landscaping:
+        "{{business_name}} — spring/fall service slots are open for past customers.",
+    },
+    estimatedROI: "Repeat business from past customers",
   },
 
   // ── Capture (4) ────────────────────────────────────────────

@@ -126,6 +126,12 @@ export interface GHLCreateContactPayload {
 export interface GHLUpdateContactPayload
   extends Partial<Omit<GHLCreateContactPayload, "locationId">> {}
 
+export interface GHLContactsListResponse {
+  contacts: GHLContact[];
+}
+
+export type GHLContactResponse = GHLContact;
+
 // ── Notes ───────────────────────────────────────────────────────────────────
 
 export interface GHLNote {
@@ -214,6 +220,14 @@ export interface GHLSendMessagePayload {
   emailBcc?: string[];
 }
 
+export interface GHLConversationsListResponse {
+  conversations: GHLConversation[];
+}
+
+export interface GHLMessagesListResponse {
+  messages: GHLMessage[];
+}
+
 // ── Opportunities / Pipeline ────────────────────────────────────────────────
 
 export type GHLOpportunityStatus = "open" | "won" | "lost" | "abandoned";
@@ -248,6 +262,12 @@ export interface GHLOpportunitiesListParams extends GHLListParams {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }
+
+export interface GHLOpportunitiesListResponse {
+  opportunities: GHLOpportunity[];
+}
+
+export type GHLOpportunityResponse = GHLOpportunity;
 
 export interface GHLCreateOpportunityPayload {
   pipelineId: string;
@@ -319,6 +339,17 @@ export interface GHLCalendar {
 
 export interface GHLCalendarsListResponse {
   calendars: GHLCalendar[];
+}
+
+export interface GHLCalendarSlotsParams {
+  calendarId: string;
+  startDate: string;
+  endDate: string;
+  timezone?: string;
+}
+
+export interface GHLCalendarSlotsResponse {
+  slots: { startTime: string; endTime: string }[];
 }
 
 export interface GHLAppointment {

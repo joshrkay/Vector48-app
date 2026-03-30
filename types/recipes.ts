@@ -15,6 +15,7 @@ export type Vertical =
 // ── Funnel Stages ──────────────────────────────────────────────────────────
 
 export type FunnelStage =
+  | "awareness"
   | "capture"
   | "engage"
   | "close"
@@ -26,6 +27,7 @@ export const FUNNEL_STAGE_META: Record<
   FunnelStage,
   { label: string; color: string }
 > = {
+  awareness: { label: "Awareness", color: "sky-100" },
   capture: { label: "Capture", color: "blue-100" },
   engage: { label: "Engage", color: "violet-100" },
   close: { label: "Close", color: "amber-100" },
@@ -36,7 +38,7 @@ export const FUNNEL_STAGE_META: Record<
 
 // ── Release Phases ─────────────────────────────────────────────────────────
 
-export type ReleasePhase = "v1" | "v2" | "v3";
+export type ReleasePhase = "ga" | "coming_soon" | "v1" | "v2" | "v3";
 
 // ── Config Fields (drives the activation form UI) ──────────────────────────
 
@@ -67,6 +69,8 @@ export interface RecipeDefinition {
   detailedDescription: string;
   funnelStage: FunnelStage;
   releasePhase: ReleasePhase;
+  /** When set, recipe is scoped to that vertical; null = all verticals */
+  vertical?: Vertical | null;
   /** Lucide icon name (resolved to component in the UI layer) */
   icon: string;
   /** Tailwind color class for the icon tile background (e.g. 'blue-100') */
