@@ -26,3 +26,6 @@ export function createAdminClient() {
 
   return adminClient;
 }
+
+/** Alias expected by newer code paths (webhooks, recipe routes). */
+export const getSupabaseAdmin = createAdminClient;

@@ -2,28 +2,26 @@ import type {
   RecipeCatalogEntry,
   RecipeActivationRow,
   RecipeWithStatus,
-  Vertical,
 } from "./types";
 
 /**
  * Merge the static recipe catalog with the customer's activation rows.
  *
  * Status logic:
- *  - activation exists with status "active"        → "active" (overrides releasePhase)
+ *  - activation exists with status "active"        → "active"
  *  - activation exists with status "paused"/"error" → "paused"
- *  - no activation + releasePhase "ga"              → "available"
- *  - no activation + releasePhase "coming_soon"     → "coming_soon"
+ *  - no activation + releasePhase "v1"              → "available"
+ *  - no activation + releasePhase "v2"/"v3"         → "coming_soon"
  *
  * Sort order:
  *  1. Active — by last_triggered_at desc (nulls last)
  *  2. Paused — previously activated, now paused or errored
- *  3. Available — vertical-matched ("recommended") first, then universal, then non-matching
- *  4. Coming soon
+ *  3. Available — v1 recipes
+ *  4. Coming soon — v2/v3 recipes
  */
 export function mergeRecipesWithActivations(
   catalog: RecipeCatalogEntry[],
   activations: RecipeActivationRow[],
-  accountVertical: Vertical,
 ): RecipeWithStatus[] {
   const activationMap = new Map(
     activations.map((a) => [a.recipe_slug, a]),
@@ -37,7 +35,7 @@ export function mergeRecipesWithActivations(
       status = "active";
     } else if (activation && (activation.status === "paused" || activation.status === "error")) {
       status = "paused";
-    } else if (entry.releasePhase === "ga") {
+    } else if (entry.releasePhase === "v1") {
       status = "available";
     } else {
       status = "coming_soon";
@@ -52,7 +50,7 @@ export function mergeRecipesWithActivations(
     };
   });
 
-  // Sort priority: active (0), available (1), coming_soon (2)
+  // Sort priority: active (0), paused (1), available (2), coming_soon (3)
   const statusOrder: Record<RecipeWithStatus["status"], number> = {
     active: 0,
     paused: 1,
@@ -73,13 +71,6 @@ export function mergeRecipesWithActivations(
       if (a.lastTriggeredAt) return -1;
       if (b.lastTriggeredAt) return 1;
       return 0;
-    }
-
-    // Within available: vertical-matched first, then universal, then non-matching
-    if (a.status === "available" && b.status === "available") {
-      const aMatch = a.vertical === accountVertical ? 0 : a.vertical === null ? 1 : 2;
-      const bMatch = b.vertical === accountVertical ? 0 : b.vertical === null ? 1 : 2;
-      return aMatch - bMatch;
     }
 
     return 0;

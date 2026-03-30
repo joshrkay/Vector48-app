@@ -10,6 +10,7 @@ import {
   classifyGHLError,
 } from "./errors";
 import type {
+  GHLClientOptions,
   GHLContactsListParams,
   GHLContactsListResponse,
   GHLContactResponse,
@@ -42,6 +43,8 @@ import type {
   GHLCreateWebhookPayload,
   GHLWebhookResponse,
 } from "./types";
+
+export type { GHLClientOptions } from "./types";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -208,7 +211,7 @@ export class GHLClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const backoff = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+        const backoff = RETRY_BACKOFF_MS[attempt - 1] ?? 4_000;
         await new Promise((r) => setTimeout(r, backoff));
       }
 
@@ -489,4 +492,54 @@ export class GHLClient {
       return this.delete(`/webhooks/${webhookId}`);
     },
   };
+}
+
+// ── Function-style wrappers ──────────────────────────────────────────────────
+// Legacy service files (contacts.ts, calendars.ts, etc.) import these helpers.
+// They create a one-shot GHLClient from the options and delegate.
+
+function clientFromOpts(opts?: GHLClientOptions): GHLClient {
+  if (opts?.locationId) {
+    const token =
+      opts.apiKey ?? process.env.GHL_AGENCY_API_KEY ?? "";
+    return GHLClient.forLocation(opts.locationId, token);
+  }
+  return GHLClient.forAgency(opts?.apiKey);
+}
+
+export async function ghlGet<T>(
+  path: string,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  const client = clientFromOpts(opts);
+  // Use the class's private request via a thin cast so we can call the
+  // internal method without duplicating fetch logic.
+  return (client as unknown as { request: (m: string, p: string, o?: { params?: Record<string, string | number | boolean | undefined> }) => Promise<T> })
+    .request("GET", path, { params: opts?.params });
+}
+
+export async function ghlPost<T>(
+  path: string,
+  body: unknown,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
+    .request("POST", path, { body });
+}
+
+export async function ghlPut<T>(
+  path: string,
+  body: unknown,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
+    .request("PUT", path, { body });
+}
+
+export async function ghlDelete<T = void>(
+  path: string,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string) => Promise<T> })
+    .request("DELETE", path);
 }

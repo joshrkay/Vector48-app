@@ -1,14 +1,7 @@
 import { cn } from "@/lib/utils";
 import { STAGE_STYLES } from "@/lib/recipes/stages";
 import type { FunnelStage } from "@/lib/recipes/types";
-
-const STAGE_LABELS: Record<FunnelStage, string> = {
-  awareness: "Awareness",
-  capture: "Capture",
-  nurture: "Nurture",
-  close: "Close",
-  delight: "Delight",
-};
+import { FUNNEL_STAGE_META } from "@/types/recipes";
 
 export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
   const style = STAGE_STYLES[stage];
@@ -21,7 +14,7 @@ export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
         style.text,
       )}
     >
-      {STAGE_LABELS[stage]}
+      {FUNNEL_STAGE_META[stage].label}
     </span>
   );
 }

@@ -33,7 +33,6 @@ export default async function RecipesPage() {
   const recipes = mergeRecipesWithActivations(
     RECIPE_CATALOG,
     activations ?? [],
-    account.vertical,
   );
 
   const activeCount = recipes.filter((r) => r.status === "active").length;
