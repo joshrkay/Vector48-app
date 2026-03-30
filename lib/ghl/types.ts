@@ -530,31 +530,7 @@ export interface GHLCreateWebhookPayload {
   locationId: string;
 }
 
-// ── Response aliases (client) ─────────────────────────────────────────────
-
-export type GHLContactResponse = GHLContact;
-
-export interface GHLContactsListResponse {
-  contacts: GHLContact[];
-  meta?: GHLPaginationMeta;
-}
-
-export interface GHLConversationsListResponse {
-  conversations: GHLConversation[];
-  meta?: GHLPaginationMeta;
-}
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  meta?: GHLPaginationMeta;
-}
-
-export interface GHLOpportunitiesListResponse {
-  opportunities: GHLOpportunity[];
-  meta?: GHLPaginationMeta;
-}
-
-export type GHLOpportunityResponse = GHLOpportunity;
+// ── Cache / client helper aliases ─────────────────────────────────────────
 
 export type GHLContactNote = GHLNote;
 

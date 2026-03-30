@@ -8,5 +8,6 @@ export {
   resumeRecipe,
 } from "./provision";
 export type { ProvisionResult } from "./provision";
-export { loadTemplate, RECIPE_TEMPLATE_PATHS } from "./templates";
+export { RECIPE_TEMPLATE_PATHS } from "./recipeTemplateRegistry";
+export { loadTemplate } from "./templates";
 export { injectVariables, UnreplacedPlaceholdersError } from "./variableInjector";

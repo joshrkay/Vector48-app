@@ -12,7 +12,12 @@ export function enqueueRecipeProvisioning(params: {
   recipeSlug: string;
   config: Record<string, unknown>;
 }): void {
-  void provisionRecipe(params).catch((err: unknown) => {
+  void provisionRecipe(
+    params.accountId,
+    params.recipeSlug,
+    params.config,
+    params.activationId,
+  ).catch((err: unknown) => {
     console.error(
       JSON.stringify({
         level: "error",

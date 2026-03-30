@@ -1,7 +1,8 @@
 import type { Database } from "@/lib/supabase/types";
 import type { RecipeDefinition } from "@/types/recipes";
 
-<<<<<<< Current (Your changes)
+export type { RecipeDefinition as RecipeCatalogEntry };
+
 export type Vertical = Database["public"]["Tables"]["accounts"]["Row"]["vertical"];
 
 export type RecipeStatus =
@@ -10,11 +11,6 @@ export type RecipeStatus =
   | "error"
   | "available"
   | "coming_soon";
-=======
-export type { RecipeDefinition as RecipeCatalogEntry };
-
-export type RecipeStatus = "active" | "paused" | "available" | "coming_soon";
->>>>>>> Incoming (Background Agent changes)
 
 export interface RecipeWithStatus extends RecipeDefinition {
   status: RecipeStatus;
