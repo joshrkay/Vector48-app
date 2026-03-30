@@ -4,88 +4,52 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "ai-{{TENANT_ID}}",
+        "path": "ai-phone-{{TENANT_ID}}",
         "responseMode": "onReceived",
         "options": {}
       },
-      "id": "webhook-1",
-      "name": "Webhook",
+      "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "InboundWebhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [0, 0],
-      "webhookId": "ai-phone-webhook"
+      "webhookId": "webhook-ai-phone-{{TENANT_ID}}"
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "a1",
-              "name": "TENANT_ID",
-              "value": "{{TENANT_ID}}",
-              "type": "string"
-            },
-            {
-              "id": "a2",
-              "name": "GHL_TOKEN",
-              "value": "{{GHL_TOKEN}}",
-              "type": "string"
-            },
-            {
-              "id": "a3",
-              "name": "GHL_LOCATION_ID",
-              "value": "{{GHL_LOCATION_ID}}",
-              "type": "string"
-            },
-            {
-              "id": "a4",
-              "name": "BUSINESS_PHONE",
-              "value": "{{BUSINESS_PHONE}}",
-              "type": "string"
-            },
-            {
-              "id": "a5",
-              "name": "BUSINESS_NAME",
-              "value": "{{BUSINESS_NAME}}",
-              "type": "string"
-            },
-            {
-              "id": "a6",
-              "name": "NOTIFICATION_PHONE",
-              "value": "{{NOTIFICATION_PHONE}}",
-              "type": "string"
-            },
-            {
-              "id": "a7",
-              "name": "ELEVENLABS_VOICE_ID",
-              "value": "{{ELEVENLABS_VOICE_ID}}",
-              "type": "string"
-            },
-            {
-              "id": "a8",
-              "name": "VERTICAL",
-              "value": "{{VERTICAL}}",
-              "type": "string"
-            },
-            {
-              "id": "a9",
-              "name": "WEBHOOK_URL",
-              "value": "{{WEBHOOK_URL}}",
-              "type": "string"
-            }
-          ]
-        },
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{\n  json: {\n    tenant_id: \"{{TENANT_ID}}\",\n    business_name: \"{{BUSINESS_NAME}}\",\n    business_phone: \"{{BUSINESS_PHONE}}\",\n    notification_phone: \"{{NOTIFICATION_PHONE}}\",\n    vertical: \"{{VERTICAL}}\",\n    elevenlabs_voice_id: \"{{ELEVENLABS_VOICE_ID}}\",\n    webhook_url: \"{{WEBHOOK_URL}}\"\n  }\n}];"
+      },
+      "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "name": "TenantContext",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.webhook_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
         "options": {}
       },
-      "id": "set-1",
-      "name": "TenantContext",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [240, 0]
+      "id": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
+      "name": "GHLHealthProbe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{GHL_CREDENTIAL_ID}}",
+          "name": "ghl_{{TENANT_ID}}"
+        }
+      },
+      "disabled": true
     }
   ],
   "connections": {
-    "Webhook": {
+    "InboundWebhook": {
       "main": [
         [
           {
@@ -95,9 +59,24 @@
           }
         ]
       ]
+    },
+    "TenantContext": {
+      "main": [
+        [
+          {
+            "node": "GHLHealthProbe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "tenant_id": "{{TENANT_ID}}"
   }
 }

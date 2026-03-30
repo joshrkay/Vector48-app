@@ -55,6 +55,8 @@ export function isRecipeAvailable(
     case "ga":
     case "v1":
       return true;
+    case "coming_soon":
+      return false;
     case "v2":
       return V2_PLANS.has(planSlug);
     case "v3":

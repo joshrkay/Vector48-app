@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/recipes/estimate-audit": "Estimate Audit",
   "/recipes": "Recipes",
   "/crm/contacts": "Contacts",
   "/crm/inbox": "Inbox",

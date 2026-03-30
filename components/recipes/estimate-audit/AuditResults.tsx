@@ -21,6 +21,8 @@ const currency = new Intl.NumberFormat("en-US", {
 interface AuditResultsProps {
   auditLogId: string | null;
   suggestions: AuditSuggestion[];
+  /** Sum of all suggestion values from the latest analysis (API). */
+  totalPotentialValue?: number | null;
   onHistoryRefresh?: () => void;
 }
 
@@ -29,6 +31,7 @@ type RowState = "pending" | "accepted" | "ignored";
 export function AuditResults({
   auditLogId,
   suggestions,
+  totalPotentialValue,
   onHistoryRefresh,
 }: AuditResultsProps) {
   const [states, setStates] = React.useState<RowState[]>(() =>
@@ -76,15 +79,19 @@ export function AuditResults({
   };
 
   const handleAccept = (index: number) => {
-    const next = states.map((s, i) => (i === index ? "accepted" : s));
-    setStates(next);
-    void postAccept(next);
+    setStates((prev) => {
+      const next = prev.map((s, i) => (i === index ? "accepted" : s));
+      void postAccept(next);
+      return next;
+    });
   };
 
   const handleIgnore = (index: number) => {
-    setStates((prev) =>
-      prev.map((s, i) => (i === index ? "ignored" : s)),
-    );
+    setStates((prev) => {
+      const next = prev.map((s, i) => (i === index ? "ignored" : s));
+      void postAccept(next);
+      return next;
+    });
   };
 
   if (suggestions.length === 0) {
@@ -97,13 +104,25 @@ export function AuditResults({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border bg-muted/40 px-4 py-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Accepted value
-        </p>
-        <p className="text-2xl font-semibold tabular-nums text-[var(--v48-accent)]">
-          {currency.format(acceptedTotal)}
-        </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border bg-muted/40 px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Accepted value
+          </p>
+          <p className="text-2xl font-semibold tabular-nums text-[var(--v48-accent)]">
+            {currency.format(acceptedTotal)}
+          </p>
+        </div>
+        {totalPotentialValue != null && (
+          <div className="rounded-lg border bg-muted/40 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Total potential
+            </p>
+            <p className="text-2xl font-semibold tabular-nums text-foreground">
+              {currency.format(totalPotentialValue)}
+            </p>
+          </div>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">

@@ -1,4 +1,5 @@
 import type { Database } from "@/lib/supabase/types";
+import { ESTIMATE_AUDIT_TOOL_NAME } from "@/lib/recipes/estimate-audit/anthropicTool";
 
 export type EstimateAuditVertical =
   Database["public"]["Enums"]["vertical"];
@@ -79,14 +80,12 @@ Trade-specific reference (use as guidance, not a checklist to spam every item):
 ${knowledge}
 
 Output rules (critical):
-- Respond with ONE JSON object only. No markdown, no code fences, no preamble, no text before or after the JSON.
-- Use this exact shape (numbers are US dollars, not cents):
-{"suggestions":[{"item":"string","reason":"string","estimatedValue":0}],"totalPotentialValue":0}
+- You MUST call the tool "${ESTIMATE_AUDIT_TOOL_NAME}" exactly once with your full analysis. Do not reply with plain text or markdown — only use that tool.
+- Tool payload shape (numbers are US dollars, not cents): suggestions[] with item, reason, estimatedValue; totalPotentialValue must equal the sum of all estimatedValue (after rounding to two decimals).
 - "item": short title for the suggestion.
 - "reason": 1–3 sentences explaining why it matters; mention pricing sanity here if relevant.
-- "estimatedValue": your best guess at incremental revenue or value for that suggestion in USD (integer or decimal). If unsure, give a conservative round number and keep the reason honest.
-- "totalPotentialValue": must equal the sum of all "estimatedValue" in "suggestions" (after rounding to two decimal places if needed).
-- If the estimate text is empty or unusable, return {"suggestions":[],"totalPotentialValue":0}.
+- "estimatedValue": your best guess at incremental revenue or value for that suggestion in USD. If unsure, give a conservative round number and keep the reason honest.
+- If the estimate text is empty or unusable, call the tool with {"suggestions":[],"totalPotentialValue":0}.
 - Produce roughly 5–10 suggestions when the estimate has enough detail; fewer is fine if the document is thin.`;
 }
 

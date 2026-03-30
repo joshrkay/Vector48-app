@@ -1,49 +1,43 @@
-import "server-only";
+// ---------------------------------------------------------------------------
+// n8n REST API client (n8n.cloud and self-hosted: same REST paths; set N8N_BASE_URL).
+// Auth: header X-N8N-API-KEY.
+// ---------------------------------------------------------------------------
 
-const MAX_RETRIES = 4;
-const RETRY_BACKOFF_MS = [500, 1_500, 3_000, 6_000];
+import {
+  classifyN8nError,
+  N8nApiError,
+  N8nNotFoundError,
+} from "./errors";
 
-export class N8nClientError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly path: string,
-    public readonly body?: unknown,
-  ) {
-    super(message);
-    this.name = "N8nClientError";
-  }
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/+$/, "");
 }
 
-export interface N8nCredentialListItem {
-  id: string;
-  name: string;
-  type: string;
-  data?: unknown;
-}
-
-export interface CreateWorkflowResult {
+export interface N8nWorkflowCreateResult {
   id: string;
   active: boolean;
 }
 
-export interface CreateCredentialResult {
+export interface N8nCredentialSummary {
+  id: string;
+  name: string;
+  type: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface N8nCredentialCreateResult {
   id: string;
 }
 
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, "");
-}
-
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/**
- * Typed client for the n8n public REST API (`X-N8N-API-KEY`).
- * Pass `baseUrl` including `/api/v1` with no trailing slash (e.g. n8n.cloud instance URL).
- * Self-hosted installs may add a path prefix, e.g. `https://host/n8n/api/v1`.
- */
+function jitterMs(base: number): number {
+  return base + Math.floor(Math.random() * 100);
+}
+
 export class N8nClient {
   private readonly baseUrl: string;
 
@@ -54,147 +48,98 @@ export class N8nClient {
     this.baseUrl = normalizeBaseUrl(baseUrl);
   }
 
-  private async request<T>(
+  /**
+   * Raw request with retries on 5xx and 429 only.
+   */
+  async request<T>(
     method: string,
     path: string,
-    options?: { body?: unknown; signal?: AbortSignal },
+    options?: { body?: unknown; query?: Record<string, string> },
   ): Promise<T> {
-    const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
-    let lastErr: unknown;
-
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      try {
-        const jsonBody = options?.body;
-        const res = await fetch(url, {
-          method,
-          headers: {
-            "X-N8N-API-KEY": this.apiKey,
-            Accept: "application/json",
-            ...(jsonBody !== undefined
-              ? { "Content-Type": "application/json" }
-              : {}),
-          },
-          body: jsonBody !== undefined ? JSON.stringify(jsonBody) : undefined,
-          signal: options?.signal,
-        });
-
-        const text = await res.text();
-        let parsed: unknown = text;
-        if (text.length > 0) {
-          try {
-            parsed = JSON.parse(text) as unknown;
-          } catch {
-            parsed = text;
-          }
-        }
-
-        if (res.status >= 500 || res.status === 429) {
-          console.warn(
-            JSON.stringify({
-              level: "warn",
-              service: "n8n",
-              event: "retryable_response",
-              method,
-              path,
-              status: res.status,
-              attempt,
-            }),
-          );
-          if (attempt < MAX_RETRIES - 1) {
-            await sleep(RETRY_BACKOFF_MS[attempt] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1]);
-            continue;
-          }
-        }
-
-        if (res.status >= 400 && res.status < 500) {
-          const msg =
-            typeof parsed === "object" &&
-            parsed !== null &&
-            "message" in parsed &&
-            typeof (parsed as { message: unknown }).message === "string"
-              ? (parsed as { message: string }).message
-              : `N8N request failed (${res.status})`;
-          throw new N8nClientError(msg, res.status, path, parsed);
-        }
-
-        if (!res.ok) {
-          throw new N8nClientError(
-            `N8N request failed (${res.status})`,
-            res.status,
-            path,
-            parsed,
-          );
-        }
-
-        return parsed as T;
-      } catch (e) {
-        lastErr = e;
-        if (e instanceof N8nClientError) {
-          throw e;
-        }
-        const retryable =
-          e instanceof TypeError ||
-          (e instanceof Error && e.name === "AbortError");
-        if (retryable && attempt < MAX_RETRIES - 1) {
-          await sleep(RETRY_BACKOFF_MS[attempt] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1]);
-          continue;
-        }
-        throw e;
+    const url = new URL(path.startsWith("/") ? path.slice(1) : path, `${this.baseUrl}/`);
+    if (options?.query) {
+      for (const [k, v] of Object.entries(options.query)) {
+        url.searchParams.set(k, v);
       }
     }
 
-    throw lastErr instanceof Error
-      ? lastErr
-      : new Error(String(lastErr));
+    const maxAttempts = 4;
+    let lastErr: unknown;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const res = await fetch(url.toString(), {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-N8N-API-KEY": this.apiKey,
+        },
+        body:
+          options?.body !== undefined
+            ? JSON.stringify(options.body)
+            : undefined,
+      });
+
+      const text = await res.text();
+      let parsed: unknown = text;
+      if (text.length > 0) {
+        try {
+          parsed = JSON.parse(text) as unknown;
+        } catch {
+          parsed = text;
+        }
+      } else {
+        parsed = undefined;
+      }
+
+      if (res.ok) {
+        return parsed as T;
+      }
+
+      const err = classifyN8nError(res.status, parsed, `${method} ${path}`);
+      lastErr = err;
+
+      if (err.retryable && attempt < maxAttempts - 1) {
+        const backoff = jitterMs(200 * 2 ** attempt);
+        await sleep(backoff);
+        continue;
+      }
+
+      throw err;
+    }
+
+    throw lastErr instanceof Error ? lastErr : new Error("n8n request failed");
   }
 
-  async createWorkflow(workflowJson: unknown): Promise<CreateWorkflowResult> {
+  async createWorkflow(workflowJson: unknown): Promise<N8nWorkflowCreateResult> {
     const data = await this.request<Record<string, unknown>>(
       "POST",
-      "/workflows",
+      "/api/v1/workflows",
       { body: workflowJson },
     );
     const id = data.id;
-    const active = data.active === true;
+    const active = Boolean(data.active);
     if (typeof id !== "string") {
-      throw new N8nClientError(
-        "N8N create workflow response missing id",
-        500,
-        "/workflows",
-        data,
-      );
+      throw new N8nApiError(500, "n8n create workflow: missing id in response", "INVALID_RESPONSE");
     }
     return { id, active };
   }
 
-  async getWorkflow(id: string): Promise<unknown> {
-    return this.request<unknown>("GET", `/workflows/${encodeURIComponent(id)}`);
-  }
-
-  async updateWorkflow(id: string, workflowJson: unknown): Promise<unknown> {
-    return this.request<unknown>("PATCH", `/workflows/${encodeURIComponent(id)}`, {
-      body: workflowJson,
-    });
-  }
-
   async activateWorkflow(id: string): Promise<void> {
-    await this.request<unknown>(
-      "POST",
-      `/workflows/${encodeURIComponent(id)}/activate`,
-    );
+    await this.request("POST", `/api/v1/workflows/${encodeURIComponent(id)}/activate`);
   }
 
   async deactivateWorkflow(id: string): Promise<void> {
-    await this.request<unknown>(
-      "POST",
-      `/workflows/${encodeURIComponent(id)}/deactivate`,
-    );
+    await this.request("POST", `/api/v1/workflows/${encodeURIComponent(id)}/deactivate`);
   }
 
   async deleteWorkflow(id: string): Promise<void> {
-    await this.request<unknown>(
-      "DELETE",
-      `/workflows/${encodeURIComponent(id)}`,
+    await this.request("DELETE", `/api/v1/workflows/${encodeURIComponent(id)}`);
+  }
+
+  async getWorkflow(id: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>(
+      "GET",
+      `/api/v1/workflows/${encodeURIComponent(id)}`,
     );
   }
 
@@ -202,51 +147,59 @@ export class N8nClient {
     name: string,
     type: string,
     data: Record<string, unknown>,
-  ): Promise<CreateCredentialResult> {
+  ): Promise<N8nCredentialCreateResult> {
     const body = { name, type, data };
-    const res = await this.request<Record<string, unknown>>(
-      "POST",
-      "/credentials",
-      { body },
-    );
+    const res = await this.request<Record<string, unknown>>("POST", "/api/v1/credentials", {
+      body,
+    });
     const cid = res.id;
     if (typeof cid !== "string") {
-      throw new N8nClientError(
-        "N8N create credential response missing id",
-        500,
-        "/credentials",
-        res,
-      );
+      throw new N8nApiError(500, "n8n create credential: missing id", "INVALID_RESPONSE");
     }
     return { id: cid };
   }
 
-  async getCredentials(
-    filter?: Record<string, string>,
-  ): Promise<N8nCredentialListItem[]> {
-    const qs =
-      filter && Object.keys(filter).length > 0
-        ? `?${new URLSearchParams(filter).toString()}`
-        : "";
-    const res = await this.request<unknown>("GET", `/credentials${qs}`);
-    if (Array.isArray(res)) {
-      return res as N8nCredentialListItem[];
+  /**
+   * List credentials. Optional query keys depend on n8n version; passed through.
+   */
+  async getCredentials(query?: Record<string, string>): Promise<N8nCredentialSummary[]> {
+    const raw = await this.request<unknown>("GET", "/api/v1/credentials", { query });
+    const list = Array.isArray(raw) ? raw : (raw as { data?: unknown })?.data;
+    if (!Array.isArray(list)) {
+      return [];
     }
-    if (
-      typeof res === "object" &&
-      res !== null &&
-      "data" in res &&
-      Array.isArray((res as { data: unknown }).data)
-    ) {
-      return (res as { data: N8nCredentialListItem[] }).data;
-    }
-    return [];
+    return list.map((c) => {
+      const row = c as Record<string, unknown>;
+      return {
+        id: String(row.id ?? ""),
+        name: String(row.name ?? ""),
+        type: String(row.type ?? ""),
+        createdAt: row.createdAt != null ? String(row.createdAt) : undefined,
+        updatedAt: row.updatedAt != null ? String(row.updatedAt) : undefined,
+      };
+    });
   }
 
   async deleteCredential(id: string): Promise<void> {
-    await this.request<unknown>(
-      "DELETE",
-      `/credentials/${encodeURIComponent(id)}`,
-    );
+    try {
+      await this.request(
+        "DELETE",
+        `/api/v1/credentials/${encodeURIComponent(id)}`,
+      );
+    } catch (e) {
+      if (e instanceof N8nNotFoundError) {
+        return;
+      }
+      throw e;
+    }
   }
+}
+
+export function createN8nClientFromEnv(): N8nClient {
+  const base = process.env.N8N_BASE_URL;
+  const key = process.env.N8N_API_KEY;
+  if (!base || !key) {
+    throw new Error("N8N_BASE_URL and N8N_API_KEY must be set");
+  }
+  return new N8nClient(base, key);
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { provisionRecipe } from "@/lib/n8n/provision";
 import { createServerClient } from "@/lib/supabase/server";
 
 // Maps step index to the DB columns that step updates
@@ -118,22 +119,40 @@ export async function completeOnboarding(
 
   // Activate Recipe 1 if requested
   if (activateRecipe) {
-    const { error: recipeError } = await supabase
+    const config = voiceConfig
+      ? {
+          voice_gender: voiceConfig.voiceGender,
+          voice_greeting: voiceConfig.voiceGreeting,
+        }
+      : null;
+
+    const { data: activation, error: recipeError } = await supabase
       .from("recipe_activations")
       .insert({
         account_id: accountId,
         recipe_slug: "ai-phone-answering",
         status: "active",
-        config: voiceConfig
-          ? {
-              voice_gender: voiceConfig.voiceGender,
-              voice_greeting: voiceConfig.voiceGreeting,
-            }
-          : null,
-      });
+        config,
+      })
+      .select("id")
+      .single();
 
-    if (recipeError) {
-      return { error: recipeError.message };
+    if (recipeError || !activation) {
+      return { error: recipeError?.message ?? "Failed to create activation" };
+    }
+
+    try {
+      await provisionRecipe(
+        accountId,
+        "ai-phone-answering",
+        config,
+        activation.id,
+      );
+    } catch {
+      return {
+        error:
+          "Recipe activation was saved but N8N provisioning failed. Check error_message on the activation or retry later.",
+      };
     }
   }
 

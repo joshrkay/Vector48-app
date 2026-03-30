@@ -3,7 +3,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createServerClient } from "@/lib/supabase/server";
 import { buildEstimateAuditSystemPrompt } from "@/lib/prompts/estimateAudit";
 import { analyzeBodySchema } from "@/lib/recipes/estimate-audit/schema";
-import { parseEstimateAuditModelJson } from "@/lib/recipes/estimate-audit/parseModelJson";
+import {
+  parseEstimateAuditModelJson,
+  parseEstimateAuditToolInput,
+} from "@/lib/recipes/estimate-audit/parseModelJson";
+import {
+  ESTIMATE_AUDIT_TOOL_NAME,
+  estimateAuditSubmitTool,
+} from "@/lib/recipes/estimate-audit/anthropicTool";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -58,38 +65,49 @@ ${trimmed}
 
   const client = new Anthropic({ apiKey });
 
-  let assistantText: string;
+  let auditResult: ReturnType<typeof parseEstimateAuditModelJson>;
   try {
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 4096,
       system,
+      tools: [estimateAuditSubmitTool],
+      tool_choice: {
+        type: "tool",
+        name: ESTIMATE_AUDIT_TOOL_NAME,
+        disable_parallel_tool_use: true,
+      },
       messages: [{ role: "user", content: userContent }],
     });
-    const block = msg.content[0];
-    if (block.type !== "text") {
-      console.error("[estimate-audit] unexpected block type", block.type);
-      return NextResponse.json(
-        { error: "Unexpected model response" },
-        { status: 502 },
-      );
+
+    const toolBlock = msg.content.find(
+      (b) => b.type === "tool_use" && b.name === ESTIMATE_AUDIT_TOOL_NAME,
+    );
+
+    if (toolBlock && toolBlock.type === "tool_use") {
+      auditResult = parseEstimateAuditToolInput(toolBlock.input);
+    } else {
+      const textBlock = msg.content.find((b) => b.type === "text");
+      if (textBlock?.type === "text") {
+        console.warn(
+          "[estimate-audit] no tool_use; falling back to text JSON parse",
+        );
+        auditResult = parseEstimateAuditModelJson(textBlock.text);
+      } else {
+        console.error(
+          "[estimate-audit] unexpected response blocks",
+          msg.content.map((b) => b.type),
+        );
+        return NextResponse.json(
+          { error: "Unexpected model response" },
+          { status: 502 },
+        );
+      }
     }
-    assistantText = block.text;
   } catch (e) {
     console.error("[estimate-audit] anthropic request failed", e);
     return NextResponse.json(
       { error: "Could not complete estimate audit" },
-      { status: 502 },
-    );
-  }
-
-  let auditResult: ReturnType<typeof parseEstimateAuditModelJson>;
-  try {
-    auditResult = parseEstimateAuditModelJson(assistantText);
-  } catch (e) {
-    console.error("[estimate-audit] JSON parse failed", e);
-    return NextResponse.json(
-      { error: "Could not parse audit results" },
       { status: 502 },
     );
   }

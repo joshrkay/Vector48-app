@@ -529,3 +529,48 @@ export interface GHLCreateWebhookPayload {
   events: string[];
   locationId: string;
 }
+
+// ── Response aliases (client) ─────────────────────────────────────────────
+
+export type GHLContactResponse = GHLContact;
+
+export interface GHLContactsListResponse {
+  contacts: GHLContact[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLConversationsListResponse {
+  conversations: GHLConversation[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLMessagesListResponse {
+  messages: GHLMessage[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLOpportunitiesListResponse {
+  opportunities: GHLOpportunity[];
+  meta?: GHLPaginationMeta;
+}
+
+export type GHLOpportunityResponse = GHLOpportunity;
+
+export type GHLContactNote = GHLNote;
+
+export interface GHLContactTask {
+  id: string;
+  title: string;
+  completed?: boolean;
+}
+
+export interface GHLCalendarSlotsParams {
+  calendarId: string;
+  startDate: string;
+  endDate: string;
+  timezone?: string;
+}
+
+export interface GHLCalendarSlotsResponse {
+  slots: { startTime: string; endTime: string }[];
+}
