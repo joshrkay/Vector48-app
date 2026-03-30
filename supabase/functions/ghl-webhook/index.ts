@@ -1,4 +1,8 @@
-// Vector 48 — GHL Webhook Receiver (Supabase Edge Function)
+// DEPRECATED: This Supabase Edge Function is replaced by the Next.js API route
+// at /app/api/webhooks/ghl/route.ts which provides full type safety, idempotency,
+// plain-English summaries, and async side effects.
+//
+// Original: Vector 48 — GHL Webhook Receiver (Supabase Edge Function)
 // Receives inbound webhooks from GoHighLevel and logs them as automation_events.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -79,6 +83,29 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Failed to log event" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+
+    // Notify the Next.js app to bust its in-memory cache for this account.
+    const nextAppUrl = Deno.env.get("NEXT_APP_URL");
+    const cacheSecret = Deno.env.get("GHL_CACHE_INVALIDATE_SECRET");
+
+    if (nextAppUrl && cacheSecret) {
+      try {
+        await fetch(`${nextAppUrl}/api/ghl/cache-invalidate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-cache-invalidate-secret": cacheSecret,
+          },
+          body: JSON.stringify({
+            accountId: account.id,
+            eventType,
+          }),
+        });
+      } catch (cacheErr) {
+        // Non-fatal: cache will expire on its own via TTL
+        console.error("Cache invalidation call failed:", cacheErr);
+      }
     }
 
     return new Response(
