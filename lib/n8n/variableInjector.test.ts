@@ -15,10 +15,31 @@ describe("injectVariables", () => {
     expect(out.b).toBe(1);
   });
 
-  it("throws when placeholders remain", () => {
+  it("replaces every occurrence of the same placeholder", () => {
+    const raw = '{"a":"{{X}}","b":"{{X}}"}';
+    const out = injectVariables(raw, { X: "same" }) as { a: string; b: string };
+    expect(out.a).toBe("same");
+    expect(out.b).toBe("same");
+  });
+
+  it("throws UnreplacedTemplateVariableError when placeholders remain", () => {
     const raw = '{"x":"{{A}}","y":"{{B}}"}';
     expect(() => injectVariables(raw, { A: "1" })).toThrow(
       UnreplacedTemplateVariableError,
     );
+  });
+
+  it("includes remaining variable names on UnreplacedTemplateVariableError", () => {
+    const raw = '{"x":"{{A}}","y":"{{B}}","z":"{{C}}"}';
+    try {
+      injectVariables(raw, { A: "1" });
+      expect.fail("expected throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(UnreplacedTemplateVariableError);
+      expect((e as UnreplacedTemplateVariableError).names.sort()).toEqual([
+        "B",
+        "C",
+      ]);
+    }
   });
 });
