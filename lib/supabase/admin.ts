@@ -5,14 +5,15 @@
 // ---------------------------------------------------------------------------
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./types";
 
-let _client: SupabaseClient | null = null;
+let _client: SupabaseClient<Database> | null = null;
 
-export function getSupabaseAdmin(): SupabaseClient {
+export function getSupabaseAdmin(): SupabaseClient<Database> {
   if (!_client) {
-    _client = createClient(
+    _client = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
   }
   return _client;
