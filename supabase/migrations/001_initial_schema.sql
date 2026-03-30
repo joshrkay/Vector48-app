@@ -108,7 +108,7 @@ CREATE TABLE accounts (
 );
 
 CREATE INDEX idx_accounts_owner ON accounts(owner_user_id);
-CREATE INDEX idx_accounts_ghl_location ON accounts(ghl_location_id);
+CREATE UNIQUE INDEX idx_accounts_ghl_location ON accounts(ghl_location_id) WHERE ghl_location_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_accounts_stripe_customer ON accounts(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
 
 -- ============================================================
@@ -338,7 +338,7 @@ CREATE POLICY "Users can update estimate audits"
 CREATE OR REPLACE FUNCTION set_trial_end()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.trial_ends_at := now() + interval '7 days';
+  NEW.trial_ends_at := COALESCE(NEW.trial_ends_at, now() + interval '7 days');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

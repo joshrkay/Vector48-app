@@ -80,9 +80,6 @@ export function NotificationSettings({ account }: { account: AccountRow }) {
       if (serialized === prevSerialized.current) return;
       prevSerialized.current = serialized;
       const v = form.getValues();
-      if (!v.sms && !v.email) {
-        return;
-      }
       const res = await fetch("/api/settings/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
