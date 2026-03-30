@@ -208,7 +208,7 @@ export class GHLClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const backoff = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+        const backoff = RETRY_BACKOFF_MS[attempt - 1] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
         await new Promise((r) => setTimeout(r, backoff));
       }
 
@@ -264,7 +264,6 @@ export class GHLClient {
     // All retries exhausted
     throw lastError ?? new GHLRateLimitError("All retries exhausted");
   }
-}
 
   private get<T>(
     path: string,

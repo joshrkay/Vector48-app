@@ -1,13 +1,15 @@
 import { cn } from "@/lib/utils";
 import { STAGE_STYLES } from "@/lib/recipes/stages";
-import type { FunnelStage } from "@/lib/recipes/types";
+import type { FunnelStage } from "@/types/recipes";
 
 const STAGE_LABELS: Record<FunnelStage, string> = {
   awareness: "Awareness",
   capture: "Capture",
-  nurture: "Nurture",
+  engage: "Engage",
   close: "Close",
-  delight: "Delight",
+  deliver: "Deliver",
+  retain: "Retain",
+  reactivate: "Reactivate",
 };
 
 export function RecipeStageTag({ stage }: { stage: FunnelStage }) {

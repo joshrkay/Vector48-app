@@ -15,6 +15,7 @@ export type Vertical =
 // ── Funnel Stages ──────────────────────────────────────────────────────────
 
 export type FunnelStage =
+  | "awareness"
   | "capture"
   | "engage"
   | "close"
@@ -26,6 +27,7 @@ export const FUNNEL_STAGE_META: Record<
   FunnelStage,
   { label: string; color: string }
 > = {
+  awareness: { label: "Awareness", color: "blue-100" },
   capture: { label: "Capture", color: "blue-100" },
   engage: { label: "Engage", color: "violet-100" },
   close: { label: "Close", color: "amber-100" },
@@ -36,7 +38,12 @@ export const FUNNEL_STAGE_META: Record<
 
 // ── Release Phases ─────────────────────────────────────────────────────────
 
-export type ReleasePhase = "v1" | "v2" | "v3";
+export type ReleasePhase =
+  | "ga"
+  | "coming_soon"
+  | "v1"
+  | "v2"
+  | "v3";
 
 // ── Config Fields (drives the activation form UI) ──────────────────────────
 
@@ -45,7 +52,9 @@ export type ConfigFieldType =
   | "number"
   | "boolean"
   | "select"
-  | "textarea";
+  | "textarea"
+  | "phone"
+  | "toggle";
 
 export interface RecipeConfigField {
   name: string;
@@ -64,6 +73,8 @@ export interface RecipeDefinition {
   slug: string;
   name: string;
   description: string;
+  /** When set, recipe is shown as recommended for this vertical only. */
+  vertical?: Vertical | null;
   detailedDescription: string;
   funnelStage: FunnelStage;
   releasePhase: ReleasePhase;
@@ -81,9 +92,7 @@ export interface RecipeDefinition {
   estimatedROI: string;
 }
 
-// ── Activation Status ──────────────────────────────────────────────────────
-// DB enum is 'active' | 'paused' | 'error'.
-// 'deactivated' is a UI-derived state: no activation row exists for this recipe.
+// ── Activation Status (UI) ─────────────────────────────────────────────────
 
 export type RecipeActivationStatus =
   | "active"
@@ -93,8 +102,12 @@ export type RecipeActivationStatus =
 
 // ── Recipe Activation (maps to recipe_activations DB row) ──────────────────
 
-/** DB-aligned status (does not include 'deactivated' — that's UI-derived) */
-export type RecipeActivationDbStatus = "active" | "paused" | "error";
+/** DB-aligned activation row status */
+export type RecipeActivationDbStatus =
+  | "active"
+  | "paused"
+  | "error"
+  | "deactivated";
 
 export interface RecipeActivation {
   id: string;
@@ -109,8 +122,3 @@ export interface RecipeActivation {
 
 // ── Merged view for the marketplace UI ─────────────────────────────────────
 
-export type RecipeWithStatus = RecipeDefinition & {
-  activationStatus?: RecipeActivationStatus;
-  lastTriggeredAt?: string;
-  config?: Record<string, unknown>;
-};

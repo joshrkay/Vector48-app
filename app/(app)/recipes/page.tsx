@@ -17,7 +17,9 @@ export default async function RecipesPage() {
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, vertical")
+    .select(
+      "id, vertical, plan_slug, phone, voice_gender, voice_greeting, business_hours",
+    )
     .eq("owner_user_id", user.id)
     .single();
 
@@ -30,10 +32,28 @@ export default async function RecipesPage() {
     .select("*")
     .eq("account_id", account.id);
 
+  const { data: integrationRows } = await supabase
+    .from("integrations")
+    .select("provider, status")
+    .eq("account_id", account.id);
+
+  const connectedProviders =
+    integrationRows
+      ?.filter((r) => r.status === "connected")
+      .map((r) => r.provider) ?? [];
+
+  const profile = {
+    phone: account.phone,
+    voice_gender: account.voice_gender,
+    voice_greeting: account.voice_greeting,
+    business_hours: account.business_hours,
+  };
+
   const recipes = mergeRecipesWithActivations(
     RECIPE_CATALOG,
     activations ?? [],
     account.vertical,
+    account.plan_slug,
   );
 
   const activeCount = recipes.filter((r) => r.status === "active").length;
@@ -47,7 +67,12 @@ export default async function RecipesPage() {
       </p>
 
       <div className="mt-6">
-        <RecipeGrid recipes={recipes} activeCount={activeCount} />
+        <RecipeGrid
+          recipes={recipes}
+          activeCount={activeCount}
+          profile={profile}
+          connectedProviders={connectedProviders}
+        />
       </div>
     </div>
   );
