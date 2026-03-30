@@ -1,11 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import type { AccountProfileSlice } from "@/lib/recipes/activationValidator";
 import type { RecipeWithStatus } from "@/lib/recipes/types";
 import { RecipeFilterTabs } from "./RecipeFilterTabs";
 import { RecipeCard } from "./RecipeCard";
 
-export function RecipeGrid({ recipes, activeCount }: { recipes: RecipeWithStatus[]; activeCount: number }) {
+export function RecipeGrid({
+  recipes,
+  activeCount,
+  profile,
+  connectedProviders,
+}: {
+  recipes: RecipeWithStatus[];
+  activeCount: number;
+  profile: AccountProfileSlice | null;
+  connectedProviders: string[];
+}) {
   const [filter, setFilter] = useState<"all" | "active">("all");
 
   const filtered =
@@ -32,7 +43,12 @@ export function RecipeGrid({ recipes, activeCount }: { recipes: RecipeWithStatus
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((recipe) => (
-            <RecipeCard key={recipe.slug} recipe={recipe} />
+            <RecipeCard
+              key={recipe.slug}
+              recipe={recipe}
+              profile={profile}
+              connectedProviders={connectedProviders}
+            />
           ))}
         </div>
       )}

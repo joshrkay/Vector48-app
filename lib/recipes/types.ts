@@ -1,29 +1,16 @@
 import type { Database } from "@/lib/supabase/types";
-
-export type FunnelStage =
-  | "awareness"
-  | "capture"
-  | "nurture"
-  | "close"
-  | "delight";
-
-export type ReleasePhase = "ga" | "coming_soon";
+import type { RecipeDefinition } from "@/types/recipes";
 
 export type Vertical = Database["public"]["Tables"]["accounts"]["Row"]["vertical"];
 
-export interface RecipeCatalogEntry {
-  slug: string;
-  name: string;
-  description: string;
-  icon: string;
-  funnelStage: FunnelStage;
-  vertical: Vertical | null;
-  releasePhase: ReleasePhase;
-}
+export type RecipeStatus =
+  | "active"
+  | "paused"
+  | "error"
+  | "available"
+  | "coming_soon";
 
-export type RecipeStatus = "active" | "paused" | "available" | "coming_soon";
-
-export interface RecipeWithStatus extends RecipeCatalogEntry {
+export interface RecipeWithStatus extends RecipeDefinition {
   status: RecipeStatus;
   lastTriggeredAt: string | null;
   activationId: string | null;

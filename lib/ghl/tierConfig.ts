@@ -4,7 +4,7 @@
 // Server-only.
 // ---------------------------------------------------------------------------
 
-import { createAdminClient } from "../supabase/admin";
+import { getSupabaseAdmin } from "../supabase/admin";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ export async function getTierConfig(accountId: string): Promise<TierConfig> {
 // ── Internal ──────────────────────────────────────────────────────────────
 
 async function loadTierConfig(accountId: string): Promise<TierConfig> {
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdmin();
 
   // Step 1: Get the account's plan_slug
   const { data: account, error: accountError } = await supabase

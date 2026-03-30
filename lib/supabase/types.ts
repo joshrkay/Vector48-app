@@ -120,21 +120,23 @@ export type Database = {
           id: string;
           account_id: string;
           recipe_slug: string;
-          status: "active" | "paused" | "error";
+          status: "active" | "paused" | "error" | "deactivated";
           config: Record<string, unknown> | null;
           n8n_workflow_id: string | null;
           activated_at: string;
           last_triggered_at: string | null;
+          deactivated_at: string | null;
         };
         Insert: {
           id?: string;
           account_id: string;
           recipe_slug: string;
-          status?: "active" | "paused" | "error";
+          status?: "active" | "paused" | "error" | "deactivated";
           config?: Record<string, unknown> | null;
           n8n_workflow_id?: string | null;
           activated_at?: string;
           last_triggered_at?: string | null;
+          deactivated_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["recipe_activations"]["Insert"]>;
       };
@@ -169,7 +171,12 @@ export type Database = {
         Row: {
           id: string;
           account_id: string;
-          provider: "jobber" | "servicetitan" | "google_business";
+          provider:
+            | "jobber"
+            | "servicetitan"
+            | "google_business"
+            | "twilio"
+            | "elevenlabs";
           status: "connected" | "disconnected";
           credentials_encrypted: Record<string, unknown> | null;
           connected_at: string;
@@ -177,7 +184,12 @@ export type Database = {
         Insert: {
           id?: string;
           account_id: string;
-          provider: "jobber" | "servicetitan" | "google_business";
+          provider:
+            | "jobber"
+            | "servicetitan"
+            | "google_business"
+            | "twilio"
+            | "elevenlabs";
           status?: "connected" | "disconnected";
           credentials_encrypted?: Record<string, unknown> | null;
           connected_at?: string;
@@ -189,8 +201,13 @@ export type Database = {
       vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";
       provisioning_status: "pending" | "complete" | "error";
       account_role: "admin" | "viewer";
-      recipe_status: "active" | "paused" | "error";
-      integration_provider: "jobber" | "servicetitan" | "google_business";
+      recipe_status: "active" | "paused" | "error" | "deactivated";
+      integration_provider:
+        | "jobber"
+        | "servicetitan"
+        | "google_business"
+        | "twilio"
+        | "elevenlabs";
       integration_status: "connected" | "disconnected";
       rate_limit_priority: "low" | "standard" | "high";
     };
