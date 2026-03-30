@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { STAGE_STYLES } from "@/lib/recipes/stages";
 import type { FunnelStage } from "@/types/recipes";
+<<<<<<< Current (Your changes)
 
 const STAGE_LABELS: Record<FunnelStage, string> = {
   awareness: "Awareness",
@@ -11,9 +12,13 @@ const STAGE_LABELS: Record<FunnelStage, string> = {
   retain: "Retain",
   reactivate: "Reactivate",
 };
+=======
+import { FUNNEL_STAGE_META } from "@/types/recipes";
+>>>>>>> Incoming (Background Agent changes)
 
 export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
   const style = STAGE_STYLES[stage];
+  const label = FUNNEL_STAGE_META[stage]?.label ?? stage;
 
   return (
     <span
@@ -23,7 +28,7 @@ export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
         style.text,
       )}
     >
-      {STAGE_LABELS[stage]}
+      {label}
     </span>
   );
 }

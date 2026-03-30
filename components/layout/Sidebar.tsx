@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Zap,
+  ClipboardList,
   Users,
   MessageSquare,
   Kanban,
@@ -24,6 +25,14 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Recipes", href: "/recipes", icon: Zap },
+];
+
+const toolsNavItems: NavItem[] = [
+  {
+    label: "Estimate Audit",
+    href: "/recipes/estimate-audit",
+    icon: ClipboardList,
+  },
 ];
 
 const crmNavItems: NavItem[] = [
@@ -91,6 +100,17 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
           {mainNavItems.map((item) => (
             <NavLink key={item.href} item={item} pathname={pathname} />
           ))}
+        </div>
+
+        <div className="mt-4">
+          <p className="mx-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+            Tools
+          </p>
+          <div className="space-y-1">
+            {toolsNavItems.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} />
+            ))}
+          </div>
         </div>
 
         {/* CRM section */}

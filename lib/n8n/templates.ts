@@ -1,26 +1,22 @@
-import "server-only";
+// ---------------------------------------------------------------------------
+// Recipe slug → n8n workflow template file (JSON string loaded from disk).
+// ---------------------------------------------------------------------------
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+const TEMPLATES_DIR = join(process.cwd(), "lib", "n8n", "templates");
+
 /** recipe_slug → filename under lib/n8n/templates/ */
-export const RECIPE_TEMPLATE_FILES: Record<string, string> = {
+export const RECIPE_TEMPLATE_PATHS: Record<string, string> = {
   "ai-phone-answering": "ai-phone-answering.json",
 };
 
-export function loadTemplateRaw(recipeSlug: string): string {
-  const file = RECIPE_TEMPLATE_FILES[recipeSlug];
+export function loadTemplate(recipeSlug: string): string {
+  const file = RECIPE_TEMPLATE_PATHS[recipeSlug];
   if (!file) {
-    throw new Error(`No N8N template for recipe: ${recipeSlug}`);
+    throw new Error(`No n8n template registered for recipe: ${recipeSlug}`);
   }
-  const path = join(process.cwd(), "lib", "n8n", "templates", file);
+  const path = join(TEMPLATES_DIR, file);
   return readFileSync(path, "utf8");
-}
-
-/**
- * Parsed workflow JSON (still contains {{placeholders}} inside string values).
- * Prefer loadTemplateRaw + injectVariables for provisioning.
- */
-export function loadTemplate(recipeSlug: string): unknown {
-  return JSON.parse(loadTemplateRaw(recipeSlug)) as unknown;
 }

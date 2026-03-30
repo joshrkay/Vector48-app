@@ -1,38 +1,48 @@
-const PLACEHOLDER_RE = /\{\{([^}]+)\}\}/g;
+// ---------------------------------------------------------------------------
+// Replace {{VAR}} placeholders in serialized workflow JSON (not template literals).
+// ---------------------------------------------------------------------------
 
-export class UnreplacedTemplateVariableError extends Error {
-  constructor(public readonly names: string[]) {
-    super(`Unreplaced template variables: ${names.join(", ")}`);
-    this.name = "UnreplacedTemplateVariableError";
+const PLACEHOLDER_RE = /\{\{([A-Z0-9_]+)\}\}/g;
+
+export class UnreplacedPlaceholdersError extends Error {
+  constructor(public readonly leftovers: string[]) {
+    super(
+      `Unreplaced template placeholders: ${leftovers.join(", ")}`,
+    );
+    this.name = "UnreplacedPlaceholdersError";
   }
 }
 
 /**
- * Replaces {{VARIABLE_NAME}} in a serialized JSON string (not template literals).
- * Throws if any placeholders remain after replacement.
+ * Replace {{VARIABLE_NAME}} in the template string, then JSON.parse.
+ * Keys in `variables` should be the placeholder names (e.g. TENANT_ID for {{TENANT_ID}}).
  */
 export function injectVariables(
   templateJsonString: string,
   variables: Record<string, string>,
 ): unknown {
-  let result = templateJsonString;
-  for (const [key, value] of Object.entries(variables)) {
-    const token = `{{${key}}}`;
-    result = result.split(token).join(value);
-  }
+  const sortedKeys = Object.keys(variables).sort((a, b) => b.length - a.length);
 
-  const remaining: string[] = [];
-  let m: RegExpExecArray | null;
-  const re = new RegExp(PLACEHOLDER_RE.source, "g");
-  while ((m = re.exec(result)) !== null) {
-    const name = m[1]?.trim();
-    if (name && !remaining.includes(name)) {
-      remaining.push(name);
+  let out = templateJsonString;
+  for (const key of sortedKeys) {
+    const value = variables[key];
+    const token = `{{${key}}}`;
+    if (out.includes(token)) {
+      out = out.split(token).join(value);
     }
   }
-  if (remaining.length > 0) {
-    throw new UnreplacedTemplateVariableError(remaining);
+
+  const leftovers: string[] = [];
+  let m: RegExpExecArray | null;
+  const re = new RegExp(PLACEHOLDER_RE.source, "g");
+  while ((m = re.exec(out)) !== null) {
+    if (m[1] && !leftovers.includes(m[1])) {
+      leftovers.push(m[1]);
+    }
+  }
+  if (leftovers.length > 0) {
+    throw new UnreplacedPlaceholdersError(leftovers);
   }
 
-  return JSON.parse(result) as unknown;
+  return JSON.parse(out) as unknown;
 }
