@@ -52,6 +52,16 @@ export type Database = {
           notification_email: boolean;
           notification_contact: string | null;
           onboarding_step: number;
+          business_email: string | null;
+          address_city: string | null;
+          address_state: string | null;
+          address_zip: string | null;
+          greeting_audio_url: string | null;
+          notification_contact_name: string | null;
+          notification_alert_email: string | null;
+          notification_alert_prefs: Record<string, unknown> | null;
+          account_status: "active" | "deleted";
+          owner_display_name: string | null;
         };
         Insert: {
           id?: string;
@@ -78,6 +88,16 @@ export type Database = {
           notification_email?: boolean;
           notification_contact?: string | null;
           onboarding_step?: number;
+          business_email?: string | null;
+          address_city?: string | null;
+          address_state?: string | null;
+          address_zip?: string | null;
+          greeting_audio_url?: string | null;
+          notification_contact_name?: string | null;
+          notification_alert_email?: string | null;
+          notification_alert_prefs?: Record<string, unknown> | null;
+          account_status?: "active" | "deleted";
+          owner_display_name?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;
       };
@@ -126,6 +146,7 @@ export type Database = {
           activated_at: string;
           last_triggered_at: string | null;
           deactivated_at: string | null;
+          error_message: string | null;
         };
         Insert: {
           id?: string;
@@ -137,6 +158,7 @@ export type Database = {
           activated_at?: string;
           last_triggered_at?: string | null;
           deactivated_at?: string | null;
+          error_message?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["recipe_activations"]["Insert"]>;
       };
@@ -177,7 +199,7 @@ export type Database = {
             | "google_business"
             | "twilio"
             | "elevenlabs";
-          status: "connected" | "disconnected";
+          status: "connected" | "disconnected" | "error";
           credentials_encrypted: Record<string, unknown> | null;
           connected_at: string;
         };
@@ -190,7 +212,7 @@ export type Database = {
             | "google_business"
             | "twilio"
             | "elevenlabs";
-          status?: "connected" | "disconnected";
+          status?: "connected" | "disconnected" | "error";
           credentials_encrypted?: Record<string, unknown> | null;
           connected_at?: string;
         };
@@ -208,7 +230,7 @@ export type Database = {
         | "google_business"
         | "twilio"
         | "elevenlabs";
-      integration_status: "connected" | "disconnected";
+      integration_status: "connected" | "disconnected" | "error";
       rate_limit_priority: "low" | "standard" | "high";
     };
   };

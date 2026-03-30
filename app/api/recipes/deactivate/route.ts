@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
-import { enqueueRecipeDeprovisioning } from "@/lib/n8n/recipeProvisioning";
+import { deprovisionRecipe } from "@/lib/n8n/provision";
 
 export async function POST(req: Request) {
   const supabase = await createServerClient();
@@ -44,27 +44,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, idempotent: true });
   }
 
-  enqueueRecipeDeprovisioning({
-    activationId: row.id,
-    accountId: account.id,
-    n8nWorkflowId: row.n8n_workflow_id,
-  });
-
-  const deactivatedAt = new Date().toISOString();
-  const { error } = await supabase
-    .from("recipe_activations")
-    .update({
-      status: "deactivated",
-      deactivated_at: deactivatedAt,
-    })
-    .eq("id", row.id)
-    .eq("account_id", account.id);
-
-  if (error) {
-    console.error("[deactivate] update failed", error.message);
+  try {
+    await deprovisionRecipe(account.id, recipeSlug);
+  } catch (e) {
+    console.error(
+      "[deactivate] deprovision failed",
+      e instanceof Error ? e.message : String(e),
+    );
     return NextResponse.json(
-      { error: "Could not deactivate recipe" },
-      { status: 500 },
+      { error: "Could not deactivate recipe automation" },
+      { status: 502 },
     );
   }
 

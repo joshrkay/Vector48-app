@@ -1,0 +1,103 @@
+{
+  "name": "AI Phone Answering — {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-{{TENANT_ID}}",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "ai-phone-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "TENANT_ID",
+              "value": "{{TENANT_ID}}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "GHL_TOKEN",
+              "value": "{{GHL_TOKEN}}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "GHL_LOCATION_ID",
+              "value": "{{GHL_LOCATION_ID}}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "BUSINESS_PHONE",
+              "value": "{{BUSINESS_PHONE}}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "BUSINESS_NAME",
+              "value": "{{BUSINESS_NAME}}",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "NOTIFICATION_PHONE",
+              "value": "{{NOTIFICATION_PHONE}}",
+              "type": "string"
+            },
+            {
+              "id": "a7",
+              "name": "ELEVENLABS_VOICE_ID",
+              "value": "{{ELEVENLABS_VOICE_ID}}",
+              "type": "string"
+            },
+            {
+              "id": "a8",
+              "name": "VERTICAL",
+              "value": "{{VERTICAL}}",
+              "type": "string"
+            },
+            {
+              "id": "a9",
+              "name": "WEBHOOK_URL",
+              "value": "{{WEBHOOK_URL}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-1",
+      "name": "TenantContext",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "TenantContext",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

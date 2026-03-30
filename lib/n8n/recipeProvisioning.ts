@@ -1,60 +1,26 @@
 import "server-only";
 
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { provisionRecipe } from "@/lib/n8n/provision";
 
 /**
- * CORE-12: wire real N8N workflow deploy here. Runs after HTTP response (fire-and-forget).
+ * CORE-08: activate route writes recipe_activations (optimistic active), then runs
+ * N8N provisioning here (fire-and-forget). Failures set status error + error_message.
  */
 export function enqueueRecipeProvisioning(params: {
   activationId: string;
   accountId: string;
   recipeSlug: string;
+  config: Record<string, unknown>;
 }): void {
-  void runProvisioningStub(params).catch((err: unknown) => {
-    console.error("[n8n] provisioning failed", {
-      activationId: params.activationId,
-      err: err instanceof Error ? err.message : String(err),
-    });
-  });
-}
-
-async function runProvisioningStub(params: {
-  activationId: string;
-  accountId: string;
-  recipeSlug: string;
-}): Promise<void> {
-  await new Promise<void>((r) => {
-    setTimeout(r, 0);
-  });
-
-  const admin = getSupabaseAdmin();
-  const workflowId = `stub-${params.recipeSlug}-${params.activationId.slice(0, 8)}`;
-
-  const { error } = await admin
-    .from("recipe_activations")
-    .update({ n8n_workflow_id: workflowId })
-    .eq("id", params.activationId)
-    .eq("account_id", params.accountId);
-
-  if (error) {
-    console.error("[n8n] stub update workflow id failed", error.message);
-    await admin
-      .from("recipe_activations")
-      .update({ status: "error" })
-      .eq("id", params.activationId)
-      .eq("account_id", params.accountId);
-  }
-}
-
-export function enqueueRecipeDeprovisioning(params: {
-  activationId: string;
-  accountId: string;
-  n8nWorkflowId: string | null;
-}): void {
-  void Promise.resolve().then(() => {
-    console.log("[n8n] deprovision stub", {
-      activationId: params.activationId,
-      workflowId: params.n8nWorkflowId,
-    });
+  void provisionRecipe(params).catch((err: unknown) => {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        service: "n8n",
+        event: "provisioning_failed",
+        activationId: params.activationId,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
   });
 }

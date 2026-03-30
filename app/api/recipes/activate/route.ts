@@ -122,6 +122,7 @@ export async function POST(req: Request) {
       activationId: updated.id,
       accountId: account.id,
       recipeSlug,
+      config: cfg.data,
     });
 
     return NextResponse.json({ success: true, activationId: updated.id });
@@ -151,6 +152,7 @@ export async function POST(req: Request) {
     activationId: inserted.id,
     accountId: account.id,
     recipeSlug,
+    config: cfg.data,
   });
 
   return NextResponse.json({ success: true, activationId: inserted.id });
