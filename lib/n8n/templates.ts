@@ -5,12 +5,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { RECIPE_TEMPLATE_PATHS } from "./recipeTemplateRegistry";
+
 const TEMPLATES_DIR = join(process.cwd(), "lib", "n8n", "templates");
 
-/** recipe_slug → filename under lib/n8n/templates/ */
-export const RECIPE_TEMPLATE_PATHS: Record<string, string> = {
-  "ai-phone-answering": "ai-phone-answering.json",
-};
+export { RECIPE_TEMPLATE_PATHS };
 
 export function loadTemplate(recipeSlug: string): string {
   const file = RECIPE_TEMPLATE_PATHS[recipeSlug];

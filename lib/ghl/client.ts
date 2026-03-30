@@ -208,12 +208,8 @@ export class GHLClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-<<<<<<< Current (Your changes)
-        const backoff = RETRY_BACKOFF_MS[attempt - 1] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
-=======
         const idx = Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1);
         const backoff = RETRY_BACKOFF_MS[idx] ?? 1_000;
->>>>>>> Incoming (Background Agent changes)
         await new Promise((r) => setTimeout(r, backoff));
       }
 

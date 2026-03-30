@@ -55,7 +55,6 @@ export default async function RecipesPage() {
     RECIPE_CATALOG,
     activations ?? [],
     account.vertical,
-    account.plan_slug,
   );
 
   const activeCount = recipes.filter((r) => r.status === "active").length;
