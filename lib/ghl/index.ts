@@ -6,7 +6,12 @@
 export { GHLClient } from "./client";
 
 // Token & factory
-export { getGHLClient } from "./token";
+export {
+  encryptToken,
+  decryptToken,
+  getAccountGhlCredentials,
+  getGHLClient,
+} from "./token";
 
 // Errors
 export {
@@ -24,6 +29,5 @@ export * from "./opportunities";
 export * from "./calendars";
 export * from "./locations";
 export * from "./webhooks";
-export * from "./token";
 // Types
 export * from "./types";
