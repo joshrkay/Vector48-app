@@ -472,105 +472,12 @@ export interface GHLWebhookResponse {
   webhook: GHLWebhook;
 }
 
-// ── Error Body (raw GHL response shape) ─────────────────────────────────────
+// ── Token Exchange (agency → sub-account) ─────────────────────────────────
 
-export type GHLCampaignStatus = "draft" | "published" | "archived";
-
-export interface GHLCampaign {
-  id: string;
-  name: string;
-  status: GHLCampaignStatus;
+export interface GHLTokenExchangeResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  scope: string;
   locationId: string;
-}
-
-// ── Locations (sub-account) ────────────────────────────────────────────────
-
-export interface GHLLocation {
-  id: string;
-  companyId: string;
-  name: string;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  country: string | null;
-  postalCode: string | null;
-  website: string | null;
-  timezone: string | null;
-  phone: string | null;
-  email: string | null;
-}
-
-export interface GHLCreateLocationPayload {
-  companyId: string;
-  name: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  postalCode?: string;
-  website?: string;
-  timezone?: string;
-  phone?: string;
-  email?: string;
-}
-
-// ── Webhooks ───────────────────────────────────────────────────────────────
-
-export interface GHLWebhook {
-  id: string;
-  url: string;
-  events: string[];
-  locationId: string;
-  active: boolean;
-}
-
-export interface GHLCreateWebhookPayload {
-  url: string;
-  events: string[];
-  locationId: string;
-}
-
-// ── Response aliases (client) ─────────────────────────────────────────────
-
-export type GHLContactResponse = GHLContact;
-
-export interface GHLContactsListResponse {
-  contacts: GHLContact[];
-  meta?: GHLPaginationMeta;
-}
-
-export interface GHLConversationsListResponse {
-  conversations: GHLConversation[];
-  meta?: GHLPaginationMeta;
-}
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  meta?: GHLPaginationMeta;
-}
-
-export interface GHLOpportunitiesListResponse {
-  opportunities: GHLOpportunity[];
-  meta?: GHLPaginationMeta;
-}
-
-export type GHLOpportunityResponse = GHLOpportunity;
-
-export type GHLContactNote = GHLNote;
-
-export interface GHLContactTask {
-  id: string;
-  title: string;
-  completed?: boolean;
-}
-
-export interface GHLCalendarSlotsParams {
-  calendarId: string;
-  startDate: string;
-  endDate: string;
-  timezone?: string;
-}
-
-export interface GHLCalendarSlotsResponse {
-  slots: { startTime: string; endTime: string }[];
 }

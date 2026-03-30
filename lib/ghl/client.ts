@@ -41,7 +41,14 @@ import type {
   GHLLocationResponse,
   GHLCreateWebhookPayload,
   GHLWebhookResponse,
+  GHLTokenExchangeResponse,
 } from "./types";
+import type {
+  GHLCreateVoiceAgentPayload,
+  GHLVoiceAgentResponse,
+  GHLCreateAgentActionPayload,
+  GHLAgentActionResponse,
+} from "./voiceTypes";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -208,12 +215,8 @@ export class GHLClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-<<<<<<< Current (Your changes)
-        const backoff = RETRY_BACKOFF_MS[attempt - 1] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
-=======
         const idx = Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1);
         const backoff = RETRY_BACKOFF_MS[idx] ?? 1_000;
->>>>>>> Incoming (Background Agent changes)
         await new Promise((r) => setTimeout(r, backoff));
       }
 
@@ -494,4 +497,68 @@ export class GHLClient {
       return this.delete(`/webhooks/${webhookId}`);
     },
   };
+
+  // ── Voice AI ────────────────────────────────────────────────────────────
+  // TODO: Verify endpoint paths against GHL Voice AI API docs. These are
+  // based on the best available documentation and may need adjustment.
+
+  readonly voiceAgent = {
+    /** Create a Voice AI agent on a sub-account. Requires location-scoped token. */
+    create: (data: GHLCreateVoiceAgentPayload) => {
+      return this.post<GHLVoiceAgentResponse>(
+        "/conversations/providers/voice-ai/agents",
+        data,
+      );
+    },
+
+    /** Create a custom action (webhook) on a Voice AI agent. */
+    createAction: (agentId: string, data: GHLCreateAgentActionPayload) => {
+      return this.post<GHLAgentActionResponse>(
+        `/conversations/providers/voice-ai/agents/${agentId}/actions`,
+        data,
+      );
+    },
+  };
+
+  // ── Token Exchange (agency → sub-account) ──────────────────────────────
+
+  /**
+   * Exchange the agency token for a sub-account-scoped access token.
+   * This is required because Voice AI and other sub-account-specific APIs
+   * need a location-scoped token, not the agency-level token.
+   *
+   * TODO: Verify the exact endpoint path and payload shape. GHL's token
+   * exchange flow may use /oauth/locationToken or a similar path.
+   */
+  static async exchangeSubAccountToken(
+    companyId: string,
+    locationId: string,
+  ): Promise<GHLTokenExchangeResponse> {
+    const agencyKey = process.env.GHL_AGENCY_API_KEY;
+    if (!agencyKey) {
+      throw new Error(
+        "GHL_AGENCY_API_KEY is required for token exchange",
+      );
+    }
+
+    const url = new URL("/oauth/locationToken", GHL_BASE_URL);
+    const res = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${agencyKey}`,
+        "Content-Type": "application/json",
+        Version: GHL_API_VERSION,
+      },
+      body: JSON.stringify({ companyId, locationId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(
+        `Token exchange failed (${res.status}): ${body.slice(0, 200)}`,
+      );
+    }
+
+    return (await res.json()) as GHLTokenExchangeResponse;
+  }
 }

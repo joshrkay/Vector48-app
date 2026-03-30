@@ -36,13 +36,15 @@ export type Database = {
           ghl_sub_account_id: string | null;
           ghl_location_id: string | null;
           ghl_token_encrypted: string | null;
+          ghl_voice_agent_id: string | null;
           onboarding_done_at: string | null;
           trial_ends_at: string | null;
           stripe_customer_id: string | null;
           stripe_subscription_id: string | null;
           plan_slug: string;
-          provisioning_status: "pending" | "complete" | "error";
+          provisioning_status: "pending" | "in_progress" | "complete" | "error";
           provisioning_error: string | null;
+          provisioning_completed_at: string | null;
           created_at: string;
           service_area: string | null;
           business_hours: Record<string, unknown> | null;
@@ -62,13 +64,15 @@ export type Database = {
           ghl_sub_account_id?: string | null;
           ghl_location_id?: string | null;
           ghl_token_encrypted?: string | null;
+          ghl_voice_agent_id?: string | null;
           onboarding_done_at?: string | null;
           trial_ends_at?: string | null;
           stripe_customer_id?: string | null;
           stripe_subscription_id?: string | null;
           plan_slug?: string;
-          provisioning_status?: "pending" | "complete" | "error";
+          provisioning_status?: "pending" | "in_progress" | "complete" | "error";
           provisioning_error?: string | null;
+          provisioning_completed_at?: string | null;
           created_at?: string;
           service_area?: string | null;
           business_hours?: Record<string, unknown> | null;
@@ -171,29 +175,54 @@ export type Database = {
         Row: {
           id: string;
           account_id: string;
-          provider: "jobber" | "servicetitan" | "google_business";
-          status: "connected" | "disconnected";
+          provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
+          status: "connected" | "disconnected" | "error";
           credentials_encrypted: Record<string, unknown> | null;
           connected_at: string;
         };
         Insert: {
           id?: string;
           account_id: string;
-          provider: "jobber" | "servicetitan" | "google_business";
-          status?: "connected" | "disconnected";
+          provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
+          status?: "connected" | "disconnected" | "error";
           credentials_encrypted?: Record<string, unknown> | null;
           connected_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["integrations"]["Insert"]>;
       };
+      recipe_triggers: {
+        Row: {
+          id: string;
+          account_id: string;
+          recipe_slug: string;
+          ghl_event_type: string;
+          contact_id: string | null;
+          fire_at: string;
+          fired: boolean;
+          payload: Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          recipe_slug: string;
+          ghl_event_type: string;
+          contact_id?: string | null;
+          fire_at: string;
+          fired?: boolean;
+          payload?: Record<string, unknown> | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["recipe_triggers"]["Insert"]>;
+      };
     };
     Enums: {
       vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";
-      provisioning_status: "pending" | "complete" | "error";
+      provisioning_status: "pending" | "in_progress" | "complete" | "error";
       account_role: "admin" | "viewer";
       recipe_status: "active" | "paused" | "error" | "deactivated";
-      integration_provider: "jobber" | "servicetitan" | "google_business";
-      integration_status: "connected" | "disconnected";
+      integration_provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
+      integration_status: "connected" | "disconnected" | "error";
       rate_limit_priority: "low" | "standard" | "high";
     };
   };
