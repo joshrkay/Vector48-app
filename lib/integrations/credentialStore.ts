@@ -1,3 +1,4 @@
+import "server-only";
 import { encryptString, decryptString } from "@/lib/utils/encryption";
 
 const V = 1;
