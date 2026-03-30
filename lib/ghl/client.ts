@@ -264,7 +264,6 @@ export class GHLClient {
     // All retries exhausted
     throw lastError ?? new GHLRateLimitError("All retries exhausted");
   }
-}
 
   private get<T>(
     path: string,

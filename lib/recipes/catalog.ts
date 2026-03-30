@@ -7,11 +7,6 @@
 // (sections 7 & 25) when available and replace as needed.
 // ---------------------------------------------------------------------------
 
-import type { RecipeDefinition } from "@/types/recipes";
-
-export const RECIPE_CATALOG: RecipeDefinition[] = [
-  // ── CAPTURE ────────────────────────────────────────────────────────────────
-
 import type { RecipeCatalogEntry } from "./types";
 
 export const RECIPE_CATALOG: RecipeCatalogEntry[] = [
