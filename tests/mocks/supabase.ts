@@ -45,6 +45,7 @@ export function createMockAccount(
     vertical: "plumbing",
     business_hours: {},
     ghl_location_id: null,
+    ghl_webhook_secret: null,
     ghl_token_encrypted: null,
     onboarding_done_at: null,
     provisioning_status: "pending",
