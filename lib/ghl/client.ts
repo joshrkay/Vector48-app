@@ -222,7 +222,7 @@ export class GHLClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const backoff = RETRY_BACKOFF_MS[attempt - 1] ?? 4_000;
+        const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)];
         await new Promise((r) => setTimeout(r, backoff));
       }
 

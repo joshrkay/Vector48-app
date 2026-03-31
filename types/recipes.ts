@@ -73,6 +73,8 @@ export interface RecipeDefinition {
   vertical?: Vertical | null;
   funnelStage: FunnelStage;
   releasePhase: ReleasePhase;
+  /** When set, recipe is scoped to that vertical; null = all verticals */
+  vertical?: Vertical | null;
   /** Lucide icon name (resolved to component in the UI layer) */
   icon: string;
   /** Tailwind color class for the icon tile background (e.g. 'blue-100') */

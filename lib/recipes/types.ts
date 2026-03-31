@@ -5,7 +5,6 @@ import type { RecipeDefinition } from "@/types/recipes";
 export type { FunnelStage };
 
 export type Vertical = Database["public"]["Tables"]["accounts"]["Row"]["vertical"];
-export type { RecipeDefinition as RecipeCatalogEntry };
 
 export type RecipeStatus = "active" | "paused" | "available" | "coming_soon";
 

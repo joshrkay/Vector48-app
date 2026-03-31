@@ -16,9 +16,5 @@ export const STAGE_STYLES: Record<FunnelStage, StageStyle> = {
   close: { bg: "bg-amber-50", text: "text-amber-600", icon: "text-amber-500" },
   deliver: { bg: "bg-green-50", text: "text-green-600", icon: "text-green-500" },
   retain: { bg: "bg-rose-50", text: "text-rose-600", icon: "text-rose-500" },
-  reactivate: {
-    bg: "bg-orange-50",
-    text: "text-orange-600",
-    icon: "text-orange-500",
-  },
+  reactivate: { bg: "bg-orange-50", text: "text-orange-600", icon: "text-orange-500" },
 };

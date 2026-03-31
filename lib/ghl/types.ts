@@ -274,11 +274,6 @@ export interface GHLMessagesListResponse {
   messages: GHLMessage[];
 }
 
-export interface GHLCreateConversationPayload {
-  locationId: string;
-  contactId: string;
-}
-
 // ── Opportunities / Pipeline ────────────────────────────────────────────────
 
 export type GHLOpportunityStatus = "open" | "won" | "lost" | "abandoned";
