@@ -495,6 +495,15 @@ export interface GHLWebhookResponse {
   webhook: GHLWebhook;
 }
 
+// ── Token Exchange (agency → sub-account) ─────────────────────────────────
+
+export interface GHLTokenExchangeResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  scope: string;
+  locationId: string;
+}
 export interface GHLWebhooksListResponse {
   webhooks: GHLWebhook[];
 }

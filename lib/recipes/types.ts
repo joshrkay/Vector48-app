@@ -1,9 +1,8 @@
 import type { Database } from "@/lib/supabase/types";
 import type { RecipeDefinition } from "@/types/recipes";
 
-export type { RecipeDefinition as RecipeCatalogEntry };
-
 export type Vertical = Database["public"]["Tables"]["accounts"]["Row"]["vertical"];
+export type { RecipeDefinition as RecipeCatalogEntry };
 
 export type RecipeStatus =
   | "active"

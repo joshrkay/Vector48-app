@@ -6,49 +6,37 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
-type EncryptedParts = {
-  iv: Buffer;
-  ciphertext: Buffer;
-  authTag: Buffer;
-};
-
-let keyCache: Buffer | undefined;
-
-function getKey(): Buffer {
-  if (keyCache) return keyCache;
-
-  const hex =
-    process.env.GHL_TOKEN_ENCRYPTION_KEY ?? process.env.GHL_ENCRYPTION_KEY;
-  if (!hex) {
-    throw new Error(
-      "GHL_TOKEN_ENCRYPTION_KEY (or legacy GHL_ENCRYPTION_KEY) is required. Set a 64-character hex string (32 bytes).",
-    );
+/**
+ * Encrypt a plaintext token with AES-256-GCM.
+ * Output format: base64(iv + ciphertext + authTag)
+ */
+export function encryptToken(plaintext: string): string {
+  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
   }
 
-  const buf = Buffer.from(hex, "hex");
-  if (buf.length !== 32) {
-    throw new Error(
-      `GHL_TOKEN_ENCRYPTION_KEY must be 32 bytes (64 hex chars). Got ${buf.length} bytes.`,
-    );
-  }
+  const keyBuffer = Buffer.from(key, "hex");
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv);
 
-  keyCache = buf;
-  return keyCache;
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return Buffer.concat([iv, encrypted, tag]).toString("base64");
 }
 
-function parseEncryptedToken(encrypted: string): EncryptedParts {
-  // Backward-compat: accept both legacy base64 blob and transient iv:tag:cipher format.
-  if (encrypted.includes(":")) {
-    const parts = encrypted.split(":");
-    if (parts.length !== 3) {
-      throw new Error("Invalid encrypted token format.");
-    }
-    const [ivB64, authTagB64, ciphertextB64] = parts;
-    return {
-      iv: Buffer.from(ivB64, "base64"),
-      authTag: Buffer.from(authTagB64, "base64"),
-      ciphertext: Buffer.from(ciphertextB64, "base64"),
-    };
+/**
+ * Decrypt a token that was encrypted with AES-256-GCM.
+ * Expected format: base64(iv + ciphertext + authTag)
+ */
+function decryptToken(encrypted: string): string {
+  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
   }
 
   const data = Buffer.from(encrypted, "base64");

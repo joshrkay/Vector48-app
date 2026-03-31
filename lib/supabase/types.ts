@@ -48,6 +48,15 @@ export type Database = {
           business_hours: Record<string, unknown>;
           ghl_location_id: string | null;
           ghl_token_encrypted: string | null;
+          ghl_voice_agent_id: string | null;
+          onboarding_done_at: string | null;
+          trial_ends_at: string | null;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          plan_slug: string;
+          provisioning_status: "pending" | "in_progress" | "complete" | "error";
+          provisioning_error: string | null;
+          provisioning_completed_at: string | null;
           ghl_provisioning_status: "pending" | "in_progress" | "complete" | "failed";
           ghl_provisioning_error: string | null;
           ghl_health_status: string;
@@ -90,6 +99,15 @@ export type Database = {
           business_hours?: Record<string, unknown>;
           ghl_location_id?: string | null;
           ghl_token_encrypted?: string | null;
+          ghl_voice_agent_id?: string | null;
+          onboarding_done_at?: string | null;
+          trial_ends_at?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          plan_slug?: string;
+          provisioning_status?: "pending" | "in_progress" | "complete" | "error";
+          provisioning_error?: string | null;
+          provisioning_completed_at?: string | null;
           ghl_provisioning_status?: "pending" | "in_progress" | "complete" | "failed";
           ghl_provisioning_error?: string | null;
           ghl_health_status?: string;
@@ -200,7 +218,7 @@ export type Database = {
         Row: {
           id: string;
           account_id: string;
-          provider: "jobber" | "servicetitan" | "google_business";
+          provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
           status: "connected" | "disconnected" | "error";
           credentials_encrypted: Record<string, unknown> | null;
           metadata: Record<string, unknown>;
@@ -211,7 +229,7 @@ export type Database = {
         Insert: {
           id?: string;
           account_id: string;
-          provider: "jobber" | "servicetitan" | "google_business";
+          provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
           status?: "connected" | "disconnected" | "error";
           credentials_encrypted?: Record<string, unknown> | null;
           metadata?: Record<string, unknown>;
@@ -221,42 +239,39 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["integrations"]["Insert"]>;
       };
-      estimate_audit_log: {
+      recipe_triggers: {
         Row: {
           id: string;
           account_id: string;
+          recipe_slug: string;
+          ghl_event_type: string;
           contact_id: string | null;
-          job_type: string | null;
-          vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
-          original_estimate_text: string | null;
-          suggestions: unknown[];
-          accepted_suggestions: unknown[];
-          total_estimated_value_cents: number;
+          fire_at: string;
+          fired: boolean;
+          payload: Record<string, unknown> | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           account_id: string;
+          recipe_slug: string;
+          ghl_event_type: string;
           contact_id?: string | null;
-          job_type?: string | null;
-          vertical?: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
-          original_estimate_text?: string | null;
-          suggestions?: unknown[];
-          accepted_suggestions?: unknown[];
-          total_estimated_value_cents?: number;
+          fire_at: string;
+          fired?: boolean;
+          payload?: Record<string, unknown> | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["estimate_audit_log"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["recipe_triggers"]["Insert"]>;
       };
     };
     Enums: {
       vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";
+      provisioning_status: "pending" | "in_progress" | "complete" | "error";
       account_role: "admin" | "viewer";
       recipe_status: "active" | "paused" | "error" | "deactivated";
-      integration_provider: "jobber" | "servicetitan" | "google_business";
+      integration_provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
       integration_status: "connected" | "disconnected" | "error";
-      provisioning_status: "pending" | "in_progress" | "complete" | "failed";
-      subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
       rate_limit_priority: "low" | "standard" | "high";
     };
   };
