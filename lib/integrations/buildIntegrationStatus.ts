@@ -5,8 +5,12 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
+import type {
+  GhlUiStatus,
+  IntegrationStatusPayload,
+} from "./integrationStatusTypes";
 
-export type GhlUiStatus = "connected" | "failed" | "pending";
+export type { IntegrationStatusPayload, GhlUiStatus } from "./integrationStatusTypes";
 
 function maskId(id: string | null): string | null {
   if (!id) return null;
@@ -19,26 +23,6 @@ function mapGhlProvisioning(s: string): GhlUiStatus {
   if (s === "complete") return "connected";
   if (s === "failed") return "failed";
   return "pending";
-}
-
-export interface IntegrationStatusPayload {
-  ghl: {
-    status: GhlUiStatus;
-    maskedLocationId: string | null;
-    lastSyncedAt: string | null;
-  };
-  voiceAgent: {
-    show: boolean;
-    status: "active" | "not_configured";
-    maskedAgentId: string | null;
-    voiceGender: "male" | "female" | null;
-    testCallTel: string | null;
-  };
-  n8n: {
-    connected: boolean;
-    webhookBaseUrl: string | null;
-    recipeExecutionCount: number;
-  };
 }
 
 export async function buildIntegrationStatus(

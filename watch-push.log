@@ -271,3 +271,34 @@
 ?? app/api/settings/business/
 ?? app/api/settings/voice/route.ts
 [Tue Mar 31 09:32:00 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...
+[Tue Mar 31 09:32:02 MST 2026] Pushed OK
+[Tue Mar 31 09:32:17 MST 2026] Changes detected:
+ M watch-push.log
+[Tue Mar 31 09:32:37 MST 2026] Still changing, retrying...
+[Tue Mar 31 09:33:22 MST 2026] Changes detected:
+ M components/settings/BusinessProfileForm.tsx
+ M components/settings/NotificationSettings.tsx
+ M components/settings/VoiceSettings.tsx
+ M watch-push.log
+[Tue Mar 31 09:33:43 MST 2026] Still changing, retrying...
+[Tue Mar 31 09:33:59 MST 2026] Changes detected:
+ M components/settings/BusinessProfileForm.tsx
+ M components/settings/NotificationSettings.tsx
+ M components/settings/VoiceSettings.tsx
+ M lib/integrations/buildIntegrationStatus.ts
+ M watch-push.log
+?? components/settings/SettingsIntegrations.tsx
+?? lib/integrations/integrationStatusTypes.ts
+[Tue Mar 31 09:34:19 MST 2026] Still changing, retrying...
+[Tue Mar 31 09:34:34 MST 2026] Changes detected:
+ M app/(app)/settings/page.tsx
+ M components/settings/BusinessProfileForm.tsx
+ M components/settings/NotificationSettings.tsx
+ M components/settings/SettingsPage.tsx
+ M components/settings/SettingsTabs.tsx
+ M components/settings/VoiceSettings.tsx
+ M lib/integrations/buildIntegrationStatus.ts
+ M watch-push.log
+?? components/settings/SettingsIntegrations.tsx
+?? lib/integrations/integrationStatusTypes.ts
+[Tue Mar 31 09:34:54 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...

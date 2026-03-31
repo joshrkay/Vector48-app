@@ -1,154 +1,166 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Play } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { US_TIMEZONES } from "@/lib/constants/usTimezones";
 import type { AccountRow } from "./types";
 
 const schema = z.object({
   voice_gender: z.enum(["male", "female"]),
-  greeting_text: z.string().min(1).max(500),
+  greeting_text: z.string().min(1).max(200),
+  timezone: z.string().min(1),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 export function VoiceSettings({ account }: { account: AccountRow }) {
   const router = useRouter();
-  const audioRef = React.useRef<HTMLAudioElement>(null);
-  const [regenLoading, setRegenLoading] = React.useState(false);
-  const [audioKey, setAudioKey] = React.useState(0);
-
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       voice_gender:
         account.voice_gender === "female" ? "female" : "male",
       greeting_text: account.greeting_text ?? "",
+      timezone: account.timezone || "America/Phoenix",
     },
   });
 
-  const preview = `${account.business_name}: ${form.watch("greeting_text") || "…"}`;
+  const greeting = form.watch("greeting_text");
+  const preview = `Hi, thanks for calling ${account.business_name || "your business"}. ${greeting || "…"}`;
 
-  async function saveVoice() {
-    const valid = await form.trigger();
-    if (!valid) return;
-    const v = form.getValues();
-    const res = await fetch("/api/settings/profile", {
+  async function onSubmit(values: FormValues) {
+    const res = await fetch("/api/settings/voice", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        voice_gender: v.voice_gender,
-        greeting_text: v.greeting_text,
+        voice_gender: values.voice_gender,
+        greeting_text: values.greeting_text,
+        timezone: values.timezone,
       }),
     });
+    const data = (await res.json().catch(() => ({}))) as {
+      warnings?: string[];
+      error?: unknown;
+    };
     if (!res.ok) {
-      toast.error("Could not save voice settings");
+      toast.error(
+        typeof data.error === "string" ? data.error : "Could not save settings",
+      );
       return;
     }
-    toast.success("Voice settings saved");
-  }
-
-  async function regenerate() {
-    setRegenLoading(true);
-    try {
-      const res = await fetch("/api/settings/voice/regenerate", {
-        method: "POST",
-      });
-      const j = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!res.ok) {
-        toast.error(j.error ?? "Regeneration failed");
-        return;
-      }
-      toast.success("Greeting audio updated");
-      setAudioKey((k) => k + 1);
-      router.refresh();
-    } finally {
-      setRegenLoading(false);
+    if (data.warnings?.includes("ghl_voice_agent")) {
+      toast.warning(
+        "Saved locally, but we couldn't sync the name to your phone system. We'll retry automatically.",
+      );
+    } else {
+      toast.success("Settings saved");
     }
+    router.refresh();
+    form.reset(values);
   }
 
   return (
-    <div className="max-w-xl space-y-6 rounded-xl border bg-card p-4 shadow-sm md:p-6">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        Voice
-      </h2>
-      {account.greeting_audio_url ? (
-        <div className="flex items-center gap-3">
-          <audio
-            ref={audioRef}
-            key={audioKey}
-            src={account.greeting_audio_url}
-            controls
-            className="h-9 flex-1"
+    <div className="mx-auto max-w-2xl space-y-6">
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-6 rounded-xl border bg-card p-4 shadow-sm md:p-6"
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          AI voice
+        </h2>
+        <div className="space-y-2">
+          <Label>Voice gender</Label>
+          <div className="flex gap-3">
+            {(["male", "female"] as const).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() =>
+                  form.setValue("voice_gender", g, { shouldDirty: true })
+                }
+                className={cn(
+                  "flex h-12 flex-1 items-center justify-center rounded-xl border-2 text-sm font-semibold capitalize transition-all",
+                  form.watch("voice_gender") === g
+                    ? "border-[#00B4A6] bg-[#00B4A6]/10 text-[#0F1E35] ring-2 ring-[#00B4A6]/20"
+                    : "border-border text-muted-foreground hover:border-[#00B4A6]/40",
+                )}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="greeting_text">
+            What should your AI say when it answers?
+          </Label>
+          <textarea
+            id="greeting_text"
+            rows={4}
+            maxLength={200}
+            {...form.register("greeting_text")}
+            className={cn(
+              "flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+              "resize-none",
+            )}
+            placeholder="Tell callers how you can help…"
           />
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="shrink-0 text-teal-600"
-            onClick={() => void audioRef.current?.play()}
-            aria-label="Play greeting"
+          <p className="text-xs text-muted-foreground">
+            {form.watch("greeting_text").length}/200
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Live preview</Label>
+          <p className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-foreground">
+            {preview}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="timezone">Timezone</Label>
+          <select
+            id="timezone"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            {...form.register("timezone")}
           >
-            <Play className="h-4 w-4" />
-          </Button>
+            {US_TIMEZONES.map((tz) => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label}
+              </option>
+            ))}
+          </select>
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          No greeting audio yet. Generate a stub to enable preview.
-        </p>
-      )}
-      <div className="space-y-2">
-        <Label>Greeting preview text</Label>
-        <p className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">{preview}</p>
-      </div>
-      <div className="space-y-2">
-        <Label>Voice gender</Label>
-        <div className="flex gap-2">
-          {(["male", "female"] as const).map((g) => (
-            <button
-              key={g}
-              type="button"
-              onClick={() => form.setValue("voice_gender", g)}
-              className={cn(
-                "rounded-lg border px-4 py-2 text-sm capitalize",
-                form.watch("voice_gender") === g
-                  ? "border-accent bg-accent-light ring-2 ring-accent/20"
-                  : "border-border",
-              )}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="greeting_text">Greeting line</Label>
-        <Input id="greeting_text" {...form.register("greeting_text")} />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={saveVoice}>
-          Save voice settings
-        </Button>
         <Button
-          type="button"
-          variant="secondary"
-          disabled={regenLoading}
-          onClick={regenerate}
+          type="submit"
+          className="bg-[#00B4A6] text-white hover:bg-[#00B4A6]/90"
+          disabled={form.formState.isSubmitting || !form.formState.isDirty}
         >
-          {regenLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            "Regenerate audio (stub)"
-          )}
+          Save Changes
         </Button>
+      </form>
+
+      <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 md:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-medium text-foreground">
+              Want your AI to sound exactly like you?
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pro Plan: Record a 30-second voice sample and your AI will speak
+              in your voice.
+            </p>
+          </div>
+          <Badge variant="secondary" className="shrink-0">
+            Coming Soon
+          </Badge>
+        </div>
       </div>
     </div>
   );
