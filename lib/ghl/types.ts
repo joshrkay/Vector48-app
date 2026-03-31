@@ -450,7 +450,21 @@ export interface GHLUpdateAppointmentPayload
     Omit<GHLCreateAppointmentPayload, "calendarId" | "locationId">
   > {}
 
-// ── Campaigns ───────────────────────────────────────────────────────────────
+export interface GHLCalendarSlot {
+  startTime: string;
+  endTime: string;
+}
+
+export interface GHLCalendarSlotsParams {
+  calendarId: string;
+  startDate: string;
+  endDate: string;
+  timezone?: string;
+}
+
+// ── Campaigns ──────────────────────────────────────────────────────────────
+
+export type GHLCampaignStatus = "draft" | "published" | "archived";
 
 export interface GHLCampaign {
   id: string;
