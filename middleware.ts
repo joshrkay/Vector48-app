@@ -8,12 +8,12 @@ const TRIAL_ALLOWED_ROUTES = ["/billing", "/login", "/signup"];
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
-  const rawSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const rawSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const hasUrl = Boolean(rawSupabaseUrl?.length);
-  const hasKey = Boolean(rawSupabaseAnonKey?.length);
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
+  const supabaseAnonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
 
-  if (!hasUrl || !hasKey) {
+  if (!supabaseUrl || !supabaseAnonKey) {
     console.warn(
       "[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY — add both to .env.local (see .env.local.example).",
     );
@@ -26,12 +26,6 @@ export async function middleware(request: NextRequest) {
         headers: { "content-type": "text/plain; charset=utf-8" },
       },
     );
-  }
-
-  const supabaseUrl = rawSupabaseUrl;
-  const supabaseAnonKey = rawSupabaseAnonKey;
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return new NextResponse("Configuration error", { status: 503 });
   }
 
   const supabase = createServerClient(
