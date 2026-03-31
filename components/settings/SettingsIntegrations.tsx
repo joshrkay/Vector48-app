@@ -193,15 +193,9 @@ export function SettingsIntegrations({
           >
             <div>
               <p className="font-medium text-muted-foreground">{item.title}</p>
-              <p className="text-sm text-muted-foreground/30">{item.body}</p>
+              <p className="text-sm text-muted-foreground/70">{item.body}</p>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled
-              className="pointer-events-none"
-            >
+            <Button type="button" size="sm" variant="outline" disabled>
               Notify Me
             </Button>
           </div>

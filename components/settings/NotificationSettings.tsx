@@ -22,13 +22,13 @@ const schema = z
     quiet_hours_end: z.string(),
   })
   .superRefine((data, ctx) => {
-    if (data.notifications_enabled && data.notification_email.trim()) {
+    if (data.notifications_enabled) {
       const r = z.string().email().safeParse(data.notification_email.trim());
       if (!r.success) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["notification_email"],
-          message: "Enter a valid email",
+          message: "Enter a valid notification email",
         });
       }
     }
