@@ -1,5 +1,6 @@
 import type { RecipeDefinition, FunnelStage } from "@/types/recipes";
 import type { Database } from "@/lib/supabase/types";
+import type { RecipeDefinition } from "@/types/recipes";
 
 export type { FunnelStage };
 

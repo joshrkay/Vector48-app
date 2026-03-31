@@ -106,9 +106,15 @@ function getAdminClient() {
   return createClient<Database>(url, serviceKey);
 }
 
+/**
+ * Fetch and decrypt GHL credentials for an account.
+ * Returns both `token` and `accessToken` (same value) for backward compatibility.
+ * Does not log token material.
+ */
 export async function getAccountGhlCredentials(accountId: string): Promise<{
   locationId: string;
   token: string;
+  accessToken: string;
 }> {
   const supabase = getAdminClient();
 
@@ -126,9 +132,11 @@ export async function getAccountGhlCredentials(accountId: string): Promise<{
     throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
   }
 
+  const accessToken = decryptToken(account.ghl_token_encrypted);
   return {
     locationId: account.ghl_location_id,
-    token: decryptToken(account.ghl_token_encrypted),
+    token: accessToken,
+    accessToken,
   };
 }
 

@@ -345,7 +345,7 @@ export class GHLClient {
 
     getMessages: (
       conversationId: string,
-      params?: GHLMessagesListParams,
+      params?: Omit<GHLMessagesListParams, "conversationId">,
     ) => {
       return this.get<GHLMessagesListResponse>(
         `/conversations/${conversationId}/messages`,

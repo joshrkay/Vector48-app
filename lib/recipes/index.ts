@@ -10,4 +10,4 @@ export {
   getV1Recipes,
   isRecipeAvailable,
 } from "./utils";
-export { mergeRecipesWithActivations } from "./activationMerge";
+export { mergeRecipesWithActivations } from "./merge";

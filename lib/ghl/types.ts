@@ -103,6 +103,16 @@ export interface GHLContactsListParams extends GHLListParams {
   sortOrder?: "asc" | "desc";
 }
 
+/** GHL v2 contacts list response */
+export interface GHLContactsListResponse {
+  contacts: GHLContact[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLContactResponse {
+  contact: GHLContact;
+}
+
 export interface GHLContactsSearchParams {
   locationId: string;
   query: string;
@@ -210,6 +220,11 @@ export interface GHLConversationsListParams extends GHLListParams {
   sortBy?: "last_message_date" | "date_added";
 }
 
+export interface GHLConversationsListResponse {
+  conversations: GHLConversation[];
+  meta?: GHLPaginationMeta;
+}
+
 export interface GHLMessage {
   id: string;
   conversationId: string;
@@ -229,6 +244,12 @@ export interface GHLMessagesListParams {
   limit?: number;
   lastMessageId?: string;
   type?: GHLMessageType;
+}
+
+export interface GHLCreateConversationPayload {
+  locationId: string;
+  contactId: string;
+  assignedTo?: string;
 }
 
 export interface GHLSendMessagePayload {
@@ -545,10 +566,15 @@ export interface GHLCreateWebhookPayload {
   secret?: string;
 }
 
-export interface GHLWebhookResponse {
-  webhook: GHLWebhook;
+export interface GHLMessagesListResponse {
+  messages: GHLMessage[];
+  nextPage: boolean;
+  lastMessageId?: string;
 }
 
 export interface GHLWebhooksListResponse {
   webhooks: GHLWebhook[];
 }
+
+// ── (duplicate declarations removed — end of file) ─────────────────────────
+

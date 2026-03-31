@@ -39,19 +39,17 @@ export function createMockAccount(
     phone: "+15551234567",
     vertical: "plumbing",
     ghl_location_id: null,
-    ghl_sub_account_id: null,
     ghl_token_encrypted: null,
-    onboarding_done_at: null,
     trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
     stripe_customer_id: null,
     stripe_subscription_id: null,
     plan_slug: "trial",
-    provisioning_status: "pending",
-    provisioning_error: null,
+    ghl_provisioning_status: "pending",
+    ghl_provisioning_error: null,
     provisioning_step: 0,
     created_at: new Date().toISOString(),
     service_area: "Dallas, TX",
-    business_hours: null,
+    business_hours: {},
     voice_gender: null,
     voice_greeting: null,
     notification_sms: false,
@@ -59,7 +57,7 @@ export function createMockAccount(
     notification_contact: null,
     onboarding_step: 8,
     ...overrides,
-  };
+  } as AccountRow;
 }
 
 // ── Chainable query builder mock ──────────────────────────────────────────

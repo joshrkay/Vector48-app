@@ -1,5 +1,6 @@
 "use server";
 
+import { provisionRecipe } from "@/lib/n8n/provision";
 import { createServerClient } from "@/lib/supabase/server";
 
 // Maps step index to the DB columns that step updates
@@ -7,11 +8,10 @@ const STEP_COLUMN_MAP: Record<number, string[]> = {
   0: ["business_name"],
   1: ["vertical"],
   2: ["phone"],
-  3: ["service_area"],
-  4: ["business_hours"],
-  5: ["voice_gender", "voice_greeting"],
-  6: ["notification_sms", "notification_email", "notification_contact"],
-  7: [], // activate recipe — handled separately
+  3: ["business_hours"],
+  4: ["voice_gender", "greeting_text"],
+  5: ["notification_contact_name", "notification_contact_phone"],
+  6: [], // activate recipe — handled separately
 };
 
 // Maps camelCase form field names to snake_case DB columns
@@ -19,14 +19,12 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   businessName: "business_name",
   vertical: "vertical",
   phone: "phone",
-  serviceArea: "service_area",
   businessHours: "business_hours",
   preset: "business_hours",
   voiceGender: "voice_gender",
-  voiceGreeting: "voice_greeting",
-  notificationSms: "notification_sms",
-  notificationEmail: "notification_email",
-  notificationContact: "notification_contact",
+  greetingText: "greeting_text",
+  notificationContactName: "notification_contact_name",
+  notificationContactPhone: "notification_contact_phone",
 };
 
 export async function saveOnboardingStep(
@@ -62,7 +60,7 @@ export async function saveOnboardingStep(
   };
 
   // Special handling for business hours step — merge preset into jsonb
-  if (step === 4) {
+  if (step === 3) {
     update.business_hours = {
       preset: data.preset,
       ...(data.customHours ? { customHours: data.customHours } : {}),
@@ -91,7 +89,7 @@ export async function saveOnboardingStep(
 export async function completeOnboarding(
   accountId: string,
   activateRecipe: boolean,
-  voiceConfig?: { voiceGender: string; voiceGreeting: string }
+  voiceConfig?: { voiceGender: string; greetingText: string }
 ) {
   const supabase = await createServerClient();
 
@@ -107,8 +105,8 @@ export async function completeOnboarding(
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
-      onboarding_done_at: new Date().toISOString(),
-      onboarding_step: 8,
+      onboarding_completed_at: new Date().toISOString(),
+      onboarding_step: 7,
     })
     .eq("id", accountId);
 
@@ -118,22 +116,40 @@ export async function completeOnboarding(
 
   // Activate Recipe 1 if requested
   if (activateRecipe) {
-    const { error: recipeError } = await supabase
+    const config = voiceConfig
+      ? {
+          voice_gender: voiceConfig.voiceGender,
+          greeting_text: voiceConfig.greetingText,
+        }
+      : null;
+
+    const { data: activation, error: recipeError } = await supabase
       .from("recipe_activations")
       .insert({
         account_id: accountId,
         recipe_slug: "ai-phone-answering",
         status: "active",
-        config: voiceConfig
-          ? {
-              voice_gender: voiceConfig.voiceGender,
-              voice_greeting: voiceConfig.voiceGreeting,
-            }
-          : null,
-      });
+        config,
+      })
+      .select("id")
+      .single();
 
-    if (recipeError) {
-      return { error: recipeError.message };
+    if (recipeError || !activation) {
+      return { error: recipeError?.message ?? "Failed to create activation" };
+    }
+
+    try {
+      await provisionRecipe(
+        accountId,
+        "ai-phone-answering",
+        config,
+        activation.id,
+      );
+    } catch {
+      return {
+        error:
+          "Recipe activation was saved but N8N provisioning failed. Check error_message on the activation or retry later.",
+      };
     }
   }
 

@@ -1,3 +1,4 @@
+import type { Vertical } from "@/types/recipes";
 import type {
   RecipeCatalogEntry,
   RecipeActivationRow,
@@ -10,8 +11,9 @@ import type {
  * Status logic:
  *  - activation exists with status "active"        → "active"
  *  - activation exists with status "paused"/"error" → "paused"
- *  - no activation + releasePhase "v1"              → "available"
- *  - no activation + releasePhase "v2"/"v3"         → "coming_soon"
+ *  - activation exists with status "deactivated" → "available" (can re-activate)
+ *  - no activation + releasePhase "ga"              → "available"
+ *  - no activation + releasePhase "coming_soon"     → "coming_soon"
  *
  * Sort order:
  *  1. Active — by last_triggered_at desc (nulls last)
@@ -33,9 +35,14 @@ export function mergeRecipesWithActivations(
     let status: RecipeWithStatus["status"];
     if (activation && activation.status === "active") {
       status = "active";
-    } else if (activation && (activation.status === "paused" || activation.status === "error")) {
+    } else if (
+      activation &&
+      (activation.status === "paused" || activation.status === "error")
+    ) {
       status = "paused";
-    } else if (entry.releasePhase === "v1") {
+    } else if (activation && activation.status === "deactivated") {
+      status = "available";
+    } else if (entry.releasePhase === "ga") {
       status = "available";
     } else {
       status = "coming_soon";
@@ -54,6 +61,7 @@ export function mergeRecipesWithActivations(
   const statusOrder: Record<RecipeWithStatus["status"], number> = {
     active: 0,
     paused: 1,
+    error: 1,
     available: 2,
     coming_soon: 3,
   };
@@ -71,6 +79,15 @@ export function mergeRecipesWithActivations(
       if (a.lastTriggeredAt) return -1;
       if (b.lastTriggeredAt) return 1;
       return 0;
+    }
+
+    // Within available: vertical-matched first, then universal, then non-matching
+    if (a.status === "available" && b.status === "available") {
+      const aMatch =
+        a.vertical === accountVertical ? 0 : a.vertical == null ? 1 : 2;
+      const bMatch =
+        b.vertical === accountVertical ? 0 : b.vertical == null ? 1 : 2;
+      return aMatch - bMatch;
     }
 
     return 0;

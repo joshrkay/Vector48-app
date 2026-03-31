@@ -7,10 +7,64 @@
 // (sections 7 & 25) when available and replace as needed.
 // ---------------------------------------------------------------------------
 
-import type { RecipeCatalogEntry } from "./types";
+import type { RecipeDefinition } from "@/types/recipes";
 
-export const RECIPE_CATALOG: RecipeCatalogEntry[] = [
-  // ── Capture ────────────────────────────────────────────────
+export const RECIPE_CATALOG: RecipeDefinition[] = [
+  // ── Awareness (2) ─────────────────────────────────────────
+  {
+    slug: "google-review-booster",
+    name: "Google Review Booster",
+    description:
+      "Automatically request Google reviews after completed jobs to build your online reputation and attract new customers.",
+    detailedDescription:
+      "After a job is marked complete, automatically send a friendly SMS with a link to leave a Google review.",
+    icon: "star",
+    funnelStage: "awareness",
+    vertical: null,
+    releasePhase: "ga",
+    stageColor: "blue-100",
+    trigger: "Job marked complete in your CRM.",
+    output: "Review request SMS sent to the customer.",
+    requiredIntegrations: [],
+    optionalIntegrations: [],
+    configFields: [],
+    verticalMessages: {
+      hvac: "",
+      plumbing: "",
+      electrical: "",
+      roofing: "",
+      landscaping: "",
+    },
+    estimatedROI: "—",
+  },
+  {
+    slug: "seasonal-campaign",
+    name: "Seasonal Campaign",
+    description:
+      "Send targeted seasonal promotions to past customers — AC tune-ups in spring, furnace checks in fall, and more.",
+    detailedDescription:
+      "Seasonal SMS campaigns tailored to your trade and service area.",
+    icon: "megaphone",
+    funnelStage: "awareness",
+    vertical: "hvac",
+    releasePhase: "coming_soon",
+    stageColor: "blue-100",
+    trigger: "Seasonal schedule or manual campaign start.",
+    output: "Promotional messages to your customer list.",
+    requiredIntegrations: [],
+    optionalIntegrations: [],
+    configFields: [],
+    verticalMessages: {
+      hvac: "",
+      plumbing: "",
+      electrical: "",
+      roofing: "",
+      landscaping: "",
+    },
+    estimatedROI: "—",
+  },
+
+  // ── Capture (4) ────────────────────────────────────────────
   {
     slug: "ai-phone-answering",
     name: "AI Phone Answering",
@@ -41,7 +95,7 @@ export const RECIPE_CATALOG: RecipeCatalogEntry[] = [
         label: "Greeting Script",
         type: "textarea",
         required: true,
-        defaultFromProfile: "voice_greeting",
+        defaultFromProfile: "greeting_text",
       },
       {
         name: "forwardingNumber",
