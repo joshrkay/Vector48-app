@@ -14,6 +14,18 @@ import {
   getN8nWebhookUrl,
 } from "@/lib/recipes/eventMapping";
 
+// Explicit recipe slug constants (no substring matching heuristics)
+const RECIPE_SLUGS = {
+  NEW_LEAD_INSTANT_RESPONSE: "new-lead-instant-response",
+  ESTIMATE_FOLLOW_UP: "estimate-follow-up",
+  APPOINTMENT_REMINDER: "appointment-reminder", // Recipe 7
+} as const;
+
+const FOLLOW_UP_RECIPE_SLUGS = [
+  RECIPE_SLUGS.NEW_LEAD_INSTANT_RESPONSE,
+  RECIPE_SLUGS.ESTIMATE_FOLLOW_UP,
+] as const;
+
 // Negative sentiment keywords that flag a call for review
 const NEGATIVE_SENTIMENT_KEYWORDS = [
   "complaint",
@@ -25,6 +37,7 @@ const NEGATIVE_SENTIMENT_KEYWORDS = [
   "lawsuit",
   "angry",
   "frustrated",
+  "emergency",
   "disappointed",
 ];
 
@@ -43,31 +56,79 @@ async function handleMessageReceived(
   event: AutomationEventInsert,
   activeRecipes: RecipeActivation[]
 ): Promise<void> {
-  // Check for active follow-up or nurture recipes
-  const followUpRecipe = activeRecipes.find(
-    (r) =>
-      r.recipe_slug.includes("follow-up") ||
-      r.recipe_slug.includes("nurture") ||
-      r.recipe_slug.includes("followup")
-  );
+  try {
+    if (!event.contact_id) return;
 
-  if (!followUpRecipe) return;
+    // Check only explicit follow-up recipe slugs
+    const followUpRecipe = activeRecipes.find((r) =>
+      FOLLOW_UP_RECIPE_SLUGS.includes(
+        r.recipe_slug as (typeof FOLLOW_UP_RECIPE_SLUGS)[number]
+      )
+    );
 
-  // A human replied — log that we detected it for the follow-up sequence.
-  // Future: pause the n8n workflow via API using followUpRecipe.n8n_workflow_id
-  await supabase.from("automation_events").insert({
-    account_id: accountId,
-    recipe_slug: followUpRecipe.recipe_slug,
-    event_type: "sequence_paused",
-    ghl_event_type: event.ghl_event_type,
-    contact_id: event.contact_id,
-    summary: `Follow-up paused: ${event.contact_id ? "contact" : "someone"} replied`,
-    detail: {
-      reason: "human_reply_detected",
-      original_event_id: event.ghl_event_id,
-      recipe_activation_id: followUpRecipe.id,
-    },
-  });
+    if (!followUpRecipe) return;
+
+    // Contact-level active-run verification:
+    // only pause if there is an active pending run for this contact+recipe.
+    const { data: activeTrigger, error: triggerLookupError } = await supabase
+      .from("recipe_triggers")
+      .select("id")
+      .eq("account_id", accountId)
+      .eq("contact_id", event.contact_id)
+      .eq("recipe_slug", followUpRecipe.recipe_slug)
+      .eq("fired", false)
+      .order("fire_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (triggerLookupError) {
+      console.error(
+        "[webhook-side-effects] Failed to verify active contact run:",
+        triggerLookupError.message,
+      );
+      return;
+    }
+
+    if (!activeTrigger) return;
+
+    // Authoritative pause mechanism:
+    // mark pending trigger rows as fired=true so this sequence will not execute.
+    const { error: pauseError } = await supabase
+      .from("recipe_triggers")
+      .update({ fired: true })
+      .eq("account_id", accountId)
+      .eq("contact_id", event.contact_id)
+      .eq("recipe_slug", followUpRecipe.recipe_slug)
+      .eq("fired", false);
+
+    if (pauseError) {
+      console.error(
+        "[webhook-side-effects] Failed to pause follow-up sequence:",
+        pauseError.message,
+      );
+      return;
+    }
+
+    await supabase.from("automation_events").insert({
+      account_id: accountId,
+      recipe_slug: followUpRecipe.recipe_slug,
+      event_type: "sequence_paused",
+      ghl_event_type: event.ghl_event_type,
+      contact_id: event.contact_id,
+      summary: "Follow-up paused after inbound message from contact",
+      detail: {
+        reason: "human_reply_detected",
+        original_event_id: event.ghl_event_id,
+        recipe_activation_id: followUpRecipe.id,
+        pause_mechanism: "recipe_triggers.fired=true",
+      },
+    });
+  } catch (err) {
+    console.error(
+      "[webhook-side-effects] Failed in message_received side effect:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 async function handleAppointmentUpdated(
@@ -77,39 +138,44 @@ async function handleAppointmentUpdated(
   rawPayload: Record<string, unknown>,
   activeRecipes: RecipeActivation[]
 ): Promise<void> {
-  const status =
-    typeof rawPayload.status === "string"
-      ? rawPayload.status.toLowerCase()
-      : typeof rawPayload.appointmentStatus === "string"
-        ? rawPayload.appointmentStatus.toLowerCase()
-        : null;
+  try {
+    const status =
+      typeof rawPayload.status === "string"
+        ? rawPayload.status.toLowerCase()
+        : typeof rawPayload.appointmentStatus === "string"
+          ? rawPayload.appointmentStatus.toLowerCase()
+          : null;
 
-  if (status !== "cancelled") return;
+    if (status !== "cancelled") return;
 
-  // Check for active re-booking recipe
-  const rebookRecipe = activeRecipes.find(
-    (r) =>
-      r.recipe_slug.includes("rebook") ||
-      r.recipe_slug.includes("re-book") ||
-      r.recipe_slug.includes("reschedule")
-  );
+    // Re-booking flow is gated strictly on Recipe 7 being active.
+    const recipe7Activation = activeRecipes.find(
+      (r) => r.recipe_slug === RECIPE_SLUGS.APPOINTMENT_REMINDER
+    );
 
-  if (!rebookRecipe) return;
+    if (!recipe7Activation) return;
 
-  // Future: invoke n8n re-booking workflow
-  await supabase.from("automation_events").insert({
-    account_id: accountId,
-    recipe_slug: rebookRecipe.recipe_slug,
-    event_type: "rebook_triggered",
-    ghl_event_type: event.ghl_event_type,
-    contact_id: event.contact_id,
-    summary: `Re-booking triggered: appointment cancelled`,
-    detail: {
-      reason: "appointment_cancelled",
-      original_event_id: event.ghl_event_id,
-      recipe_activation_id: rebookRecipe.id,
-    },
-  });
+    // Future: invoke Recipe 7 n8n re-booking path
+    await supabase.from("automation_events").insert({
+      account_id: accountId,
+      recipe_slug: recipe7Activation.recipe_slug,
+      event_type: "rebook_triggered",
+      ghl_event_type: event.ghl_event_type,
+      contact_id: event.contact_id,
+      summary: "Re-booking triggered: appointment cancelled",
+      detail: {
+        reason: "appointment_cancelled",
+        original_event_id: event.ghl_event_id,
+        recipe_activation_id: recipe7Activation.id,
+        gate: "recipe_7_active",
+      },
+    });
+  } catch (err) {
+    console.error(
+      "[webhook-side-effects] Failed in appointment_updated side effect:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 async function handleCallCompleted(
@@ -118,37 +184,45 @@ async function handleCallCompleted(
   event: AutomationEventInsert,
   rawPayload: Record<string, unknown>
 ): Promise<void> {
-  // Check notes and transcription for negative sentiment
-  const notes =
-    typeof rawPayload.notes === "string" ? rawPayload.notes.toLowerCase() : "";
-  const transcription =
-    typeof rawPayload.transcription === "string"
-      ? rawPayload.transcription.toLowerCase()
-      : "";
-  const searchText = `${notes} ${transcription}`;
+  try {
+    // Check notes and transcription for negative sentiment
+    const notes =
+      typeof rawPayload.notes === "string" ? rawPayload.notes.toLowerCase() : "";
+    const transcription =
+      typeof rawPayload.transcription === "string"
+        ? rawPayload.transcription.toLowerCase()
+        : "";
+    const searchText = `${notes} ${transcription}`;
 
-  const matchedKeywords = NEGATIVE_SENTIMENT_KEYWORDS.filter((kw) =>
-    searchText.includes(kw)
-  );
+    const matchedKeywords = NEGATIVE_SENTIMENT_KEYWORDS.filter((kw) =>
+      searchText.includes(kw)
+    );
 
-  // Require 2+ keyword matches to reduce false positives — a single
-  // "cancel" in a normal appointment call shouldn't trigger an alert
-  if (matchedKeywords.length < 2) return;
+    // Guardrail to reduce false positives:
+    // require 2+ distinct negative keywords before raising an alert.
+    if (matchedKeywords.length < 2) return;
 
-  // Flag call for review — this shows as an alert in the dashboard
-  await supabase.from("automation_events").insert({
-    account_id: accountId,
-    recipe_slug: null,
-    event_type: "alert",
-    ghl_event_type: event.ghl_event_type,
-    contact_id: event.contact_id,
-    summary: `Flagged call: potential complaint from contact ${event.contact_id ?? "(unknown)"}`,
-    detail: {
-      reason: "negative_sentiment_detected",
-      keywords: matchedKeywords,
-      original_event_id: event.ghl_event_id,
-    },
-  });
+    // Flag call for review — this shows as an alert in the dashboard
+    await supabase.from("automation_events").insert({
+      account_id: accountId,
+      recipe_slug: null,
+      event_type: "alert",
+      ghl_event_type: event.ghl_event_type,
+      contact_id: event.contact_id,
+      summary: `Flagged call: potential complaint from contact ${event.contact_id ?? "(unknown)"}`,
+      detail: {
+        reason: "negative_sentiment_detected",
+        keywords: matchedKeywords,
+        original_event_id: event.ghl_event_id,
+        false_positive_guardrails: "require_two_or_more_keywords",
+      },
+    });
+  } catch (err) {
+    console.error(
+      "[webhook-side-effects] Failed in call_completed side effect:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 // ── Recipe-aware event routing ──────────────────────────────────────────
