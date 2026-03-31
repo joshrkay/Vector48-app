@@ -70,36 +70,16 @@ async function handleMessageReceived(
 
     // Contact-level active-run verification:
     // only pause if there is an active pending run for this contact+recipe.
-    const { data: activeTrigger, error: triggerLookupError } = await supabase
-      .from("recipe_triggers")
-      .select("id")
-      .eq("account_id", accountId)
-      .eq("contact_id", event.contact_id)
-      .eq("recipe_slug", followUpRecipe.recipe_slug)
-      .eq("fired", false)
-      .order("fire_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    if (triggerLookupError) {
-      console.error(
-        "[webhook-side-effects] Failed to verify active contact run:",
-        triggerLookupError.message,
-      );
-      return;
-    }
-
-    if (!activeTrigger) return;
-
     // Authoritative pause mechanism:
     // mark pending trigger rows as fired=true so this sequence will not execute.
-    const { error: pauseError } = await supabase
+    const { data: pausedTriggers, error: pauseError } = await supabase
       .from("recipe_triggers")
       .update({ fired: true })
       .eq("account_id", accountId)
       .eq("contact_id", event.contact_id)
       .eq("recipe_slug", followUpRecipe.recipe_slug)
-      .eq("fired", false);
+      .eq("fired", false)
+      .select("id");
 
     if (pauseError) {
       console.error(
@@ -108,6 +88,8 @@ async function handleMessageReceived(
       );
       return;
     }
+
+    if (!pausedTriggers || pausedTriggers.length === 0) return;
 
     await supabase.from("automation_events").insert({
       account_id: accountId,
