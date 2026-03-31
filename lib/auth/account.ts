@@ -16,11 +16,11 @@ export async function requireAccountForUser(
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, account_status")
+    .select("id")
     .eq("owner_user_id", user.id)
     .maybeSingle();
 
-  if (!account || account.account_status === "deleted") {
+  if (!account) {
     return null;
   }
 

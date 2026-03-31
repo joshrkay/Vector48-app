@@ -15,7 +15,7 @@ import type { AccountRow } from "./types";
 
 const schema = z.object({
   voice_gender: z.enum(["male", "female"]),
-  voice_greeting: z.string().min(1).max(500),
+  greeting_text: z.string().min(1).max(500),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -31,11 +31,11 @@ export function VoiceSettings({ account }: { account: AccountRow }) {
     defaultValues: {
       voice_gender:
         account.voice_gender === "female" ? "female" : "male",
-      voice_greeting: account.voice_greeting ?? "",
+      greeting_text: account.greeting_text ?? "",
     },
   });
 
-  const preview = `${account.business_name}: ${form.watch("voice_greeting") || "…"}`;
+  const preview = `${account.business_name}: ${form.watch("greeting_text") || "…"}`;
 
   async function saveVoice() {
     const valid = await form.trigger();
@@ -46,7 +46,7 @@ export function VoiceSettings({ account }: { account: AccountRow }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         voice_gender: v.voice_gender,
-        voice_greeting: v.voice_greeting,
+        greeting_text: v.greeting_text,
       }),
     });
     if (!res.ok) {
@@ -130,8 +130,8 @@ export function VoiceSettings({ account }: { account: AccountRow }) {
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="voice_greeting">Greeting line</Label>
-        <Input id="voice_greeting" {...form.register("voice_greeting")} />
+        <Label htmlFor="greeting_text">Greeting line</Label>
+        <Input id="greeting_text" {...form.register("greeting_text")} />
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={saveVoice}>

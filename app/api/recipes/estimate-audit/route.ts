@@ -125,7 +125,7 @@ ${trimmed}
       vertical,
       job_type: jobType,
       suggestions: suggestionsPayload,
-      total_potential_value: auditResult.totalPotentialValue,
+      total_estimated_value_cents: Math.round(auditResult.totalPotentialValue * 100),
     })
     .select("id")
     .single();

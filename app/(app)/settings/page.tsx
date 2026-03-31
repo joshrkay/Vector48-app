@@ -23,10 +23,6 @@ export default async function SettingsRoutePage() {
     redirect("/login");
   }
 
-  if (account.account_status === "deleted") {
-    redirect("/login");
-  }
-
   const { data: pricing } = await supabase
     .from("pricing_config")
     .select("*")
@@ -41,7 +37,6 @@ export default async function SettingsRoutePage() {
 
   const meta = user.user_metadata as Record<string, unknown> | undefined;
   const ownerName =
-    (account.owner_display_name?.trim() || "") ||
     (typeof meta?.full_name === "string" ? meta.full_name : "") ||
     (typeof meta?.name === "string" ? meta.name : "") ||
     "";

@@ -63,12 +63,12 @@ export async function middleware(request: NextRequest) {
   if (user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
     const { data: account } = await supabase
       .from("accounts")
-      .select("trial_ends_at, plan_slug, onboarding_done_at")
+      .select("trial_ends_at, plan_slug, onboarding_completed_at")
       .single();
 
     if (account) {
       // Onboarding gate — force incomplete onboarding to /onboarding
-      if (!account.onboarding_done_at && !pathname.startsWith("/onboarding")) {
+      if (!account.onboarding_completed_at && !pathname.startsWith("/onboarding")) {
         const url = request.nextUrl.clone();
         url.pathname = "/onboarding";
         return NextResponse.redirect(url);

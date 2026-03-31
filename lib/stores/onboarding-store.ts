@@ -22,13 +22,12 @@ export interface OnboardingState {
   businessName: string;
   vertical: Vertical | "";
   phone: string;
-  serviceArea: string;
   businessHours: BusinessHours;
   voiceGender: "male" | "female";
-  voiceGreeting: string;
-  notificationSms: boolean;
-  notificationEmail: boolean;
-  notificationContact: string;
+  greetingText: string;
+  notificationContactName: string;
+  notificationContactPhone: string;
+  notificationPreferences: Record<string, unknown>;
   activateRecipe1: boolean;
 }
 
@@ -48,13 +47,12 @@ export const createOnboardingStore = (initial: Partial<OnboardingState>) =>
     businessName: "",
     vertical: "",
     phone: "",
-    serviceArea: "",
     businessHours: { preset: "weekday_8_5" },
     voiceGender: "male",
-    voiceGreeting: "",
-    notificationSms: true,
-    notificationEmail: false,
-    notificationContact: "",
+    greetingText: "",
+    notificationContactName: "",
+    notificationContactPhone: "",
+    notificationPreferences: {},
     activateRecipe1: true,
     ...initial,
     setStepData: (data) => set((s) => ({ ...s, ...data })),

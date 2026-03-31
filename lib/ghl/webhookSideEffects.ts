@@ -49,7 +49,7 @@ async function handleMessageReceived(
 
   // A human replied — log that we detected it for the follow-up sequence.
   // Future: pause the n8n workflow via API using followUpRecipe.n8n_workflow_id
-  await supabase.from("event_log").insert({
+  await supabase.from("automation_events").insert({
     account_id: accountId,
     recipe_slug: followUpRecipe.recipe_slug,
     event_type: "sequence_paused",
@@ -91,7 +91,7 @@ async function handleAppointmentUpdated(
   if (!rebookRecipe) return;
 
   // Future: invoke n8n re-booking workflow
-  await supabase.from("event_log").insert({
+  await supabase.from("automation_events").insert({
     account_id: accountId,
     recipe_slug: rebookRecipe.recipe_slug,
     event_type: "rebook_triggered",
@@ -130,7 +130,7 @@ async function handleCallCompleted(
   if (matchedKeywords.length < 2) return;
 
   // Flag call for review — this shows as an alert in the dashboard
-  await supabase.from("event_log").insert({
+  await supabase.from("automation_events").insert({
     account_id: accountId,
     recipe_slug: null,
     event_type: "alert",
@@ -148,7 +148,7 @@ async function handleCallCompleted(
 // ── Main dispatcher ───────────────────────────────────────────────────────
 
 /**
- * Process side effects after a webhook event has been written to event_log.
+ * Process side effects after a webhook event has been written to automation_events.
  * This function is fire-and-forget — it must never throw.
  */
 export async function processSideEffects(
