@@ -155,7 +155,7 @@ export function ActivationSheet({
         setPhase("plan_limit");
         setPlanMessage({
           message: String(data.message ?? ""),
-          upgradeHref: String(data.upgradeHref ?? "/settings?tab=billing"),
+          upgradeHref: String(data.upgradeHref ?? "/billing"),
           planDisplayName: String(data.planDisplayName ?? ""),
         });
         return;

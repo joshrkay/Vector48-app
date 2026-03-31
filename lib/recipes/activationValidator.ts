@@ -16,7 +16,7 @@ export function getRecipeDefinitionOrThrow(
 ): RecipeDefinition | null {
   const recipe = getRecipeBySlug(slug);
   if (!recipe) return null;
-  if (recipe.releasePhase === "coming_soon") return null;
+  if (recipe.marketplaceListing === "coming_soon") return null;
   return recipe;
 }
 
@@ -136,6 +136,6 @@ export async function assertPlanAllowsMoreActivations(
     code: "PLAN_LIMIT",
     planDisplayName,
     message: `You've reached your ${planDisplayName} limit for active recipes. Upgrade to Growth for unlimited recipes.`,
-    upgradeHref: "/settings?tab=billing",
+    upgradeHref: "/billing",
   };
 }

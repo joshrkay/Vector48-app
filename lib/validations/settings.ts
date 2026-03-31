@@ -13,6 +13,33 @@ export const profilePatchSchema = z.object({
   greeting_text: z.string().max(500).nullable().optional(),
 });
 
+export const businessPatchSchema = z.object({
+  business_name: z.string().min(1).max(200).optional(),
+  phone: z.string().max(40).nullable().optional(),
+  email: z.string().email().max(200).nullable().optional(),
+  address_city: z.string().max(100).nullable().optional(),
+  address_state: z.string().max(100).nullable().optional(),
+  address_zip: z.string().max(20).nullable().optional(),
+  vertical: z
+    .enum([
+      "hvac",
+      "plumbing",
+      "electrical",
+      "roofing",
+      "landscaping",
+      "other",
+    ])
+    .nullable()
+    .optional(),
+  business_hours: businessHoursSchema.nullable().optional(),
+});
+
+export const voicePatchSchema = z.object({
+  voice_gender: z.enum(["male", "female"]),
+  greeting_text: z.string().min(1).max(200),
+  timezone: z.string().min(1).max(80),
+});
+
 export const notificationPreferencesSchema = z.object({
   sms: z.boolean().optional(),
   email: z.boolean().optional(),
@@ -30,6 +57,10 @@ export const notificationPreferencesSchema = z.object({
 export const notificationsPatchSchema = z.object({
   notification_contact_name: z.string().max(200).nullable().optional(),
   notification_contact_phone: z.string().max(200).nullable().optional(),
+  notification_email: z.string().email().max(200).nullable().optional(),
+  notifications_enabled: z.boolean().optional(),
+  quiet_hours_start: z.string().max(8).nullable().optional(),
+  quiet_hours_end: z.string().max(8).nullable().optional(),
   notification_preferences: notificationPreferencesSchema.optional(),
 });
 

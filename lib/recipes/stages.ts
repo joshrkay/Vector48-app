@@ -10,7 +10,6 @@ export interface StageStyle {
 }
 
 export const STAGE_STYLES: Record<FunnelStage, StageStyle> = {
-  awareness: { bg: "bg-sky-50", text: "text-sky-600", icon: "text-sky-500" },
   capture: { bg: "bg-teal-50", text: "text-teal-600", icon: "text-teal-500" },
   engage: { bg: "bg-violet-50", text: "text-violet-600", icon: "text-violet-500" },
   close: { bg: "bg-amber-50", text: "text-amber-600", icon: "text-amber-500" },

@@ -1,19 +1,28 @@
 import { auditModelResponseSchema } from "./schema";
 
+function roundToNearest25(value: number): number {
+  return Math.round(value / 25) * 25;
+}
+
+function normalizeAuditModelResponse(input: unknown) {
+  const validated = auditModelResponseSchema.parse(input);
+  const suggestions = validated.suggestions.map((suggestion) => ({
+    ...suggestion,
+    estimatedValue: roundToNearest25(suggestion.estimatedValue),
+  }));
+  const sum = suggestions.reduce((acc, suggestion) => acc + suggestion.estimatedValue, 0);
+  return {
+    suggestions,
+    summary: validated.summary,
+    totalPotentialValue: Math.round(sum * 100) / 100,
+  };
+}
+
 /**
  * Validates structured output from Anthropic tool_use input.
  */
 export function parseEstimateAuditToolInput(input: unknown) {
-  const validated = auditModelResponseSchema.parse(input);
-  const sum = validated.suggestions.reduce(
-    (acc, s) => acc + s.estimatedValue,
-    0,
-  );
-  const rounded = Math.round(sum * 100) / 100;
-  return {
-    suggestions: validated.suggestions,
-    totalPotentialValue: rounded,
-  };
+  return normalizeAuditModelResponse(input);
 }
 
 /**
@@ -33,14 +42,5 @@ export function stripAssistantJsonFence(raw: string): string {
 export function parseEstimateAuditModelJson(text: string) {
   const cleaned = stripAssistantJsonFence(text);
   const parsed: unknown = JSON.parse(cleaned);
-  const validated = auditModelResponseSchema.parse(parsed);
-  const sum = validated.suggestions.reduce(
-    (acc, s) => acc + s.estimatedValue,
-    0,
-  );
-  const rounded = Math.round(sum * 100) / 100;
-  return {
-    suggestions: validated.suggestions,
-    totalPotentialValue: rounded,
-  };
+  return normalizeAuditModelResponse(parsed);
 }

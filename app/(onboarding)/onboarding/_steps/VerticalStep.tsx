@@ -13,6 +13,7 @@ import {
   Zap,
   Home,
   TreePine,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOnboarding } from "./WizardShell";
@@ -28,6 +29,7 @@ const VERTICALS = [
   { value: "electrical" as const, label: "Electrical", icon: Zap },
   { value: "roofing" as const, label: "Roofing", icon: Home },
   { value: "landscaping" as const, label: "Landscaping", icon: TreePine },
+  { value: "other" as const, label: "Other", icon: Briefcase },
 ];
 
 export function VerticalStep({ onNext, onValidityChange }: StepProps) {

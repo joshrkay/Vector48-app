@@ -1,5 +1,5 @@
-import path from "node:path";
 import { defineConfig } from "vitest/config";
+import path from "path";
 
 export default defineConfig({
   test: {
@@ -7,7 +7,7 @@ export default defineConfig({
     setupFiles: ["./tests/setup.ts"],
     globals: true,
     testTimeout: 15_000,
-    include: ["lib/**/*.test.ts"],
+    exclude: ["**/node_modules/**", "tests/voice/**"],
   },
   resolve: {
     alias: {

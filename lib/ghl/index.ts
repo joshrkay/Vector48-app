@@ -13,6 +13,8 @@ export {
   getGHLClient,
 } from "./token";
 
+export { updateVoiceAgent, buildVoiceGreetingLine } from "./voiceAgent";
+
 // Errors
 export {
   GHLApiError,

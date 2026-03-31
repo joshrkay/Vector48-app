@@ -148,8 +148,6 @@ export interface GHLContactsListResponse {
   contacts: GHLContact[];
 }
 
-export type GHLContactResponse = GHLContact;
-
 // ── Notes ───────────────────────────────────────────────────────────────────
 
 export interface GHLNote {
@@ -246,10 +244,17 @@ export interface GHLMessagesListParams {
   type?: GHLMessageType;
 }
 
+export interface GHLMessagesListResponse {
+  messages: GHLMessage[];
+  traceId?: string;
+}
+
+/** Payload for POST /conversations/ (create thread). */
 export interface GHLCreateConversationPayload {
   locationId: string;
   contactId: string;
-  assignedTo?: string;
+  subject?: string;
+  type?: GHLMessageType;
 }
 
 export interface GHLSendMessagePayload {
@@ -268,10 +273,6 @@ export interface GHLSendMessagePayload {
 
 export interface GHLConversationsListResponse {
   conversations: GHLConversation[];
-}
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
 }
 
 // ── Opportunities / Pipeline ────────────────────────────────────────────────
@@ -511,38 +512,34 @@ export interface GHLCreateLocationPayload {
   settings?: Record<string, unknown>;
 }
 
-export interface GHLLocationResponse {
-  location: GHLLocation;
-}
-
-export interface GHLCreateLocationResponse {
-  location: GHLLocation;
-}
-
+/** Sub-account update (PUT /locations/:locationId) — partial fields. */
 export interface GHLUpdateLocationPayload {
   name?: string;
+  email?: string;
   phone?: string;
   address?: string;
   city?: string;
   state?: string;
   postalCode?: string;
   country?: string;
-  timezone?: string;
   website?: string;
-  email?: string;
-  settings?: {
-    businessName?: string;
-    businessHours?: GHLBusinessHours[];
-  };
+  timezone?: string;
 }
 
-export interface GHLBusinessHours {
-  dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
-  openHour: number;
-  openMinute: number;
-  closeHour: number;
-  closeMinute: number;
-  isOpen: boolean;
+export interface GHLLocationResponse {
+  location: GHLLocation;
+}
+
+/** Voice AI — list agents (GET /voice-ai/agents). */
+export interface GHLVoiceAgentSummary {
+  id: string;
+  locationId?: string;
+  name?: string;
+}
+
+export interface GHLVoiceAgentsListResponse {
+  agents?: GHLVoiceAgentSummary[];
+  data?: GHLVoiceAgentSummary[];
 }
 
 // ── Webhooks (agency-level) ─────────────────────────────────────────────────
@@ -569,11 +566,19 @@ export interface GHLWebhook {
 }
 
 export interface GHLCreateWebhookPayload {
+  url: string;
+  events: GHLWebhookEvent[];
+  locationId?: string;
+  secret?: string;
+}
+
 export interface GHLWebhookResponse {
   webhook: GHLWebhook;
 }
 
-// ── Token Exchange (agency → sub-account) ─────────────────────────────────
+export interface GHLWebhooksListResponse {
+  webhooks: GHLWebhook[];
+}
 
 export interface GHLTokenExchangeResponse {
   access_token: string;
@@ -582,30 +587,4 @@ export interface GHLTokenExchangeResponse {
   scope: string;
   locationId: string;
 }
-export interface GHLWebhooksListResponse {
-  webhooks: GHLWebhook[];
-}
-
-// ── Error ──────────────────────────────────────────────────────────────────
-
-export interface GHLCampaign {
-  id: string;
-  name: string;
-  locationId: string;
-  url: string;
-  events: string[];
-  secret?: string;
-}
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  nextPage: boolean;
-  lastMessageId?: string;
-}
-
-export interface GHLWebhooksListResponse {
-  webhooks: GHLWebhook[];
-}
-
-// ── (duplicate declarations removed — end of file) ─────────────────────────
 

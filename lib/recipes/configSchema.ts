@@ -1,6 +1,13 @@
 import { z } from "zod";
 import type { RecipeConfigField } from "@/types/recipes";
 
+function getSelectOptionValues(field: RecipeConfigField): string[] {
+  if (!field.options?.length) return [];
+  return field.options.map((option) =>
+    typeof option === "string" ? option : option.value,
+  );
+}
+
 export function buildRecipeConfigZodSchema(
   fields: RecipeConfigField[],
 ): z.ZodObject<Record<string, z.ZodTypeAny>> {
@@ -29,7 +36,7 @@ export function buildRecipeConfigZodSchema(
         break;
       case "select":
         if (f.options?.length) {
-          const allowed = f.options;
+          const allowed = getSelectOptionValues(f);
           fieldSchema = z
             .string()
             .refine((v) => allowed.includes(v), "Select a valid option");

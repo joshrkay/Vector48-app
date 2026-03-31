@@ -8,9 +8,29 @@ const TRIAL_ALLOWED_ROUTES = ["/billing", "/settings"];
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
+  const supabaseAnonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn(
+      "[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY — add both to .env.local (see .env.local.example).",
+    );
+    return new NextResponse(
+      "Configuration error: Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY.\n\n" +
+        "Copy .env.local.example to .env.local and set both values from your Supabase project:\n" +
+        "https://supabase.com/dashboard/project/_/settings/api\n",
+      {
+        status: 503,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      },
+    );
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
