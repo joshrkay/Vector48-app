@@ -47,6 +47,7 @@ export type Database = {
           vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
           business_hours: Record<string, unknown>;
           ghl_location_id: string | null;
+          ghl_webhook_secret: string | null;
           ghl_token_encrypted: string | null;
           ghl_voice_agent_id: string | null;
           onboarding_done_at: string | null;
@@ -98,6 +99,7 @@ export type Database = {
           vertical?: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
           business_hours?: Record<string, unknown>;
           ghl_location_id?: string | null;
+          ghl_webhook_secret?: string | null;
           ghl_token_encrypted?: string | null;
           ghl_voice_agent_id?: string | null;
           onboarding_done_at?: string | null;

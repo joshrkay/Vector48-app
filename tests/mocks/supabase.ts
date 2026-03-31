@@ -39,6 +39,7 @@ export function createMockAccount(
     phone: "+15551234567",
     vertical: "plumbing",
     ghl_location_id: null,
+    ghl_webhook_secret: null,
     ghl_token_encrypted: null,
     trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
     stripe_customer_id: null,
