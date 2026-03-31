@@ -39,7 +39,7 @@ export async function GET() {
 
   const payload = await buildIntegrationStatus(
     supabase,
-    account as IntegrationStatusAccountInput,
+    account as unknown as IntegrationStatusAccountInput,
   );
   return NextResponse.json(payload);
 }
