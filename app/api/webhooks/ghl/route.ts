@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
+import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
 
 // Timing-safe token comparison — hash both sides to fixed length so
 // timingSafeEqual never leaks the secret's length via early return.
@@ -103,33 +104,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Insert failed" }, { status: 500 });
   }
 
-  const ackStartedAt = Date.now();
-  const response = NextResponse.json({ received: true });
+  // 7. Fire-and-forget cache invalidation — must not block the response
+  Promise.resolve()
+    .then(() => invalidateGHLCache(account.id, ghlEventType))
+    .catch((err) => console.error("[ghl-webhook] Cache invalidation error:", err));
 
-  // Fire-and-forget side effects after ack path — never throw to response.
-  const scheduleSideEffects = () => {
-    processSideEffects(account.id, eventRow, body).catch((err) => {
-      console.error("[ghl-webhook] Side effect error:", err);
-    });
-  };
-  if (typeof setImmediate === "function") {
-    setImmediate(scheduleSideEffects);
-  } else {
-    queueMicrotask(scheduleSideEffects);
-  }
-
-  const ackMs = Date.now() - ackStartedAt;
-  const totalMs = Date.now() - startedAt;
-  console.info("[ghl-webhook] timing", {
-    parse_ms: parseMs,
-    lookup_ms: lookupMs,
-    insert_ms: insertMs,
-    ack_ms: ackMs,
-    total_ms: totalMs,
-    within_sla_5s: totalMs < 5_000,
-    account_id: account.id,
-    ghl_event_type: ghlEventType,
-  });
+  // 8. Fire side effects async — must not block the response
+  processSideEffects(account.id, eventRow, body).catch((err) =>
+    console.error("[ghl-webhook] Side effect error:", err)
+  );
 
   return response;
 }
