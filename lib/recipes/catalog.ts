@@ -758,7 +758,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     verticalMessages: {
       hvac: "Temps hitting [X]° this week in [City]. If your AC hasn't been serviced this year, now's the time. We're booking same-week appointments.",
       plumbing:
-        "Freeze warning for [City] tonight. If your irrigation isn't winterized yet, call us today — we have same-day availability.",
+        "Freeze warning for [City] tonight. Worried about frozen pipes or outdoor spigots? We can winterize lines, check your water heater, and handle burst-pipe emergencies — same-day slots available.",
       electrical:
         "Power outages reported in [City]. If you need generator service or have storm damage to your electrical, we're available today.",
       roofing:
