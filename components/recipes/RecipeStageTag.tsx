@@ -8,6 +8,10 @@ const STAGE_LABELS: Record<FunnelStage, string> = {
   nurture: "Nurture",
   close: "Close",
   delight: "Delight",
+  engage: "Engage",
+  deliver: "Deliver",
+  retain: "Retain",
+  reactivate: "Reactivate",
 };
 
 export function RecipeStageTag({ stage }: { stage: FunnelStage }) {

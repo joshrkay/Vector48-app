@@ -26,3 +26,6 @@ export function createAdminClient() {
 
   return adminClient;
 }
+
+/** Alias for backward compatibility with imports that use getSupabaseAdmin. */
+export const getSupabaseAdmin = createAdminClient;
