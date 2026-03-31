@@ -219,6 +219,7 @@ export type Database = {
           original_estimate_text: string | null;
           suggestions: unknown[];
           accepted_suggestions: unknown[];
+          audit_summary: string | null;
           total_estimated_value_cents: number;
           created_at: string;
         };
@@ -231,6 +232,7 @@ export type Database = {
           original_estimate_text?: string | null;
           suggestions?: unknown[];
           accepted_suggestions?: unknown[];
+          audit_summary?: string | null;
           total_estimated_value_cents?: number;
           created_at?: string;
         };

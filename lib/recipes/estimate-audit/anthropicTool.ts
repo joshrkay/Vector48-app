@@ -19,6 +19,11 @@ export const estimateAuditSubmitTool: Tool = {
         items: {
           type: "object",
           properties: {
+            category: {
+              type: "string",
+              enum: ["missed_item", "upsell", "pricing_flag"],
+              description: "Type of suggestion",
+            },
             item: { type: "string", description: "Short title for the suggestion" },
             reason: {
               type: "string",
@@ -28,9 +33,30 @@ export const estimateAuditSubmitTool: Tool = {
               type: "number",
               description: "Approximate incremental value in USD",
             },
+            confidence: {
+              type: "string",
+              enum: ["high", "medium", "low"],
+              description: "How likely this suggestion applies",
+            },
+            priority: {
+              type: "string",
+              enum: ["high", "medium", "low"],
+              description: "Customer impact importance",
+            },
           },
-          required: ["item", "reason", "estimatedValue"],
+          required: [
+            "category",
+            "item",
+            "reason",
+            "estimatedValue",
+            "confidence",
+            "priority",
+          ],
         },
+      },
+      summary: {
+        type: "string",
+        description: "One-sentence overall estimate assessment",
       },
       totalPotentialValue: {
         type: "number",
@@ -38,6 +64,6 @@ export const estimateAuditSubmitTool: Tool = {
           "Sum of all estimatedValue entries (USD); must match the sum of suggestions.",
       },
     },
-    required: ["suggestions", "totalPotentialValue"],
+    required: ["suggestions", "summary", "totalPotentialValue"],
   },
 };

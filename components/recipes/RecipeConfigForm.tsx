@@ -41,6 +41,18 @@ function formatPhoneInput(raw: string): string {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
+function getSelectOptions(field: RecipeConfigField): Array<{
+  value: string;
+  label: string;
+}> {
+  if (!field.options?.length) return [];
+  return field.options.map((option) =>
+    typeof option === "string"
+      ? { value: option, label: option }
+      : { value: option.value, label: option.label },
+  );
+}
+
 export interface RecipeConfigFormProps {
   configFields: RecipeConfigField[];
   profile: AccountProfileSlice | null;
@@ -83,9 +95,15 @@ export function RecipeConfigForm({
   const defaultValues = useMemo(() => {
     const v: Record<string, unknown> = {};
     for (const f of editableFields) {
-      if (f.type === "toggle" || f.type === "boolean") v[f.name] = false;
-      else if (f.type === "number") v[f.name] = undefined;
-      else v[f.name] = "";
+      if (f.defaultValue !== undefined) {
+        v[f.name] = f.defaultValue;
+      } else if (f.type === "toggle" || f.type === "boolean") {
+        v[f.name] = false;
+      } else if (f.type === "number") {
+        v[f.name] = undefined;
+      } else {
+        v[f.name] = "";
+      }
     }
     return v;
   }, [editableFields]);
@@ -191,9 +209,9 @@ export function RecipeConfigForm({
                           <SelectValue placeholder={`Select ${field.label}`} />
                         </SelectTrigger>
                         <SelectContent>
-                          {field.options.map((opt) => (
-                            <SelectItem key={opt} value={opt}>
-                              {opt}
+                          {getSelectOptions(field).map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -218,6 +236,11 @@ export function RecipeConfigForm({
                       />
                     )}
                   </FormControl>
+                  {field.helpText ? (
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      {field.helpText}
+                    </p>
+                  ) : null}
                   <FormMessage />
                 </FormItem>
               )}

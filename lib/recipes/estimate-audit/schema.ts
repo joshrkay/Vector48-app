@@ -15,13 +15,17 @@ export const analyzeBodySchema = z.object({
 });
 
 export const auditSuggestionSchema = z.object({
+  category: z.enum(["missed_item", "upsell", "pricing_flag"]),
   item: z.string(),
   reason: z.string(),
   estimatedValue: z.number(),
+  confidence: z.enum(["high", "medium", "low"]),
+  priority: z.enum(["high", "medium", "low"]),
 });
 
 export const auditModelResponseSchema = z.object({
   suggestions: z.array(auditSuggestionSchema),
+  summary: z.string(),
   totalPotentialValue: z.number(),
 });
 

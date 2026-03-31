@@ -25,6 +25,7 @@ interface EstimateInputProps {
   onAnalyzeSuccess: (payload: {
     auditLogId: string;
     suggestions: AuditSuggestion[];
+    summary: string;
     totalPotentialValue: number;
   }) => void;
 }
@@ -117,6 +118,7 @@ export function EstimateInput({
       const data = (await res.json()) as {
         auditLogId?: string;
         suggestions?: AuditSuggestion[];
+        summary?: string;
         totalPotentialValue?: number;
         error?: string;
       };
@@ -127,6 +129,7 @@ export function EstimateInput({
       if (
         !data.auditLogId ||
         !data.suggestions ||
+        !data.summary ||
         data.totalPotentialValue === undefined
       ) {
         setError("Unexpected response");
@@ -135,6 +138,7 @@ export function EstimateInput({
       onAnalyzeSuccess({
         auditLogId: data.auditLogId,
         suggestions: data.suggestions,
+        summary: data.summary,
         totalPotentialValue: data.totalPotentialValue,
       });
     } catch {

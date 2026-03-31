@@ -10,7 +10,7 @@
 import type { RecipeDefinition } from "@/types/recipes";
 
 export const RECIPE_CATALOG: RecipeDefinition[] = [
-  // ── Awareness (2) ─────────────────────────────────────────
+  // ── Capture (2) ────────────────────────────────────────────
   {
     slug: "google-review-booster",
     name: "Google Review Booster",
@@ -19,10 +19,10 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "After a job is marked complete, automatically send a friendly SMS with a link to leave a Google review.",
     icon: "star",
-    funnelStage: "awareness",
+    funnelStage: "capture",
     vertical: null,
-    releasePhase: "ga",
-    stageColor: "blue-100",
+    releasePhase: "v1",
+    marketplaceListing: "available",
     trigger: "Job marked complete in your CRM.",
     output: "Review request SMS sent to the customer.",
     requiredIntegrations: [],
@@ -45,10 +45,10 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "Seasonal SMS campaigns tailored to your trade and service area.",
     icon: "megaphone",
-    funnelStage: "awareness",
+    funnelStage: "capture",
     vertical: "hvac",
-    releasePhase: "coming_soon",
-    stageColor: "blue-100",
+    releasePhase: "v1",
+    marketplaceListing: "coming_soon",
     trigger: "Seasonal schedule or manual campaign start.",
     output: "Promotional messages to your customer list.",
     requiredIntegrations: [],
@@ -69,33 +69,37 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     slug: "ai-phone-answering",
     name: "AI Phone Answering",
     description:
-      "Never miss a call again. AI answers when you can't, captures the caller's info, and texts you a summary instantly.",
+      "AI answers missed and after-hours calls, captures lead info, and texts you a summary.",
     detailedDescription:
-      "When a call comes in and you're unable to answer, our AI voice agent picks up, greets the caller by name if possible, captures their issue, and sends you an SMS summary with the caller's details. No more lost leads from missed calls.",
+      "When an inbound call goes unanswered or arrives after hours, an AI voice agent answers within 2 rings. It introduces itself using your business name and greeting, collects the caller's name, job description, and preferred callback time, then sends you an SMS summary within 60 seconds.",
     funnelStage: "capture",
     releasePhase: "v1",
+    marketplaceListing: "available",
     icon: "Phone",
-    stageColor: "blue-100",
-    trigger: "Incoming call goes unanswered after the configured ring timeout.",
+    trigger: "Inbound call goes unanswered or arrives after business hours.",
     output:
-      "AI answers the call, captures caller info, and texts the business owner a summary.",
+      "SMS to owner within 60 seconds: caller name, callback number, job description, urgency level.",
     requiredIntegrations: ["twilio", "elevenlabs"],
     optionalIntegrations: [],
     configFields: [
       {
         name: "voiceGender",
-        label: "Voice Gender",
+        label: "Voice",
         type: "select",
         required: true,
         defaultFromProfile: "voice_gender",
-        options: ["male", "female"],
+        options: [
+          { value: "male", label: "Male" },
+          { value: "female", label: "Female" },
+        ],
       },
       {
         name: "voiceGreeting",
-        label: "Greeting Script",
+        label: "AI greeting script",
         type: "textarea",
         required: true,
         defaultFromProfile: "greeting_text",
+        helpText: "Greeting your AI uses when answering calls.",
       },
       {
         name: "forwardingNumber",
@@ -112,41 +116,41 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
     ],
     verticalMessages: {
-      hvac: "Hi, thanks for calling! I'm the AI assistant for {{business_name}}. I can help you schedule a heating or cooling service. What's going on with your system today?",
+      hvac: "Hi, you've reached [Business]. I'm out on a job right now but I want to make sure we take care of you...",
       plumbing:
-        "Hi, thanks for calling {{business_name}}! I'm the AI assistant. Are you dealing with a plumbing emergency, or would you like to schedule a service appointment?",
+        "Thanks for calling [Business]. We handle everything from leaks to full remodels...",
       electrical:
-        "Hi, thanks for calling {{business_name}}! I'm the AI assistant. Do you need help with an electrical issue or would you like to schedule an inspection?",
+        "Hi, you've reached [Business]. Whether it's a panel upgrade or an emergency, we've got you covered...",
       roofing:
-        "Hi, thanks for calling {{business_name}}! I'm the AI assistant. Are you looking for a roof inspection, repair estimate, or something else?",
+        "Hi, this is [Business]. If you're dealing with storm damage or a leak, you've called the right place...",
       landscaping:
-        "Hi, thanks for calling {{business_name}}! I'm the AI assistant. Are you interested in a landscaping quote or scheduling a regular service?",
+        "Thanks for calling [Business]. We'd love to help with your lawn or landscape project...",
     },
-    estimatedROI: "Recovers 30-40% of missed calls",
+    estimatedROI: "Recovers 30-40% of missed calls as captured leads.",
   },
 
   {
     slug: "missed-call-text-back",
     name: "Missed Call Text-Back",
     description:
-      "Instantly texts callers you missed so they know you'll follow up.",
+      "Sends an instant SMS when you miss a call, inviting the caller to text back.",
     detailedDescription:
-      "When a call goes unanswered, the system automatically sends an SMS to the caller within seconds acknowledging their call and letting them know you'll get back to them. Keeps leads warm until you can respond.",
+      "Within 90 seconds of a missed call, a conversational SMS is sent from your business number. It acknowledges the missed call, invites a text reply, and offers to book a time. Any reply routes to your inbox.",
     funnelStage: "capture",
     releasePhase: "v1",
+    marketplaceListing: "available",
     icon: "MessageSquare",
-    stageColor: "blue-100",
-    trigger: "A call is missed or goes to voicemail.",
-    output:
-      "An SMS is sent to the caller within seconds with a customizable message.",
+    trigger: "Inbound call missed and not answered by AI Phone Answering.",
+    output: "Caller receives instant text. Replies route to your inbox.",
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [
       {
         name: "textBackMessage",
-        label: "Text-Back Message",
+        label: "Custom text-back message (optional)",
         type: "textarea",
-        required: true,
+        required: false,
+        helpText: "Leave blank for our default message tuned to your trade.",
       },
       {
         name: "textBackDelaySec",
@@ -156,17 +160,17 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}, sorry we missed your call! We'll get back to you shortly. If it's an HVAC emergency, reply URGENT and we'll prioritize your request. — {{business_name}}",
+      hvac: "Hey, we just missed your call at [Business]. What's going on with your system? Reply here and we'll get back to you fast.",
       plumbing:
-        "Hey {{contact_name}}, sorry we missed your call! We'll get back to you shortly. If you have a plumbing emergency, reply URGENT. — {{business_name}}",
+        "Sorry we missed you! This is [Business]. What can we help with? Reply anytime.",
       electrical:
-        "Hey {{contact_name}}, sorry we missed your call! We'll call you back shortly. If this is an electrical emergency, reply URGENT. — {{business_name}}",
+        "Hey, we missed your call at [Business]. Need something electrical looked at? Shoot us a text here.",
       roofing:
-        "Hey {{contact_name}}, sorry we missed your call! We'll get back to you ASAP. If you have a roof leak, reply URGENT. — {{business_name}}",
+        "Sorry we missed you! This is [Business]. Dealing with a roof issue? Tell us what's going on.",
       landscaping:
-        "Hey {{contact_name}}, sorry we missed your call! We'll get back to you shortly. — {{business_name}}",
+        "Sorry we missed you! This is [Business]. What can we help you with? Reply anytime.",
     },
-    estimatedROI: "Recovers 20-30% of missed call leads",
+    estimatedROI: "Captures leads that would otherwise call a competitor.",
   },
 
   // ── ENGAGE ─────────────────────────────────────────────────────────────────
@@ -175,69 +179,74 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     slug: "new-lead-instant-response",
     name: "New Lead Instant Response",
     description:
-      "Responds to new leads within seconds to maximize conversion.",
+      "Contacts new leads via SMS and email within 90 seconds of arriving.",
     detailedDescription:
-      "When a new lead comes in through any channel — web form, ad, referral — the system instantly sends a personalized SMS introducing your business and asking how you can help. Speed-to-lead is the #1 factor in conversion.",
+      "When a new lead enters via web form, ad click, or missed call log, an immediate SMS and email are sent within 90 seconds. A follow-up goes out at 24h and 72h if no response. Sequence stops when the lead replies or books.",
     funnelStage: "engage",
     releasePhase: "v1",
+    marketplaceListing: "available",
     icon: "Zap",
-    stageColor: "violet-100",
-    trigger: "A new contact is created in the CRM from any source.",
-    output:
-      "A personalized SMS is sent to the lead within seconds of entry.",
+    trigger: "New lead enters system via web form, ad click, or missed call log.",
+    output: "Full sequence activity logged per lead. Replies route to inbox.",
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [
       {
         name: "responseMessage",
-        label: "Instant Response Message",
+        label: "First response SMS (optional)",
         type: "textarea",
-        required: true,
+        required: false,
+        helpText: "Leave blank for our default tuned to your trade.",
       },
       {
         name: "responseDelaySec",
-        label: "Delay Before Sending (seconds)",
-        type: "number",
+        label: "Send follow-ups at 24h and 72h",
+        type: "toggle",
         required: false,
+        defaultValue: true,
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}! Thanks for reaching out to {{business_name}}. We'd love to help with your heating or cooling needs. What can we do for you?",
+      hvac: "Hi [Name], this is [Business]. Got your message — we're on it. When works for a quick call today?",
       plumbing:
-        "Hey {{contact_name}}! Thanks for reaching out to {{business_name}}. We'd love to help with your plumbing needs. What's going on?",
+        "Hi [Name], this is [Business]. We got your message about a plumbing issue. When's a good time to talk?",
       electrical:
-        "Hey {{contact_name}}! Thanks for reaching out to {{business_name}}. We'd love to help with your electrical needs. What can we do for you?",
+        "Hi [Name], this is [Business]. Got your message about an electrical issue — we're on it. When works for a quick call today?",
       roofing:
-        "Hey {{contact_name}}! Thanks for reaching out to {{business_name}}. We'd love to help with your roofing needs. What can we do for you?",
+        "Hey [Name], saw your inquiry about a roof inspection. We're booking this week — want to grab a spot?",
       landscaping:
-        "Hey {{contact_name}}! Thanks for reaching out to {{business_name}}. We'd love to help with your landscaping needs. What are you looking for?",
+        "Hi [Name], this is [Business]. Thanks for reaching out about your lawn care needs. When can we chat?",
     },
-    estimatedROI: "Increases lead conversion by 30-50%",
+    estimatedROI: "78% of jobs go to the first responder. Sub-2-minute response rate.",
   },
 
   {
     slug: "lead-qualification",
-    name: "Lead Qualification",
+    name: "Lead Qualification via SMS",
     description:
-      "AI qualifies leads via text conversation before they reach your team.",
+      "AI asks 2-3 qualifying questions via text to score and route new leads.",
     detailedDescription:
-      "After the initial response, the AI continues the SMS conversation to qualify the lead — asking about the type of work needed, timeline, budget range, and property details. Qualified leads are tagged and prioritized in the pipeline.",
+      "When a new lead arrives with no job details, AI sends a short conversational SMS asking qualifying questions: work type, property type, timeline, and location. Responses are parsed into a lead score. High-urgency leads are flagged for immediate callback.",
     funnelStage: "engage",
     releasePhase: "v2",
+    marketplaceListing: "available",
     icon: "ClipboardCheck",
-    stageColor: "violet-100",
-    trigger:
-      "A new lead responds to the initial outreach message.",
+    trigger: "New inbound lead with no job details.",
     output:
-      "The lead is qualified via AI conversation and tagged with qualification score in the CRM.",
+      "Lead record enriched with job type, property, urgency score, and AI summary.",
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [
       {
         name: "qualificationQuestions",
-        label: "Qualification Questions (one per line)",
-        type: "textarea",
+        label: "Urgency threshold",
+        type: "select",
         required: true,
+        options: [
+          { value: "emergency", label: "Emergency only (active leak, no heat/AC)" },
+          { value: "same_week", label: "Needs service this week" },
+          { value: "any", label: "Any interested lead" },
+        ],
       },
       {
         name: "qualifiedTag",
@@ -253,81 +262,98 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
     ],
     verticalMessages: {
-      hvac: "Great, a few quick questions so we can get you the right help: What type of system do you have (central AC, heat pump, furnace)? Is this for a repair, replacement, or new install?",
+      hvac: "Hey [Name] — is your AC completely out or just not cooling well? Helps us know how fast to get someone out.",
       plumbing:
-        "Got it! A few quick questions: Is this a repair, new install, or remodel project? Is the issue urgent (active leak, no water)?",
+        "Hi [Name]! Quick question — is this more of an emergency (active leak, no hot water) or can it wait a few days?",
       electrical:
-        "Thanks! A few quick questions: Is this a repair, new install, or inspection? Is the issue urgent (power out, sparking)?",
+        "Hi [Name] — is this something that needs attention right away, or more of a planned project?",
       roofing:
-        "Thanks! A few quick questions: Are you looking for a repair, replacement, or new installation? How old is your current roof?",
+        "Hey [Name] — are you dealing with an active leak, or looking for an inspection/estimate?",
       landscaping:
-        "Thanks! A few quick questions: Are you looking for a one-time project or ongoing maintenance? What's the approximate size of the area?",
+        "Hi [Name] — are you looking for a one-time job or ongoing lawn care? Helps us give you the right quote.",
     },
-    estimatedROI: "Saves 5-10 hours/week on manual lead screening",
+    estimatedROI: "Office staff only call back leads worth their time.",
   },
 
   // ── CLOSE ──────────────────────────────────────────────────────────────────
 
   {
     slug: "estimate-follow-up",
-    name: "Estimate Follow-Up",
+    name: "Estimate & Quote Follow-Up",
     description:
-      "Automatically follows up after sending an estimate to close the deal.",
+      "Automated follow-up sequence after sending an estimate: 24h, 48h, and 5 days.",
     detailedDescription:
-      "After you send an estimate, the system waits a configurable period then sends a friendly follow-up SMS checking if the customer has questions. Keeps you top-of-mind and dramatically improves close rates.",
+      "After an estimate is sent, follow-up messages go out at 24h, 48h, and 5-day intervals. Tone shifts from informational to light urgency. AI personalizes based on job type. Stops on booking or explicit decline.",
     funnelStage: "close",
     releasePhase: "v1",
+    marketplaceListing: "available",
     icon: "FileText",
-    stageColor: "amber-100",
-    trigger:
-      "An estimate or proposal is sent to the customer (opportunity stage change).",
-    output:
-      "A follow-up SMS is sent after the configured delay asking if they have questions.",
+    trigger: "Estimate sent to prospect (CRM status change or manual tag).",
+    output: "Follow-up activity and delivery status logged per lead.",
     requiredIntegrations: [],
     optionalIntegrations: ["jobber", "servicetitan"],
     configFields: [
       {
         name: "followUpMessage",
-        label: "Follow-Up Message",
+        label: "Estimate follow-up message",
         type: "textarea",
         required: true,
       },
       {
-        name: "followUpDelayHours",
-        label: "Hours After Estimate to Follow Up",
+        name: "followUpStep1DelayHours",
+        label: "First follow-up (hours after estimate)",
         type: "number",
         required: true,
+        defaultValue: 24,
+        helpText:
+          "Typically 24. Tone: informational check-in.",
+      },
+      {
+        name: "followUpStep2DelayHours",
+        label: "Second follow-up (hours after estimate)",
+        type: "number",
+        required: true,
+        defaultValue: 48,
+        helpText:
+          "Typically 48. Tone: answer questions / light nudge.",
+      },
+      {
+        name: "followUpStep3DelayHours",
+        label: "Third follow-up (hours after estimate)",
+        type: "number",
+        required: true,
+        defaultValue: 120,
+        helpText:
+          "Typically 120 (5 days). Tone: light urgency before closing the loop.",
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}, just checking in on the estimate we sent for your HVAC work. Do you have any questions or would you like to schedule the job? — {{business_name}}",
+      hvac: "Hi [Name], wanted to follow up on the estimate we sent for your AC. We have openings this week if you're ready to move forward.",
       plumbing:
-        "Hey {{contact_name}}, just following up on the plumbing estimate we sent. Any questions? We'd love to get you on the schedule. — {{business_name}}",
+        "Hey [Name] — just checking in on that plumbing estimate. Any questions we can answer?",
       electrical:
-        "Hey {{contact_name}}, following up on the electrical estimate we sent. Any questions or ready to move forward? — {{business_name}}",
+        "Hi [Name], following up on the estimate for your panel upgrade. Happy to walk through anything.",
       roofing:
-        "Hey {{contact_name}}, following up on your roofing estimate. Any questions? We're happy to walk through the details. — {{business_name}}",
+        "Hi [Name], wanted to follow up on the estimate we sent for your roof. We have a crew available next week if you're ready.",
       landscaping:
-        "Hey {{contact_name}}, following up on the landscaping estimate we sent. Any questions or ready to get started? — {{business_name}}",
+        "Hey [Name] — spring slots are filling up fast. Want to lock in your lawn care plan?",
     },
-    estimatedROI: "Improves estimate close rate by 15-25%",
+    estimatedROI: "Recovers 15-25% of quotes that would otherwise go cold.",
   },
 
   {
     slug: "seasonal-demand-outreach",
     name: "Seasonal Demand Outreach",
     description:
-      "Proactively reaches out to customers before peak seasons.",
+      "AI-generated seasonal campaigns to your contact list at peak-demand times.",
     detailedDescription:
-      "Automatically sends seasonal campaign messages to your customer list before peak demand periods — AC tune-ups before summer, furnace checks before winter, gutter cleaning before fall. Fills your schedule during transition periods.",
+      "At the start of high-demand seasons, AI generates and sends targeted outreach to your contact list. Messages are specific to your vertical and season. Engaged contacts route to booking. Non-responders suppressed for 30 days.",
     funnelStage: "close",
     releasePhase: "v2",
+    marketplaceListing: "available",
     icon: "Sun",
-    stageColor: "amber-100",
-    trigger:
-      "Scheduled campaign trigger based on configured seasonal dates.",
-    output:
-      "Personalized seasonal outreach SMS sent to matching customer segments.",
+    trigger: "Scheduled campaign trigger (date-based or weather-event-based).",
+    output: "Campaign send log, open/reply rates, and bookings in dashboard.",
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [
@@ -351,36 +377,34 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}! Summer is around the corner. Now's the perfect time to get your AC tuned up before the heat hits. Want us to schedule a visit? — {{business_name}}",
+      hvac: "AC tune-up season is here. Last year we found issues in 1 in 3 units we inspected. Book before the heat hits.",
       plumbing:
-        "Hey {{contact_name}}! Winter's coming — time to check your pipes and water heater before the freeze. Want to schedule a quick inspection? — {{business_name}}",
+        "Freeze warnings coming. Get your pipes winterized before the cold hits — takes about an hour.",
       electrical:
-        "Hey {{contact_name}}! Storm season is approaching. Is your home's electrical system ready? We're offering generator and surge protector checks. — {{business_name}}",
+        "Storm season is coming. Now's the time to check your generator and surge protection. We have openings this week.",
       roofing:
-        "Hey {{contact_name}}! Fall is here — time for a roof inspection before the heavy rain and snow. Want to schedule a free check-up? — {{business_name}}",
+        "Major storm came through last night. We're doing free roof inspections this week for [City] homeowners — spots are limited.",
       landscaping:
-        "Hey {{contact_name}}! Spring is here and it's the perfect time to refresh your yard. Want to schedule a spring cleanup? — {{business_name}}",
+        "Time to get your lawn ready. We have early-season openings available — book before they fill up.",
     },
-    estimatedROI: "Fills 20-30% of off-peak schedule gaps",
+    estimatedROI: "Fills schedule during peak demand without manual blasts.",
   },
 
   // ── DELIVER ────────────────────────────────────────────────────────────────
 
   {
     slug: "appointment-reminder",
-    name: "Appointment Reminder",
+    name: "Appointment Reminder & Confirmation",
     description:
-      "Sends automated reminders before scheduled appointments to reduce no-shows.",
+      "Sends reminders 24h and 2h before appointments with one-tap confirm/reschedule.",
     detailedDescription:
-      "Automatically texts customers before their scheduled appointment with a reminder of the date, time, and any prep instructions. Reduces no-shows and last-minute cancellations, keeping your schedule full.",
+      "Reminder SMS sent 24 hours and 2 hours before each appointment. Customer confirms or reschedules with a single tap. Cancellations trigger an automatic re-booking flow offering the next two available slots.",
     funnelStage: "deliver",
     releasePhase: "v1",
+    marketplaceListing: "available",
     icon: "Bell",
-    stageColor: "green-100",
-    trigger:
-      "A scheduled appointment is approaching (configurable hours before).",
-    output:
-      "An SMS reminder is sent to the customer with appointment details.",
+    trigger: "Appointment created or confirmed in system.",
+    output: "Confirmation status per appointment. Cancellations surface as alerts.",
     requiredIntegrations: [],
     optionalIntegrations: ["jobber", "servicetitan"],
     configFields: [
@@ -392,40 +416,39 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
       {
         name: "reminderHoursBefore",
-        label: "Hours Before Appointment",
+        label: "Hours Before Appointment (24 or 2)",
         type: "number",
         required: true,
+        helpText: "Use 24 and 2 with separate activations if needed.",
       },
     ],
     verticalMessages: {
-      hvac: "Reminder: Your HVAC appointment with {{business_name}} is tomorrow at {{appointment_time}}. Please make sure someone 18+ is home and the area around your unit is clear. Reply C to confirm or R to reschedule.",
+      hvac: "Your AC tune-up is tomorrow at 2pm. Our tech will call when they're 30 min away. Reply C to confirm.",
       plumbing:
-        "Reminder: Your plumbing appointment with {{business_name}} is tomorrow at {{appointment_time}}. Please clear the area under sinks if applicable. Reply C to confirm or R to reschedule.",
+        "Reminder: [Tech] from [Business] is scheduled tomorrow at 10am for your plumbing service. Reply C to confirm or R to reschedule.",
       electrical:
-        "Reminder: Your electrical appointment with {{business_name}} is tomorrow at {{appointment_time}}. Please ensure access to the electrical panel. Reply C to confirm or R to reschedule.",
+        "Reminder: [Tech] from [Business] is scheduled tomorrow at 10am for your panel inspection. Reply C to confirm or R to reschedule.",
       roofing:
-        "Reminder: Your roofing appointment with {{business_name}} is tomorrow at {{appointment_time}}. No need to be home — we'll take exterior photos and follow up. Reply C to confirm or R to reschedule.",
+        "Your roof inspection is scheduled for tomorrow at 9am. We'll call 30 min before arrival. Reply C to confirm.",
       landscaping:
-        "Reminder: Your landscaping appointment with {{business_name}} is tomorrow at {{appointment_time}}. Please make sure gates are unlocked. Reply C to confirm or R to reschedule.",
+        "Reminder: [Business] is coming tomorrow at 8am for your lawn service. Reply C to confirm.",
     },
-    estimatedROI: "Reduces no-shows by 30-50%",
+    estimatedROI: "Eliminates most no-shows and auto-recovers cancellations.",
   },
 
   {
     slug: "tech-on-the-way",
-    name: "Tech On-The-Way",
+    name: "Tech On-The-Way Notification",
     description:
-      "Notifies customers when a technician is en route to their location.",
+      "Texts the customer when your tech is dispatched with name and ETA.",
     detailedDescription:
-      "When a technician is dispatched, the system sends a real-time SMS to the customer with the tech's name, ETA, and a photo if available. Reduces 'where's my tech' calls and improves the customer experience.",
+      "When a technician is dispatched, AI texts the customer with the tech's first name and estimated arrival window. If no confirmation that someone is home, a follow-up is sent 30 minutes before arrival.",
     funnelStage: "deliver",
     releasePhase: "v2",
+    marketplaceListing: "available",
     icon: "Truck",
-    stageColor: "green-100",
-    trigger:
-      "A technician is dispatched or an appointment status changes to 'en route'.",
-    output:
-      "An SMS is sent to the customer with technician details and estimated arrival time.",
+    trigger: "Technician dispatched to a job (CRM status change or manual trigger).",
+    output: "Dispatch notification logged. Unconfirmed jobs surface as alerts.",
     requiredIntegrations: [],
     optionalIntegrations: ["jobber", "servicetitan"],
     configFields: [
@@ -443,36 +466,34 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
     ],
     verticalMessages: {
-      hvac: "Good news! Your HVAC technician {{tech_name}} is on the way and should arrive in about {{eta}} minutes. — {{business_name}}",
+      hvac: "Your tech [Name] is heading to you now — ETA about 45 minutes. They'll call when they're close.",
       plumbing:
-        "Good news! Your plumber {{tech_name}} is on the way and should arrive in about {{eta}} minutes. — {{business_name}}",
+        "Hi [Name], [Tech] from [Business] is on his way and should arrive between 1:00-1:30pm. Reply YES if someone will be home.",
       electrical:
-        "Good news! Your electrician {{tech_name}} is on the way and should arrive in about {{eta}} minutes. — {{business_name}}",
+        "[Tech] from [Business] is on the way — should be there in about 30 minutes.",
       roofing:
-        "Good news! Your roofing crew lead {{tech_name}} is on the way and should arrive in about {{eta}} minutes. — {{business_name}}",
+        "Hi [Name], our crew is heading to your property now. ETA 45 minutes. They'll call on arrival.",
       landscaping:
-        "Good news! Your landscaping crew lead {{tech_name}} is on the way and should arrive in about {{eta}} minutes. — {{business_name}}",
+        "[Business] crew is on the way for your lawn service. Should arrive within the hour.",
     },
-    estimatedROI: "Reduces 'where's my tech' calls by 60%",
+    estimatedROI: "Reduces wasted truck rolls from no-one-home scenarios.",
   },
 
   // ── RETAIN ─────────────────────────────────────────────────────────────────
 
   {
     slug: "review-request",
-    name: "Review Request",
+    name: "Review Request Automation",
     description:
-      "Asks happy customers to leave a review after job completion.",
+      "Sends a personalized review request 2-4 hours after job completion.",
     detailedDescription:
-      "After a job is marked complete, the system waits a configurable period then sends a friendly SMS asking the customer to leave a review on your preferred platform. Includes a direct link to make it as easy as possible.",
+      "After a job is marked complete, AI sends a personalized SMS referencing the work done and including a direct Google review link. One follow-up at 48 hours if no action. Negative sentiment in replies is flagged to the owner before it becomes a public review.",
     funnelStage: "retain",
     releasePhase: "v1",
+    marketplaceListing: "available",
     icon: "Star",
-    stageColor: "rose-100",
-    trigger:
-      "A job or appointment is marked as completed in the CRM.",
-    output:
-      "An SMS with a direct review link is sent to the customer after the configured delay.",
+    trigger: "Job marked complete in CRM or manual trigger.",
+    output: "Review request send and response logged. Negative sentiment flagged.",
     requiredIntegrations: [],
     optionalIntegrations: ["google_business"],
     configFields: [
@@ -481,7 +502,11 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
         label: "Review Platform",
         type: "select",
         required: true,
-        options: ["google", "yelp", "facebook"],
+        options: [
+          { value: "google", label: "Google" },
+          { value: "yelp", label: "Yelp" },
+          { value: "facebook", label: "Facebook" },
+        ],
       },
       {
         name: "reviewRequestMessage",
@@ -491,40 +516,39 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
       {
         name: "reviewRequestDelayHours",
-        label: "Hours After Job to Send Request",
+        label: "Hours after job completion to send",
         type: "number",
         required: false,
+        helpText: "Recommended: 2-4 hours after completion.",
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}, thanks for choosing {{business_name}} for your HVAC service! If you had a great experience, we'd really appreciate a quick review: {{review_link}} — it helps other homeowners find us!",
+      hvac: "Hi [Name], hope the AC repair went smoothly today. If you have a minute, we'd love a quick Google review — it means a lot. [Link]",
       plumbing:
-        "Hey {{contact_name}}, thanks for choosing {{business_name}} for your plumbing work! We'd love a quick review if you're happy with the job: {{review_link}}",
+        "Thanks for choosing [Business] for your plumbing work, [Name]. Mind leaving us a quick review? [Link]",
       electrical:
-        "Hey {{contact_name}}, thanks for choosing {{business_name}} for your electrical work! A quick review really helps us out: {{review_link}}",
+        "Hi [Name], hope everything's working great after today's electrical work. A Google review would really help us out! [Link]",
       roofing:
-        "Hey {{contact_name}}, thanks for trusting {{business_name}} with your roof! If you're happy with the work, a quick review would mean a lot: {{review_link}}",
+        "Hi [Name], hope the roof repair went smoothly today. If you have a minute, we'd love a quick Google review. [Link]",
       landscaping:
-        "Hey {{contact_name}}, thanks for choosing {{business_name}} for your landscaping! If you love how things look, we'd appreciate a review: {{review_link}}",
+        "Thanks for having us out today, [Name]. Your lawn is looking great! Mind leaving us a quick review? [Link]",
     },
-    estimatedROI: "Increases reviews by 3-5x",
+    estimatedROI: "Increases Google reviews by 3-5x with no effort.",
   },
 
   {
     slug: "post-job-upsell",
-    name: "Post-Job Upsell",
+    name: "Post-Job Follow-Up & Upsell",
     description:
-      "Suggests related services after completing a job.",
+      "Checks in 5-7 days after a job and introduces a related service.",
     detailedDescription:
-      "After a job is completed, the system identifies related services that the customer might need and sends a personalized recommendation. Drives repeat business and increases average customer lifetime value.",
+      "AI sends a follow-up 5-7 days after job completion. Checks in on the work, offers to answer questions, and introduces a relevant related service. No hard sell — purely informational with a soft CTA.",
     funnelStage: "retain",
     releasePhase: "v2",
+    marketplaceListing: "available",
     icon: "TrendingUp",
-    stageColor: "rose-100",
-    trigger:
-      "A job is completed and the customer has no other open opportunities.",
-    output:
-      "An SMS is sent suggesting related services based on the completed job type.",
+    trigger: "Job completed + review request sent (or 7 days post-job).",
+    output: "Message sent. Replies route to inbox. Bookings attributed.",
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [
@@ -536,40 +560,39 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
       {
         name: "upsellDelayDays",
-        label: "Days After Job to Send",
+        label: "Days after job to send follow-up",
         type: "number",
         required: true,
+        defaultValue: "7",
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}, now that your AC is running great, have you thought about adding a UV air purifier or upgrading your thermostat? We're running a special this month. — {{business_name}}",
+      hvac: "Hope your AC is running great! Most systems over 8 years old benefit from an annual tune-up. We can usually get that done in under an hour. Want us to book one?",
       plumbing:
-        "Hey {{contact_name}}, now that your plumbing issue is fixed, have you thought about a whole-home water filtration system or tankless water heater? — {{business_name}}",
+        "Just checking in — is everything draining well? If it was a recurring issue, a camera inspection can tell us exactly what's going on. About $150 and takes 20 minutes.",
       electrical:
-        "Hey {{contact_name}}, now that your electrical work is done, have you considered a whole-home surge protector or smart panel upgrade? — {{business_name}}",
+        "Hope everything's working well after the repair! If your home is over 20 years old, a full panel inspection is worth doing. Takes about an hour.",
       roofing:
-        "Hey {{contact_name}}, now that your roof is in great shape, have you considered adding gutter guards or attic insulation? — {{business_name}}",
+        "Hope the repair is holding up! If you haven't had a full inspection in a few years, we offer a free one for past customers. Worth doing before winter.",
       landscaping:
-        "Hey {{contact_name}}, now that your yard looks great, have you considered an irrigation system or outdoor lighting? — {{business_name}}",
+        "Hope the yard is looking good! We also offer seasonal fertilization and weed control — keeps things looking great year-round. Want details?",
     },
-    estimatedROI: "Increases repeat revenue by 15-20%",
+    estimatedROI: "Generates 10-15% additional revenue from existing customers.",
   },
 
   {
     slug: "maintenance-plan-enrollment",
     name: "Maintenance Plan Enrollment",
     description:
-      "Encourages customers to sign up for a recurring maintenance plan.",
+      "Offers your maintenance plan to new customers 7 days after their first job.",
     detailedDescription:
-      "After a service is completed, the system sends a message highlighting the benefits of a recurring maintenance plan — priority scheduling, discounts, and system longevity. Drives predictable recurring revenue.",
+      "7 days after a new customer's first job, AI sends a message introducing your maintenance or service plan. Describes what's included, cost, and benefit. Soft opt-in CTA. Interested customers route to booking or payment.",
     funnelStage: "retain",
     releasePhase: "v2",
+    marketplaceListing: "available",
     icon: "Repeat",
-    stageColor: "rose-100",
-    trigger:
-      "A job is completed and the customer is not on a maintenance plan.",
-    output:
-      "An SMS is sent promoting the maintenance plan with a sign-up link.",
+    trigger: "First job completed with a new customer.",
+    output: "Enrollment interest logged. Opt-ins tagged for recurring service.",
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [
@@ -593,17 +616,17 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}, did you know our HVAC maintenance plan includes 2 annual tune-ups, priority scheduling, and 15% off repairs? Plans start at $14.99/mo. Interested? — {{business_name}}",
+      hvac: "A lot of our customers sign up for our annual maintenance plan after their first service. Two visits a year, priority scheduling, and we catch issues before they get expensive. Want details?",
       plumbing:
-        "Hey {{contact_name}}, our plumbing maintenance plan includes an annual inspection, priority service, and 10% off all repairs. Plans start at $9.99/mo. — {{business_name}}",
+        "We offer an annual plumbing check-up plan — includes a full inspection, drain cleaning, and priority service. Saves you money long-term. Interested?",
       electrical:
-        "Hey {{contact_name}}, our electrical maintenance plan includes an annual safety inspection and 15% off future work. Plans start at $9.99/mo. — {{business_name}}",
+        "We offer an annual electrical safety plan — panel inspection, outlet testing, and priority scheduling. Peace of mind for about the cost of a dinner out.",
       roofing:
-        "Hey {{contact_name}}, our roof maintenance plan includes biannual inspections and priority storm damage repair. Plans start at $12.99/mo. — {{business_name}}",
+        "We offer an annual roof maintenance plan — inspections twice a year plus priority scheduling for repairs. Catches small issues before they become big ones.",
       landscaping:
-        "Hey {{contact_name}}, our recurring maintenance plan covers weekly mowing, seasonal cleanup, and priority scheduling. Plans start at $149/mo. — {{business_name}}",
+        "Did you know we offer a full-season lawn care program? Weekly cuts, fertilization, and fall cleanup — all handled. Want me to send you pricing?",
     },
-    estimatedROI: "Converts 10-15% of one-time customers to recurring",
+    estimatedROI: "Recurring maintenance contracts are the highest-margin trades revenue.",
   },
 
   // ── REACTIVATE ─────────────────────────────────────────────────────────────
@@ -612,17 +635,15 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     slug: "customer-reactivation",
     name: "Customer Reactivation",
     description:
-      "Re-engages past customers who haven't booked in a while.",
+      "Re-engages customers who haven't had a job in 90+ days.",
     detailedDescription:
-      "Identifies customers who haven't booked a service in a configurable period and sends a friendly check-in message with an incentive to book again. Reactivates dormant customers and fills quiet periods.",
+      "AI identifies dormant customers (90+ days since last interaction) and sends a warm re-engagement message referencing their last job. One follow-up at 7 days. Then suppressed for 90 days.",
     funnelStage: "reactivate",
     releasePhase: "v2",
+    marketplaceListing: "available",
     icon: "UserPlus",
-    stageColor: "orange-100",
-    trigger:
-      "A customer has had no activity for a configurable number of days (e.g., 90+).",
-    output:
-      "A re-engagement SMS is sent with a personalized offer or check-in.",
+    trigger: "Customer has not had a job or interaction in 90+ days.",
+    output: "Reactivation sends and responses logged. Bookings attributed.",
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [
@@ -634,40 +655,39 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
       {
         name: "inactiveDaysThreshold",
-        label: "Days of Inactivity Before Trigger",
+        label: "Consider dormant after (days)",
         type: "number",
         required: true,
+        defaultValue: "90",
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}, it's been a while! Your HVAC system might be due for a checkup. Book a tune-up this month and get 10% off. — {{business_name}}",
+      hvac: "Hi [Name], it's been a while since we last serviced your system. With summer coming, now's a great time for a tune-up. Want to get on the schedule?",
       plumbing:
-        "Hey {{contact_name}}, it's been a while! Just checking in — if you need any plumbing work, we're offering 10% off for returning customers this month. — {{business_name}}",
+        "Hey [Name] — just reaching out to see if everything is still running smoothly. If you've got anything on your list, we're booking this week.",
       electrical:
-        "Hey {{contact_name}}, it's been a while! If you have any electrical projects on your list, we're offering 10% off for returning customers. — {{business_name}}",
+        "Hi [Name], it's been a while! If you've got any electrical projects on the to-do list, we have openings this month.",
       roofing:
-        "Hey {{contact_name}}, it's been a while! Your roof may be due for an inspection. Book this month and get a free assessment. — {{business_name}}",
+        "Hey [Name] — it's been a while since your last service. We're offering free inspections for past customers this month. Interested?",
       landscaping:
-        "Hey {{contact_name}}, it's been a while! Your yard might need some love. Book this month and get 10% off any service. — {{business_name}}",
+        "Hi [Name], spring is here! Ready to get your lawn looking great again? We're booking early-season slots now.",
     },
-    estimatedROI: "Reactivates 10-20% of dormant customers",
+    estimatedROI: "Turns dormant contact lists into an ongoing revenue source.",
   },
 
   {
     slug: "unsold-estimate-reactivation",
     name: "Unsold Estimate Reactivation",
     description:
-      "Follows up on old estimates that were never closed.",
+      "Re-engages prospects with estimates older than 14 days that never converted.",
     detailedDescription:
-      "Identifies estimates and proposals that were sent but never accepted, then sends a follow-up message checking if the customer is still interested. Often recovers revenue that would otherwise be lost.",
+      "AI identifies stalled estimates (14+ days, no booking, no explicit decline) and sends a re-engagement message referencing the original quote. Offers to update if needed. One follow-up at 7 days, then archived.",
     funnelStage: "reactivate",
     releasePhase: "v3",
+    marketplaceListing: "available",
     icon: "RefreshCw",
-    stageColor: "orange-100",
-    trigger:
-      "An opportunity has been in 'estimate sent' stage for a configurable number of days without a response.",
-    output:
-      "A follow-up SMS is sent asking if the customer is still interested in the quoted work.",
+    trigger: "Estimate sent 14+ days ago with no booking and no explicit decline.",
+    output: "Reopened jobs tracked. Revenue recovered from cold quotes attributed.",
     requiredIntegrations: [],
     optionalIntegrations: ["jobber", "servicetitan"],
     configFields: [
@@ -679,40 +699,39 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       },
       {
         name: "staleDaysThreshold",
-        label: "Days Before Estimate Is Considered Stale",
+        label: "Reactivate estimates older than (days)",
         type: "number",
         required: true,
+        defaultValue: "14",
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}, we sent you an estimate for HVAC work a while back. Still interested? We'd love to get you on the schedule — and we might be able to work on the price. — {{business_name}}",
+      hvac: "Hi [Name], I know it's been a few weeks since we sent that estimate. If your timeline has changed or you have questions, happy to revisit. Still interested?",
       plumbing:
-        "Hey {{contact_name}}, we sent you a plumbing estimate a while back. Still thinking about it? Let us know — we'd love to help. — {{business_name}}",
+        "Hey [Name] — following up on that plumbing estimate from a couple weeks back. Pricing is still valid. Want to move forward?",
       electrical:
-        "Hey {{contact_name}}, we sent you an electrical estimate a while back. Still interested? Let us know and we'll get you on the calendar. — {{business_name}}",
+        "Hi [Name], following up on that estimate for the panel upgrade. If your timeline has changed, happy to revisit. Still interested?",
       roofing:
-        "Hey {{contact_name}}, you got a roofing estimate from us a while back. Still considering the project? We'd love to chat. — {{business_name}}",
+        "Hey [Name] — following up on that roof estimate from a couple weeks back. Pricing is still valid and we have some openings. Want to move forward?",
       landscaping:
-        "Hey {{contact_name}}, you got a landscaping estimate from us a while back. Still interested? Spring's a great time to get started. — {{business_name}}",
+        "Hi [Name] — just circling back on that landscaping estimate. Spring slots are filling up. Want to lock it in?",
     },
-    estimatedROI: "Recovers 10-15% of stale estimates",
+    estimatedROI: "Recovers 10-20% of stale estimates with zero effort.",
   },
 
   {
     slug: "weather-event-outreach",
     name: "Weather Event Outreach",
     description:
-      "Proactively reaches out to customers after severe weather events.",
+      "Auto-sends targeted campaigns within hours of severe weather in your area.",
     detailedDescription:
-      "After a major weather event (storm, freeze, heat wave), the system sends targeted outreach to customers in affected areas offering inspections and repairs. Positions your business as proactive and captures demand spikes.",
+      "Within hours of a qualifying weather event (heat wave, freeze, major storm), AI generates and sends a targeted campaign to the relevant customer segment. Contacts who engage route to a booking sequence.",
     funnelStage: "reactivate",
     releasePhase: "v3",
+    marketplaceListing: "available",
     icon: "CloudLightning",
-    stageColor: "orange-100",
-    trigger:
-      "A weather event alert is triggered for the service area (manual or API-driven).",
-    output:
-      "A targeted SMS is sent to customers in the affected area offering post-storm services.",
+    trigger: "Severe weather event detected in customer service area.",
+    output: "Campaign volume and engagement logged. Bookings attributed.",
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [
@@ -727,21 +746,27 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
         label: "Weather Event Type",
         type: "select",
         required: true,
-        options: ["storm", "freeze", "heat_wave", "flooding", "hail"],
+        options: [
+          { value: "storm", label: "Storm" },
+          { value: "freeze", label: "Freeze" },
+          { value: "heat_wave", label: "Heat Wave" },
+          { value: "flooding", label: "Flooding" },
+          { value: "hail", label: "Hail" },
+        ],
       },
     ],
     verticalMessages: {
-      hvac: "Hey {{contact_name}}, after the recent {{weather_event}}, your HVAC system may need attention. We're offering free post-storm inspections this week. Want us to come take a look? — {{business_name}}",
+      hvac: "Temps hitting [X]° this week in [City]. If your AC hasn't been serviced this year, now's the time. We're booking same-week appointments.",
       plumbing:
-        "Hey {{contact_name}}, after the recent {{weather_event}}, frozen or burst pipes can be a real risk. Need a plumbing inspection? We're prioritizing existing customers. — {{business_name}}",
+        "Freeze warning for [City] tonight. If your irrigation isn't winterized yet, call us today — we have same-day availability.",
       electrical:
-        "Hey {{contact_name}}, after the recent {{weather_event}}, power surges may have damaged appliances or wiring. We're offering free electrical safety checks. — {{business_name}}",
+        "Power outages reported in [City]. If you need generator service or have storm damage to your electrical, we're available today.",
       roofing:
-        "Hey {{contact_name}}, after the recent {{weather_event}}, your roof may have sustained damage. We're offering free storm damage inspections — want us to come take a look? — {{business_name}}",
+        "Big storm last night. We're doing complimentary post-storm inspections this week for [City] homeowners. Grab a slot before they fill up.",
       landscaping:
-        "Hey {{contact_name}}, after the recent {{weather_event}}, your yard may need some cleanup. We're offering storm cleanup services — want us to come by? — {{business_name}}",
+        "Freeze warning for [City] tonight. If your irrigation isn't winterized yet, call us today — we have same-day availability.",
     },
-    estimatedROI: "Captures 40-60% of post-storm demand",
+    estimatedROI: "Captures urgent demand before competitors react.",
   },
 ];
 

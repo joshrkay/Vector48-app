@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const system = buildEstimateAuditSystemPrompt(vertical);
+  const system = buildEstimateAuditSystemPrompt(vertical, jobType);
   const userContent = `Job type (free text from the owner): ${jobType}
 
 Estimate text to analyze:
@@ -112,19 +112,14 @@ ${trimmed}
     );
   }
 
-  const suggestionsPayload = auditResult.suggestions.map((s) => ({
-    item: s.item,
-    reason: s.reason,
-    estimatedValue: s.estimatedValue,
-  }));
-
   const { data: inserted, error: insertError } = await supabase
     .from("estimate_audit_log")
     .insert({
       account_id: account.id,
       vertical,
       job_type: jobType,
-      suggestions: suggestionsPayload,
+      suggestions: auditResult.suggestions,
+      audit_summary: auditResult.summary,
       total_estimated_value_cents: Math.round(auditResult.totalPotentialValue * 100),
     })
     .select("id")
@@ -141,6 +136,7 @@ ${trimmed}
   return NextResponse.json({
     auditLogId: inserted.id,
     suggestions: auditResult.suggestions,
+    summary: auditResult.summary,
     totalPotentialValue: auditResult.totalPotentialValue,
   });
 }

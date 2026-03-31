@@ -1,0 +1,207 @@
+.root {
+  box-sizing: border-box;
+  font-family: var(--font-dm-sans), system-ui, -apple-system, sans-serif;
+  background: #0f1e35;
+  color: #e2e8f0;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+.root * {
+  box-sizing: border-box;
+}
+
+.container {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.title {
+  font-family: var(--font-syne), system-ui, sans-serif;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  margin-bottom: 2rem;
+}
+
+.phase {
+  margin-bottom: 2.5rem;
+}
+
+.phaseHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.phaseNum {
+  background: #00b4a6;
+  color: #0f1e35;
+  font-size: 0.7rem;
+  font-weight: 700;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.phaseTitle {
+  font-family: var(--font-syne), system-ui, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.phaseTime {
+  color: #00b4a6;
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+.taskList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.taskItem {
+  background: #1a2a42;
+  border: 1px solid #2a3a52;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.check {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #475569;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
+  padding: 0;
+}
+
+.check:hover {
+  border-color: #00b4a6;
+}
+
+.taskItemDone .check {
+  background: #00b4a6;
+  border-color: #00b4a6;
+}
+
+.checkMark {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #0f1e35;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.taskItemDone .checkMark {
+  display: flex;
+}
+
+.taskText {
+  flex: 1;
+}
+
+.taskItemDone .taskText {
+  text-decoration: line-through;
+  color: #64748b;
+}
+
+.boldLead {
+  font-weight: 700;
+  color: inherit;
+}
+
+.taskItemDone .boldLead {
+  color: #64748b;
+}
+
+.dep {
+  display: inline-block;
+  background: #2a3a52;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+.envTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.82rem;
+}
+
+.envTable th {
+  background: #0f1e35;
+  color: #00b4a6;
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid #2a3a52;
+}
+
+.envTable td {
+  background: #1a2a42;
+  color: #cbd5e1;
+  padding: 8px 12px;
+  border: 1px solid #2a3a52;
+}
+
+.envVar {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: #00b4a6;
+}
+
+.summary {
+  background: #1a2a42;
+  border: 1px solid #00b4a6;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 2rem;
+}
+
+.summaryTitle {
+  font-family: var(--font-syne), system-ui, sans-serif;
+  color: #00b4a6;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.summaryP {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.summaryPSpaced {
+  margin-top: 0.5rem;
+}

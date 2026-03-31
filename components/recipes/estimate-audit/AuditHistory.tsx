@@ -11,6 +11,7 @@ interface Row {
   id: string;
   created_at: string;
   job_type: string;
+  audit_summary: string | null;
   suggestions: unknown;
   accepted_suggestions: unknown;
   total_estimated_value_cents: number;
@@ -28,7 +29,7 @@ export function AuditHistory() {
     const { data, error: qErr } = await supabase
       .from("estimate_audit_log")
       .select(
-        "id, created_at, job_type, suggestions, accepted_suggestions, total_estimated_value_cents",
+        "id, created_at, job_type, audit_summary, suggestions, accepted_suggestions, total_estimated_value_cents",
       )
       .order("created_at", { ascending: false })
       .limit(50);
@@ -108,6 +109,11 @@ export function AuditHistory() {
                     {" "}
                     · {dateFmt.format(new Date(r.created_at))}
                   </span>
+                  {r.audit_summary ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {r.audit_summary}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="text-muted-foreground">
                   {suggestionCount} suggestions

@@ -30,16 +30,10 @@ export async function POST(req: Request) {
 
   const { auditLogId, acceptedSuggestions } = parsed.data;
 
-  const payload = acceptedSuggestions.map((s) => ({
-    item: s.item,
-    reason: s.reason,
-    estimatedValue: s.estimatedValue,
-  }));
-
   const { data: updated, error } = await supabase
     .from("estimate_audit_log")
     .update({
-      accepted_suggestions: payload,
+      accepted_suggestions: acceptedSuggestions,
     })
     .eq("id", auditLogId)
     .eq("account_id", account.id)
