@@ -19,6 +19,9 @@ const signupSchema = z.object({
 
 type SignupValues = z.infer<typeof signupSchema>;
 
+const TRIAL_DAYS = 7;
+const MS_PER_DAY = 86_400_000;
+
 export default function SignupPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -59,16 +62,36 @@ export default function SignupPage() {
       .insert({
         owner_user_id: user.id,
         business_name: data.businessName,
+        vertical: "hvac", // placeholder — overwritten during onboarding
+        trial_ends_at: new Date(Date.now() + TRIAL_DAYS * MS_PER_DAY).toISOString(),
+        plan_slug: "trial",
+        provisioning_status: "pending",
       })
       .select("id")
       .single();
 
     if (accountError) {
-      setServerError(accountError.message);
+      console.error("Account creation failed:", accountError.message);
+      setServerError("An unexpected error occurred while creating your account. Please try again.");
       return;
     }
 
-    // 3. Redirect to onboarding
+    // 3. Create account_users join row
+    const { error: membershipError } = await supabase
+      .from("account_users")
+      .insert({
+        account_id: account.id,
+        user_id: user.id,
+        role: "admin",
+      });
+
+    if (membershipError) {
+      console.error("Membership creation failed:", membershipError.message);
+      setServerError("An unexpected error occurred while creating your account. Please try again.");
+      return;
+    }
+
+    // 4. Redirect to onboarding
     router.push("/onboarding");
   }
 
@@ -90,7 +113,7 @@ export default function SignupPage() {
             {...register("businessName")}
           />
           {errors.businessName && (
-            <p className="text-[13px] text-[#EF4444]">{errors.businessName.message}</p>
+            <p className="text-[13px] text-destructive">{errors.businessName.message}</p>
           )}
         </div>
 
@@ -104,7 +127,7 @@ export default function SignupPage() {
             {...register("email")}
           />
           {errors.email && (
-            <p className="text-[13px] text-[#EF4444]">{errors.email.message}</p>
+            <p className="text-[13px] text-destructive">{errors.email.message}</p>
           )}
         </div>
 
@@ -129,13 +152,13 @@ export default function SignupPage() {
             </button>
           </div>
           {errors.password && (
-            <p className="text-[13px] text-[#EF4444]">{errors.password.message}</p>
+            <p className="text-[13px] text-destructive">{errors.password.message}</p>
           )}
         </div>
 
         {/* Server error */}
         {serverError && (
-          <p className="text-[13px] text-[#EF4444]">{serverError}</p>
+          <p className="text-[13px] text-destructive">{serverError}</p>
         )}
 
         {/* Submit */}
