@@ -221,3 +221,9 @@
 [Tue Mar 31 09:24:48 MST 2026] Changes detected:
  M watch-push.log
 [Tue Mar 31 09:25:09 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...
+[Tue Mar 31 09:25:28 MST 2026] Pushed OK
+[Tue Mar 31 09:26:14 MST 2026] Changes detected:
+ M lib/supabase/types.ts
+ M watch-push.log
+?? supabase/migrations/003_settings_accounts_integrations.sql
+[Tue Mar 31 09:26:34 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...

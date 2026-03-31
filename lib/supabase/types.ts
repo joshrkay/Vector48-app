@@ -44,7 +44,14 @@ export type Database = {
           address_city: string | null;
           address_state: string | null;
           address_zip: string | null;
-          vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
+          vertical:
+            | "hvac"
+            | "plumbing"
+            | "electrical"
+            | "roofing"
+            | "landscaping"
+            | "other"
+            | null;
           business_hours: Record<string, unknown>;
           ghl_location_id: string | null;
           ghl_token_encrypted: string | null;
@@ -52,6 +59,8 @@ export type Database = {
           ghl_provisioning_error: string | null;
           ghl_health_status: string;
           ghl_last_health_check: string | null;
+          ghl_last_synced_at: string | null;
+          ghl_voice_agent_id: string | null;
           elevenlabs_voice_id: string | null;
           voice_gender: "male" | "female" | null;
           greeting_text: string | null;
@@ -59,7 +68,12 @@ export type Database = {
           greeting_audio_url: string | null;
           notification_contact_name: string | null;
           notification_contact_phone: string | null;
+          notification_email: string | null;
+          notifications_enabled: boolean;
+          quiet_hours_start: string | null;
+          quiet_hours_end: string | null;
           notification_preferences: Record<string, unknown>;
+          timezone: string;
           onboarding_step: number;
           onboarding_completed_at: string | null;
           activate_recipe_1: boolean;
@@ -80,7 +94,14 @@ export type Database = {
           address_city?: string | null;
           address_state?: string | null;
           address_zip?: string | null;
-          vertical?: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
+          vertical?:
+            | "hvac"
+            | "plumbing"
+            | "electrical"
+            | "roofing"
+            | "landscaping"
+            | "other"
+            | null;
           business_hours?: Record<string, unknown>;
           ghl_location_id?: string | null;
           ghl_token_encrypted?: string | null;
@@ -88,6 +109,8 @@ export type Database = {
           ghl_provisioning_error?: string | null;
           ghl_health_status?: string;
           ghl_last_health_check?: string | null;
+          ghl_last_synced_at?: string | null;
+          ghl_voice_agent_id?: string | null;
           elevenlabs_voice_id?: string | null;
           voice_gender?: "male" | "female" | null;
           greeting_text?: string | null;
@@ -95,7 +118,12 @@ export type Database = {
           greeting_audio_url?: string | null;
           notification_contact_name?: string | null;
           notification_contact_phone?: string | null;
+          notification_email?: string | null;
+          notifications_enabled?: boolean;
+          quiet_hours_start?: string | null;
+          quiet_hours_end?: string | null;
           notification_preferences?: Record<string, unknown>;
+          timezone?: string;
           onboarding_step?: number;
           onboarding_completed_at?: string | null;
           activate_recipe_1?: boolean;
@@ -188,24 +216,26 @@ export type Database = {
         Row: {
           id: string;
           account_id: string;
-          provider: "jobber" | "servicetitan" | "google_business";
+          provider: "jobber" | "servicetitan" | "google_business" | "ghl";
           status: "connected" | "disconnected" | "error";
           credentials_encrypted: Record<string, unknown> | null;
           metadata: Record<string, unknown>;
           connected_at: string | null;
           disconnected_at: string | null;
           error_message: string | null;
+          updated_at: string;
         };
         Insert: {
           id?: string;
           account_id: string;
-          provider: "jobber" | "servicetitan" | "google_business";
+          provider: "jobber" | "servicetitan" | "google_business" | "ghl";
           status?: "connected" | "disconnected" | "error";
           credentials_encrypted?: Record<string, unknown> | null;
           metadata?: Record<string, unknown>;
           connected_at?: string | null;
           disconnected_at?: string | null;
           error_message?: string | null;
+          updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["integrations"]["Insert"]>;
       };
@@ -215,7 +245,14 @@ export type Database = {
           account_id: string;
           contact_id: string | null;
           job_type: string | null;
-          vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
+          vertical:
+            | "hvac"
+            | "plumbing"
+            | "electrical"
+            | "roofing"
+            | "landscaping"
+            | "other"
+            | null;
           original_estimate_text: string | null;
           suggestions: unknown[];
           accepted_suggestions: unknown[];
@@ -228,7 +265,14 @@ export type Database = {
           account_id: string;
           contact_id?: string | null;
           job_type?: string | null;
-          vertical?: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
+          vertical?:
+            | "hvac"
+            | "plumbing"
+            | "electrical"
+            | "roofing"
+            | "landscaping"
+            | "other"
+            | null;
           original_estimate_text?: string | null;
           suggestions?: unknown[];
           accepted_suggestions?: unknown[];
@@ -240,10 +284,16 @@ export type Database = {
       };
     };
     Enums: {
-      vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";
+      vertical:
+        | "hvac"
+        | "plumbing"
+        | "electrical"
+        | "roofing"
+        | "landscaping"
+        | "other";
       account_role: "admin" | "viewer";
       recipe_status: "active" | "paused" | "error" | "deactivated";
-      integration_provider: "jobber" | "servicetitan" | "google_business";
+      integration_provider: "jobber" | "servicetitan" | "google_business" | "ghl";
       integration_status: "connected" | "disconnected" | "error";
       provisioning_status: "pending" | "in_progress" | "complete" | "failed";
       subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
