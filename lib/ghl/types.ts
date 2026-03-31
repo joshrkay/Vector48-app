@@ -282,10 +282,6 @@ export interface GHLConversationsListResponse {
   conversations: GHLConversation[];
 }
 
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-}
-
 // ── Opportunities / Pipeline ────────────────────────────────────────────────
 
 export type GHLOpportunityStatus = "open" | "won" | "lost" | "abandoned";
@@ -577,6 +573,11 @@ export interface GHLWebhook {
 }
 
 export interface GHLCreateWebhookPayload {
+  url: string;
+  events: GHLWebhookEvent[];
+  locationId?: string;
+}
+
 export interface GHLWebhookResponse {
   webhook: GHLWebhook;
 }
@@ -599,27 +600,4 @@ export interface GHLTokenExchangeResponse {
 export interface GHLWebhooksListResponse {
   webhooks: GHLWebhook[];
 }
-
-// ── Error ──────────────────────────────────────────────────────────────────
-
-export interface GHLCampaign {
-  id: string;
-  name: string;
-  locationId: string;
-  url: string;
-  events: string[];
-  secret?: string;
-}
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  nextPage: boolean;
-  lastMessageId?: string;
-}
-
-export interface GHLWebhooksListResponse {
-  webhooks: GHLWebhook[];
-}
-
-// ── (duplicate declarations removed — end of file) ─────────────────────────
 

@@ -361,17 +361,6 @@ export class GHLClient {
       return this.get<{ notes: GHLNote[] }>(`/contacts/${contactId}/notes`);
     },
 
-  delete(contactId: string) {
-    return this.client._delete(`/contacts/${contactId}`);
-  }
-
-  /** GHL contacts search uses POST, not GET. */
-  search(params: GHLContactsSearchParams) {
-    return this.client._post<GHLPaginatedResponse<GHLContact>>(
-      "/contacts/search",
-      params,
-    );
-  }
     getCustomFields: (contactId: string) => {
       return this.get<{ customFields: GHLCustomFieldValue[] }>(
         `/contacts/${contactId}/customFields`,
@@ -381,19 +370,6 @@ export class GHLClient {
 
   // ── Conversations ───────────────────────────────────────────────────────
 
-  removeTag(contactId: string, tags: string[]) {
-    return this.client._request<{ contact: GHLContact }>(
-      "DELETE",
-      `/contacts/${contactId}/tags`,
-      { body: { tags } },
-    );
-  }
-
-  getNotes(contactId: string) {
-    return this.client._get<{ notes: GHLNote[] }>(
-      `/contacts/${contactId}/notes`,
-    );
-  }
   readonly conversations = {
     list: (params?: GHLConversationsListParams) => {
       const { locationId, ...rest } = params ?? {};
@@ -484,31 +460,6 @@ export class GHLClient {
       );
     },
 
-  update(opportunityId: string, data: Partial<GHLCreateOpportunityPayload>) {
-    return this.client._put<{ opportunity: GHLOpportunity }>(
-      `/opportunities/${opportunityId}`,
-      data,
-    );
-  }
-
-  updateStage(opportunityId: string, pipelineStageId: string) {
-    return this.client._put<{ opportunity: GHLOpportunity }>(
-      `/opportunities/${opportunityId}`,
-      { pipelineStageId },
-    );
-  }
-
-  updateStatus(opportunityId: string, status: GHLOpportunityStatus) {
-    return this.client._put<{ opportunity: GHLOpportunity }>(
-      `/opportunities/${opportunityId}/status`,
-      { status },
-    );
-  }
-
-  delete(opportunityId: string) {
-    return this.client._delete(`/opportunities/${opportunityId}`);
-  }
-}
     update: (eventId: string, data: GHLUpdateAppointmentPayload) => {
       return this.put<{ event: GHLAppointment }>(
         `/calendars/events/${eventId}`,
@@ -547,19 +498,6 @@ export class GHLClient {
     },
   };
 
-  get(eventId: string) {
-    return this.client._get<{ event: GHLAppointment }>(
-      `/calendars/events/${eventId}`,
-    );
-  }
-
-  create(data: GHLCreateAppointmentPayload) {
-    return this.client._post<{ event: GHLAppointment }>(
-      "/calendars/events",
-      data,
-    );
-  }
-
   readonly customFields = {
     list: (locationId?: string) => {
       const locId = locationId ?? this.locationId;
@@ -571,17 +509,6 @@ export class GHLClient {
 
   // ── Locations (agency-level only) ───────────────────────────────────────
 
-  cancel(eventId: string) {
-    return this.client._put<{ event: GHLAppointment }>(
-      `/calendars/events/${eventId}`,
-      { status: "cancelled" },
-    );
-  }
-
-  delete(eventId: string) {
-    return this.client._delete(`/calendars/events/${eventId}`);
-  }
-}
   readonly locations = {
     create: (data: GHLCreateLocationPayload) => {
       return this.post<GHLLocationResponse>("/locations/", data);
@@ -613,24 +540,6 @@ export class GHLClient {
       return this.post<GHLWebhookResponse>("/webhooks/", data);
     },
 
-  list() {
-    return this.client._get<{ calendars: GHLCalendar[] }>("/calendars/");
-  }
-
-  get(calendarId: string) {
-    return this.client._get<{ calendar: GHLCalendar }>(
-      `/calendars/${calendarId}`,
-    );
-  }
-
-  getSlots(params: GHLCalendarSlotsParams) {
-    const { calendarId, ...rest } = params;
-    return this.client._get<{ slots: Record<string, GHLCalendarSlot[]> }>(
-      `/calendars/${calendarId}/free-slots`,
-      spreadParams(rest as Record<string, unknown>),
-    );
-  }
-}
     delete: (webhookId: string) => {
       return this.delete(`/webhooks/${webhookId}`);
     },
