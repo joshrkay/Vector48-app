@@ -21,6 +21,7 @@ export function DashboardHeader({
 }: DashboardHeaderProps) {
   const [greeting, setGreeting] = useState<string | null>(null);
 
+  // Empty deps: one interval + listeners per mount; greeting updates via refresh().
   useEffect(() => {
     const refresh = () => {
       setGreeting(greetingForHour(new Date().getHours()));
@@ -35,10 +36,12 @@ export function DashboardHeader({
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", refresh);
 
     return () => {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", refresh);
     };
   }, []);
 
