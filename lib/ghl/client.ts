@@ -611,73 +611,19 @@ export class GHLClient {
 }
 
 // ── Function-style wrappers ──────────────────────────────────────────────────
-// Legacy service files (contacts.ts, calendars.ts, etc.) import these helpers.
+// Resource modules (calendars.ts, contacts.ts, …) import these helpers.
 // They create a one-shot GHLClient from the options and delegate.
 
-function clientFromOpts(opts?: GHLClientOptions): GHLClient {
-  if (opts?.locationId) {
-    const token =
-      opts.apiKey ?? process.env.GHL_AGENCY_API_KEY ?? "";
-    return GHLClient.forLocation(opts.locationId, token);
-  }
-  return GHLClient.forAgency(opts?.apiKey);
-}
-
-export async function ghlGet<T>(
-  path: string,
-  opts?: GHLClientOptions,
-): Promise<T> {
-  const client = clientFromOpts(opts);
-  // Use the class's private request via a thin cast so we can call the
-  // internal method without duplicating fetch logic.
-  return (client as unknown as { request: (m: string, p: string, o?: { params?: Record<string, string | number | boolean | undefined> }) => Promise<T> })
-    .request("GET", path, { params: opts?.params });
-}
-
-export async function ghlPost<T>(
-  path: string,
-  body: unknown,
-  opts?: GHLClientOptions,
-): Promise<T> {
-  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
-    .request("POST", path, { body });
-}
-
-export async function ghlPut<T>(
-  path: string,
-  body: unknown,
-  opts?: GHLClientOptions,
-): Promise<T> {
-  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
-    .request("PUT", path, { body });
-}
-
-export async function ghlDelete<T = void>(
-  path: string,
-  opts?: GHLClientOptions,
-): Promise<T> {
-  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string) => Promise<T> })
-    .request("DELETE", path);
-}
-
-// ── Functional API for resource modules (calendars.ts, contacts.ts, …) ───
-
-export interface GHLClientOptions {
-  /** Required for real API calls; optional in spread types until callers merge opts. */
-  token?: string;
-  locationId?: string;
-  params?: Record<string, string | number | boolean | undefined>;
-}
-
 function clientFromOpts(opts: GHLClientOptions | undefined): GHLClient {
-  if (!opts?.token) {
-    throw new Error("GHL token is required");
+  const apiKey = opts?.apiKey ?? process.env.GHL_AGENCY_API_KEY;
+  if (!apiKey) {
+    throw new Error("GHL apiKey is required (or set GHL_AGENCY_API_KEY)");
   }
-  const loc = opts.locationId;
+  const loc = opts?.locationId;
   if (!loc) {
     throw new Error("GHL locationId is required");
   }
-  return GHLClient.forLocation(loc, opts.token);
+  return GHLClient.forLocation(loc, apiKey);
 }
 
 export function ghlGet<T>(path: string, opts?: GHLClientOptions): Promise<T> {
