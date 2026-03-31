@@ -52,7 +52,7 @@ Deno.serve(async (req: Request) => {
     const { data: account, error: accountError } = await supabase
       .from("accounts")
       .select("id")
-      .eq("ghl_sub_account_id", locationId)
+      .eq("ghl_location_id", locationId)
       .single();
 
     if (accountError || !account) {

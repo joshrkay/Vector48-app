@@ -95,6 +95,16 @@ export interface GHLContactsListParams extends GHLListParams {
   sortOrder?: "asc" | "desc";
 }
 
+/** GHL v2 contacts list response */
+export interface GHLContactsListResponse {
+  contacts: GHLContact[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLContactResponse {
+  contact: GHLContact;
+}
+
 export interface GHLContactsSearchParams {
   locationId: string;
   query: string;
@@ -180,6 +190,11 @@ export interface GHLConversationsListParams extends GHLListParams {
   sortBy?: "last_message_date" | "date_added";
 }
 
+export interface GHLConversationsListResponse {
+  conversations: GHLConversation[];
+  meta?: GHLPaginationMeta;
+}
+
 export interface GHLMessage {
   id: string;
   conversationId: string;
@@ -254,6 +269,15 @@ export interface GHLOpportunitiesListParams extends GHLListParams {
   query?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+}
+
+export interface GHLOpportunitiesListResponse {
+  opportunities: GHLOpportunity[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLOpportunityResponse {
+  opportunity: GHLOpportunity;
 }
 
 export interface GHLCreateOpportunityPayload {
@@ -557,3 +581,4 @@ export interface GHLLocationResponse {
 }
 
 // ── (duplicate declarations removed — end of file) ─────────────────────────
+

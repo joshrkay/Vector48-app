@@ -32,35 +32,34 @@ export default async function OnboardingPage() {
   }
 
   // If no account exists yet, create one with minimal data
+  // The trg_accounts_create_owner trigger auto-creates the account_users row
   if (!account) {
     const { data: newAccount } = await supabase
       .from("accounts")
       .insert({
         owner_user_id: user.id,
         business_name: "",
-        vertical: "hvac", // default, will be changed in wizard
       })
       .select()
       .single();
 
-    if (newAccount) {
-      await supabase.from("account_users").insert({
-        account_id: newAccount.id,
-        user_id: user.id,
-        role: "admin",
-      });
-      account = newAccount;
-    }
+    account = newAccount;
   }
 
   // If onboarding already done, go to dashboard
-  if (account?.onboarding_done_at) {
+  if (account?.onboarding_completed_at) {
     redirect("/dashboard");
   }
 
   if (!account) {
     redirect("/login");
   }
+
+  const prefs =
+    account.notification_preferences &&
+    typeof account.notification_preferences === "object"
+      ? (account.notification_preferences as Record<string, unknown>)
+      : {};
 
   return (
     <WizardShell
@@ -69,17 +68,16 @@ export default async function OnboardingPage() {
         businessName: account.business_name || "",
         vertical: account.vertical || "",
         phone: account.phone || "",
-        serviceArea: account.service_area || "",
         businessHours: account.business_hours
           ? {
               preset: (account.business_hours as Record<string, string>).preset as "weekday_8_5" | "weekday_7_6" | "all_week" | "custom" || "weekday_8_5",
             }
           : { preset: "weekday_8_5" as const },
         voiceGender: (account.voice_gender as "male" | "female") || "male",
-        voiceGreeting: account.voice_greeting || "",
-        notificationSms: account.notification_sms ?? true,
-        notificationEmail: account.notification_email ?? false,
-        notificationContact: account.notification_contact || "",
+        greetingText: account.greeting_text || "",
+        notificationContactName: account.notification_contact_name || "",
+        notificationContactPhone: account.notification_contact_phone || "",
+        notificationPreferences: prefs,
         activateRecipe1: true,
         currentStep: account.onboarding_step || 0,
       }}

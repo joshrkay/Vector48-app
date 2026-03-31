@@ -4,7 +4,7 @@
 // Server-only.
 // ---------------------------------------------------------------------------
 
-import { createAdminClient } from "../supabase/admin";
+import { getSupabaseAdmin } from "../supabase/admin";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ export async function getTierConfig(accountId: string): Promise<TierConfig> {
 // ── Internal ──────────────────────────────────────────────────────────────
 
 async function loadTierConfig(accountId: string): Promise<TierConfig> {
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdmin();
 
   // Step 1: Get the account's plan_slug
   const { data: account, error: accountError } = await supabase
@@ -84,7 +84,7 @@ async function loadTierConfig(accountId: string): Promise<TierConfig> {
   // Step 2: Get the pricing config for that plan
   const { data: pricing, error: pricingError } = await supabase
     .from("pricing_config")
-    .select("ghl_cache_ttl_secs, webhooks_enabled, rate_limit_priority, max_active_recipes")
+    .select("ghl_cache_ttl_seconds, webhooks_enabled, rate_limit_priority, max_active_recipes")
     .eq("plan_slug", account.plan_slug)
     .single();
 
@@ -97,7 +97,7 @@ async function loadTierConfig(accountId: string): Promise<TierConfig> {
   }
 
   return {
-    cacheTTL: pricing.ghl_cache_ttl_secs,
+    cacheTTL: pricing.ghl_cache_ttl_seconds,
     webhooksEnabled: pricing.webhooks_enabled,
     rateLimitBudget: RATE_LIMIT_BUDGETS[pricing.rate_limit_priority] ?? 60,
     maxActiveRecipes: pricing.max_active_recipes,

@@ -58,13 +58,12 @@ export async function POST(req: Request) {
   }
 
   // 4. Look up account by GHL location ID
-  // Use .limit(1) instead of .single() to avoid errors when multiple rows
-  // match (e.g., same ID in ghl_location_id and ghl_sub_account_id columns)
+  // Use .limit(1) instead of .single() to avoid errors when no rows match
   const supabase = getSupabaseAdmin();
   const { data: accounts } = await supabase
     .from("accounts")
     .select("id")
-    .or(`ghl_location_id.eq."${locationId}",ghl_sub_account_id.eq."${locationId}"`)
+    .eq("ghl_location_id", locationId)
     .limit(1);
 
   const account = accounts?.[0] ?? null;
@@ -83,9 +82,9 @@ export async function POST(req: Request) {
     account_id: account.id,
   };
 
-  // 6. Insert into event_log with idempotency
+  // 6. Insert into automation_events with idempotency
   const { error: insertError } = await supabase
-    .from("event_log")
+    .from("automation_events")
     .insert(eventRow);
 
   if (insertError) {

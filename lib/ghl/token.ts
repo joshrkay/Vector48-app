@@ -138,3 +138,34 @@ export async function getGHLClient(accountId: string): Promise<{
 }> {
   return getAccountGhlCredentials(accountId);
 }
+
+/**
+ * Decrypted GHL access token and location id for server-side integrations (e.g. n8n credentials).
+ * Does not log token material.
+ */
+export async function getAccountGhlCredentials(accountId: string): Promise<{
+  locationId: string;
+  accessToken: string;
+}> {
+  const supabase = getAdminClient();
+
+  const { data: account, error } = await supabase
+    .from("accounts")
+    .select("ghl_location_id, ghl_token_encrypted")
+    .eq("id", accountId)
+    .single();
+
+  if (error || !account) {
+    throw new Error(`Account not found: ${accountId}`);
+  }
+
+  if (!account.ghl_token_encrypted || !account.ghl_location_id) {
+    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
+  }
+
+  const accessToken = decryptToken(account.ghl_token_encrypted);
+  return {
+    locationId: account.ghl_location_id,
+    accessToken,
+  };
+}

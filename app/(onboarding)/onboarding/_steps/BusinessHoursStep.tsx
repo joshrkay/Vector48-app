@@ -7,36 +7,13 @@ import {
   businessHoursSchema,
   type BusinessHoursData,
 } from "@/lib/validations/onboarding";
-import { cn } from "@/lib/utils";
 import { useOnboarding } from "./WizardShell";
+import { BusinessHoursFields } from "@/components/settings/BusinessHoursFields";
 
 interface StepProps {
   onNext: (data: Record<string, unknown>) => void;
   onValidityChange: (valid: boolean) => void;
 }
-
-const PRESETS = [
-  {
-    value: "weekday_8_5" as const,
-    label: "Mon–Fri, 8am–5pm",
-    desc: "Standard business hours",
-  },
-  {
-    value: "weekday_7_6" as const,
-    label: "Mon–Fri, 7am–6pm",
-    desc: "Extended weekday hours",
-  },
-  {
-    value: "all_week" as const,
-    label: "7 Days a Week",
-    desc: "Mon–Sun, 8am–6pm",
-  },
-  {
-    value: "custom" as const,
-    label: "Custom Hours",
-    desc: "Set your own schedule",
-  },
-];
 
 export function BusinessHoursStep({ onNext, onValidityChange }: StepProps) {
   const businessHours = useOnboarding((s) => s.businessHours);
@@ -50,7 +27,6 @@ export function BusinessHoursStep({ onNext, onValidityChange }: StepProps) {
   const selected = watch("preset");
 
   useEffect(() => {
-    // All presets are valid — always enable Continue
     onValidityChange(true);
   }, [selected, onValidityChange]);
 
@@ -65,28 +41,13 @@ export function BusinessHoursStep({ onNext, onValidityChange }: StepProps) {
       <p className="mt-2 text-center text-sm text-text-secondary">
         AI will handle calls outside these hours automatically.
       </p>
-      <div className="mt-6 flex flex-col gap-3">
-        {PRESETS.map((p) => (
-          <button
-            key={p.value}
-            type="button"
-            onClick={() =>
-              setValue("preset", p.value, { shouldValidate: true })
-            }
-            className={cn(
-              "flex min-h-[56px] flex-col rounded-xl border-2 px-4 py-3 text-left transition-all",
-              selected === p.value
-                ? "border-accent bg-accent-light ring-2 ring-accent/20"
-                : "border-border hover:border-accent/40"
-            )}
-          >
-            <span className="text-sm font-semibold text-text-primary">
-              {p.label}
-            </span>
-            <span className="text-xs text-text-secondary">{p.desc}</span>
-          </button>
-        ))}
-      </div>
+      <BusinessHoursFields
+        className="mt-6"
+        value={{ preset: selected }}
+        onChange={(next) =>
+          setValue("preset", next.preset, { shouldValidate: true })
+        }
+      />
     </form>
   );
 }

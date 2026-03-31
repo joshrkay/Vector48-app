@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // GHL Webhook Parser — Pure function that normalizes raw GHL webhook payloads
-// into AutomationEventInsert objects for the event_log table.
+// into AutomationEventInsert objects for the automation_events table.
 // ---------------------------------------------------------------------------
 
 import type { AutomationEventInsert } from "./webhookTypes";
@@ -232,7 +232,7 @@ function buildSummary(
 // ── Main parser ───────────────────────────────────────────────────────────
 
 /**
- * Parses a raw GHL webhook payload into a normalized event for event_log.
+ * Parses a raw GHL webhook payload into a normalized event for automation_events.
  * This is a pure function — it does not touch the database or network.
  *
  * @param rawPayload - The raw JSON body from the GHL webhook
@@ -248,11 +248,21 @@ export function parseGHLWebhook(
   const ghlEventId = extractEventId(rawPayload, ghlEventType);
   const summary = buildSummary(rawPayload, ghlEventType);
 
+  const contact =
+    typeof rawPayload.contact === "object" && rawPayload.contact !== null
+      ? (rawPayload.contact as Record<string, unknown>)
+      : null;
+  const contactPhone =
+    str(rawPayload.phone) ?? str(contact?.phone) ?? null;
+  const contactName = formatContactName(rawPayload);
+
   return {
     recipe_slug: null,
     event_type: eventType,
     ghl_event_type: ghlEventType,
     contact_id: contactId,
+    contact_phone: contactPhone,
+    contact_name: contactName !== "Unknown contact" ? contactName : null,
     ghl_event_id: ghlEventId,
     summary,
     detail: rawPayload,

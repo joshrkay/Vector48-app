@@ -1,8 +1,8 @@
+import type { Vertical } from "@/types/recipes";
 import type {
   RecipeCatalogEntry,
   RecipeActivationRow,
   RecipeWithStatus,
-  Vertical,
 } from "./types";
 
 /**
@@ -11,6 +11,7 @@ import type {
  * Status logic:
  *  - activation exists with status "active"        → "active" (overrides releasePhase)
  *  - activation exists with status "paused"/"error" → "paused"
+ *  - activation exists with status "deactivated" → "available" (can re-activate)
  *  - no activation + releasePhase "ga"              → "available"
  *  - no activation + releasePhase "coming_soon"     → "coming_soon"
  *
@@ -35,8 +36,13 @@ export function mergeRecipesWithActivations(
     let status: RecipeWithStatus["status"];
     if (activation && activation.status === "active") {
       status = "active";
-    } else if (activation && (activation.status === "paused" || activation.status === "error")) {
+    } else if (
+      activation &&
+      (activation.status === "paused" || activation.status === "error")
+    ) {
       status = "paused";
+    } else if (activation && activation.status === "deactivated") {
+      status = "available";
     } else if (entry.releasePhase === "ga") {
       status = "available";
     } else {
@@ -56,6 +62,7 @@ export function mergeRecipesWithActivations(
   const statusOrder: Record<RecipeWithStatus["status"], number> = {
     active: 0,
     paused: 1,
+    error: 1,
     available: 2,
     coming_soon: 3,
   };
@@ -77,8 +84,10 @@ export function mergeRecipesWithActivations(
 
     // Within available: vertical-matched first, then universal, then non-matching
     if (a.status === "available" && b.status === "available") {
-      const aMatch = a.vertical === accountVertical ? 0 : a.vertical === null ? 1 : 2;
-      const bMatch = b.vertical === accountVertical ? 0 : b.vertical === null ? 1 : 2;
+      const aMatch =
+        a.vertical === accountVertical ? 0 : a.vertical == null ? 1 : 2;
+      const bMatch =
+        b.vertical === accountVertical ? 0 : b.vertical == null ? 1 : 2;
       return aMatch - bMatch;
     }
 
