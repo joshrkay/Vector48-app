@@ -51,11 +51,11 @@ export default function LoginPage() {
     // Check onboarding status
     const { data: account } = await supabase
       .from("accounts")
-      .select("onboarding_done_at")
+      .select("onboarding_completed_at")
       .eq("owner_user_id", user.id)
       .single();
 
-    if (!account || !account.onboarding_done_at) {
+    if (!account || !account.onboarding_completed_at) {
       router.push("/onboarding");
     } else {
       router.push("/dashboard");

@@ -56,8 +56,8 @@ export default function SignupPage() {
       return;
     }
 
-    // 2. Create account row
-    const { data: account, error: accountError } = await supabase
+    // 2. Create account row (trigger auto-sets trial_ends_at and creates account_users row)
+    const { error: accountError } = await supabase
       .from("accounts")
       .insert({
         owner_user_id: user.id,
