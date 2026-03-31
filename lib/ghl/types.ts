@@ -447,8 +447,34 @@ export interface GHLCreateLocationPayload {
   settings?: Record<string, unknown>;
 }
 
+/** Sub-account update (PUT /locations/:locationId) — partial fields. */
+export interface GHLUpdateLocationPayload {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  website?: string;
+  timezone?: string;
+}
+
 export interface GHLLocationResponse {
   location: GHLLocation;
+}
+
+/** Voice AI — list agents (GET /voice-ai/agents). */
+export interface GHLVoiceAgentSummary {
+  id: string;
+  locationId?: string;
+  name?: string;
+}
+
+export interface GHLVoiceAgentsListResponse {
+  agents?: GHLVoiceAgentSummary[];
+  data?: GHLVoiceAgentSummary[];
 }
 
 // ── Webhooks (agency-level) ─────────────────────────────────────────────────

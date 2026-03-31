@@ -38,9 +38,11 @@ import type {
   GHLCalendarsListResponse,
   GHLCampaignsListResponse,
   GHLCreateLocationPayload,
+  GHLUpdateLocationPayload,
   GHLLocationResponse,
   GHLCreateWebhookPayload,
   GHLWebhookResponse,
+  GHLVoiceAgentsListResponse,
 } from "./types";
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -281,6 +283,10 @@ export class GHLClient {
     return this.request<T>("PUT", path, { body });
   }
 
+  private patch<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>("PATCH", path, { body });
+  }
+
   private delete<T = void>(path: string): Promise<T> {
     return this.request<T>("DELETE", path);
   }
@@ -476,6 +482,24 @@ export class GHLClient {
   readonly locations = {
     create: (data: GHLCreateLocationPayload) => {
       return this.post<GHLLocationResponse>("/locations/", data);
+    },
+
+    /** Update sub-account (location) profile; uses location-scoped token. */
+    update: (locationId: string, data: GHLUpdateLocationPayload) => {
+      return this.put<void>(`/locations/${locationId}`, data);
+    },
+  };
+
+  /** Voice AI agents (HighLevel Voice AI public API). */
+  readonly voiceAi = {
+    listAgents: (params: { locationId: string }) => {
+      return this.get<GHLVoiceAgentsListResponse>("/voice-ai/agents", {
+        locationId: params.locationId,
+      });
+    },
+
+    patchAgent: (agentId: string, body: Record<string, unknown>) => {
+      return this.patch<unknown>(`/voice-ai/agents/${agentId}`, body);
     },
   };
 

@@ -5,7 +5,9 @@ export const businessNameSchema = z.object({
 });
 
 export const verticalSchema = z.object({
-  vertical: z.enum(["hvac", "plumbing", "electrical", "roofing", "landscaping"], {
+  vertical: z.enum(
+    ["hvac", "plumbing", "electrical", "roofing", "landscaping", "other"],
+    {
     required_error: "Select your industry",
   }),
 });
