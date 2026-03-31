@@ -55,7 +55,10 @@ export function ActivityFeed({
     }
   }, [hasMore, loading, nextOffset]);
 
-  if (events.length === 0) {
+  // Empty state only when there is nothing to show and no further pages to fetch.
+  // If the first page is empty but hasMore is true, we still render the list
+  // section so "Load more" can fetch the next offset.
+  if (events.length === 0 && !hasMore) {
     return (
       <section className="mt-8 rounded-xl border border-slate-800 bg-slate-900/30 px-6 py-16 text-center">
         <div className="mx-auto flex max-w-sm flex-col items-center gap-4">
@@ -92,48 +95,54 @@ export function ActivityFeed({
         Recent activity
       </h2>
       <ul className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/30">
-        {events.map((row) => {
-          const detail =
-            row.detail && typeof row.detail === "object"
-              ? row.detail
-              : ({} as Record<string, unknown>);
-          const description = formatActivityDescription(
-            row.event_type,
-            detail,
-            row.summary,
-          );
-          const badge = getActivityStatus(row.event_type, detail);
-          const dotClass = getStageDotClass(row.recipe_slug);
+        {events.length === 0 ? (
+          <li className="px-4 py-8 text-center text-sm text-slate-500">
+            No events in this batch. Load more to see older activity.
+          </li>
+        ) : (
+          events.map((row) => {
+            const detail =
+              row.detail && typeof row.detail === "object"
+                ? row.detail
+                : ({} as Record<string, unknown>);
+            const description = formatActivityDescription(
+              row.event_type,
+              detail,
+              row.summary,
+            );
+            const badge = getActivityStatus(row.event_type, detail);
+            const dotClass = getStageDotClass(row.recipe_slug);
 
-          return (
-            <li
-              key={row.id}
-              className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:gap-4"
-            >
-              <div className="flex min-w-0 flex-1 items-start gap-3">
-                <span
-                  className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClass}`}
-                  aria-hidden
-                />
-                <div className="min-w-0">
-                  <p className="text-sm text-white">{description}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {formatRelativeTime(row.created_at)}
-                  </p>
-                </div>
-              </div>
-              <span
-                className={
-                  badge === "success"
-                    ? "shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400"
-                    : "shrink-0 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-medium text-red-400"
-                }
+            return (
+              <li
+                key={row.id}
+                className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:gap-4"
               >
-                {badge === "success" ? "Success" : "Failed"}
-              </span>
-            </li>
-          );
-        })}
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <span
+                    className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClass}`}
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm text-white">{description}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatRelativeTime(row.created_at)}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={
+                    badge === "success"
+                      ? "shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400"
+                      : "shrink-0 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-medium text-red-400"
+                  }
+                >
+                  {badge === "success" ? "Success" : "Failed"}
+                </span>
+              </li>
+            );
+          })
+        )}
       </ul>
       {hasMore ? (
         <div className="mt-6 flex justify-center">
