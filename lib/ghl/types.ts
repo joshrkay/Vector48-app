@@ -210,14 +210,16 @@ export interface GHLMessage {
 }
 
 export interface GHLMessagesListParams {
+  conversationId: string;
   limit?: number;
   lastMessageId?: string;
   type?: GHLMessageType;
 }
 
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  traceId?: string;
+export interface GHLCreateConversationPayload {
+  locationId: string;
+  contactId: string;
+  assignedTo?: string;
 }
 
 export interface GHLSendMessagePayload {
@@ -397,75 +399,96 @@ export interface GHLUpdateAppointmentPayload
     Omit<GHLCreateAppointmentPayload, "calendarId" | "locationId">
   > {}
 
-// ── Campaigns ───────────────────────────────────────────────────────────────
-
-export interface GHLCampaign {
-  id: string;
-  name: string;
-  locationId: string;
-  status: "draft" | "published" | "archived";
-  type: string;
-  dateAdded: string;
-  dateUpdated: string;
-}
-
-export interface GHLCampaignsListResponse {
-  campaigns: GHLCampaign[];
-}
-
-// ── Locations (Sub-account creation — agency-level) ─────────────────────────
-
-export interface GHLLocation {
-  id: string;
-  companyId: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  postalCode: string | null;
-  country: string | null;
-  website: string | null;
-  timezone: string | null;
-  settings: Record<string, unknown>;
-  dateAdded: string;
-}
+// ── Locations ─────────────────────────────────────────────────────────────
 
 export interface GHLCreateLocationPayload {
   companyId: string;
   name: string;
-  email?: string;
   phone?: string;
   address?: string;
   city?: string;
   state?: string;
   postalCode?: string;
   country?: string;
-  website?: string;
   timezone?: string;
-  settings?: Record<string, unknown>;
+  website?: string;
+  email?: string;
 }
 
-export interface GHLLocationResponse {
+export interface GHLLocation {
+  id: string;
+  companyId: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  timezone: string | null;
+  website: string | null;
+  email: string | null;
+  apiKey: string;
+  dateAdded: string;
+}
+
+export interface GHLCreateLocationResponse {
   location: GHLLocation;
 }
 
-// ── Webhooks (agency-level) ─────────────────────────────────────────────────
+export interface GHLUpdateLocationPayload {
+  name?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  timezone?: string;
+  website?: string;
+  email?: string;
+  settings?: {
+    businessName?: string;
+    businessHours?: GHLBusinessHours[];
+  };
+}
+
+export interface GHLBusinessHours {
+  dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+  openHour: number;
+  openMinute: number;
+  closeHour: number;
+  closeMinute: number;
+  isOpen: boolean;
+}
+
+// ── Webhooks ──────────────────────────────────────────────────────────────
+
+export type GHLWebhookEvent =
+  | "ContactCreate"
+  | "ContactUpdate"
+  | "ConversationUnreadUpdate"
+  | "OpportunityCreate"
+  | "OpportunityStageUpdate"
+  | "AppointmentCreate"
+  | "AppointmentStatusUpdate"
+  | "InboundMessage"
+  | "CallCompleted";
+
+export interface GHLCreateWebhookPayload {
+  locationId: string;
+  url: string;
+  events: GHLWebhookEvent[];
+  secret?: string;
+}
 
 export interface GHLWebhook {
   id: string;
   locationId: string;
   url: string;
   events: string[];
-  verified: boolean;
+  active: boolean;
   dateAdded: string;
-}
-
-export interface GHLCreateWebhookPayload {
-  locationId: string;
-  url: string;
-  events: string[];
 }
 
 export interface GHLWebhookResponse {
@@ -481,3 +504,90 @@ export interface GHLTokenExchangeResponse {
   scope: string;
   locationId: string;
 }
+export interface GHLWebhooksListResponse {
+  webhooks: GHLWebhook[];
+}
+
+// ── Error ──────────────────────────────────────────────────────────────────
+
+export interface GHLCampaign {
+  id: string;
+  name: string;
+  locationId: string;
+  status: "draft" | "published" | "archived";
+  type: string;
+  dateAdded: string;
+  dateUpdated: string;
+}
+
+export interface GHLCampaignsListResponse {
+  campaigns: GHLCampaign[];
+}
+
+// ── Derived / list response types ──────────────────────────────────────────
+
+export interface GHLContactsListResponse {
+  contacts: GHLContact[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLContactResponse {
+  contact: GHLContact;
+}
+
+/** Alias for GHLNote, used by legacy service files. */
+export type GHLContactNote = GHLNote;
+
+export interface GHLContactTask {
+  id: string;
+  title: string;
+  body: string | null;
+  dueDate: string;
+  completed: boolean;
+  assignedTo: string | null;
+  contactId: string;
+  dateAdded: string;
+}
+
+export interface GHLConversationsListResponse {
+  conversations: GHLConversation[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLMessagesListResponse {
+  messages: GHLMessage[];
+  nextPage: boolean;
+  lastMessageId?: string;
+}
+
+export interface GHLOpportunitiesListResponse {
+  opportunities: GHLOpportunity[];
+  meta?: GHLPaginationMeta;
+}
+
+export interface GHLOpportunityResponse {
+  opportunity: GHLOpportunity;
+}
+
+export interface GHLCalendarSlotsParams {
+  calendarId: string;
+  startDate: string;
+  endDate: string;
+  timezone?: string;
+  userId?: string;
+}
+
+export interface GHLCalendarSlot {
+  slots: string[];
+}
+
+export interface GHLCalendarSlotsResponse {
+  _dates_: Record<string, GHLCalendarSlot>;
+}
+
+export interface GHLLocationResponse {
+  location: GHLLocation;
+}
+
+// ── (duplicate declarations removed — end of file) ─────────────────────────
+

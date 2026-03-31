@@ -78,6 +78,12 @@ export type Database = {
           stripe_subscription_id: string | null;
           subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at: string;
+          service_area: string | null;
+          voice_greeting: string | null;
+          notification_sms: boolean;
+          notification_email: boolean;
+          notification_contact: string | null;
+          provisioning_step: number;
           updated_at: string;
         };
         Insert: {
@@ -123,6 +129,12 @@ export type Database = {
           stripe_subscription_id?: string | null;
           subscription_status?: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at?: string;
+          service_area?: string | null;
+          voice_greeting?: string | null;
+          notification_sms?: boolean;
+          notification_email?: boolean;
+          notification_contact?: string | null;
+          provisioning_step?: number;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;
