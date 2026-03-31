@@ -22,8 +22,24 @@ export function DashboardHeader({
   const [greeting, setGreeting] = useState<string | null>(null);
 
   useEffect(() => {
-    const hour = new Date().getHours();
-    setGreeting(greetingForHour(hour));
+    const refresh = () => {
+      setGreeting(greetingForHour(new Date().getHours()));
+    };
+
+    refresh();
+    const intervalId = window.setInterval(refresh, 60_000);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   const name = businessName.trim() || "your business";
