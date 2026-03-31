@@ -6,7 +6,6 @@ import { FUNNEL_STAGE_META } from "@/types/recipes";
 export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
   const style = STAGE_STYLES[stage];
   const label = FUNNEL_STAGE_META[stage]?.label ?? stage;
-
   return (
     <span
       className={cn(

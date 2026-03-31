@@ -1,49 +1,101 @@
-// ---------------------------------------------------------------------------
-// GoHighLevel — Token Decryption & Client Factory
-// Server-only: never import this file in client components.
-// ---------------------------------------------------------------------------
-import "server-only";
-
 import { createClient } from "@supabase/supabase-js";
-import crypto from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { Database } from "@/lib/supabase/types";
-import { GHLClient } from "./client";
-
-// ── AES-256-GCM decryption ─────────────────────────────────────────────────
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
-const TAG_LENGTH = 16;
+const AUTH_TAG_LENGTH = 16;
 
-/**
- * Decrypt a token that was encrypted with AES-256-GCM.
- * Expected format: base64(iv + ciphertext + authTag)
- */
-function decryptToken(encrypted: string): string {
-  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
+type EncryptedParts = {
+  iv: Buffer;
+  ciphertext: Buffer;
+  authTag: Buffer;
+};
+
+let keyCache: Buffer | undefined;
+
+function getKey(): Buffer {
+  if (keyCache) return keyCache;
+
+  const hex =
+    process.env.GHL_TOKEN_ENCRYPTION_KEY ?? process.env.GHL_ENCRYPTION_KEY;
+  if (!hex) {
+    throw new Error(
+      "GHL_TOKEN_ENCRYPTION_KEY (or legacy GHL_ENCRYPTION_KEY) is required. Set a 64-character hex string (32 bytes).",
+    );
   }
 
-  const keyBuffer = Buffer.from(key, "hex");
+  const buf = Buffer.from(hex, "hex");
+  if (buf.length !== 32) {
+    throw new Error(
+      `GHL_TOKEN_ENCRYPTION_KEY must be 32 bytes (64 hex chars). Got ${buf.length} bytes.`,
+    );
+  }
+
+  keyCache = buf;
+  return keyCache;
+}
+
+function parseEncryptedToken(encrypted: string): EncryptedParts {
+  // Backward-compat: accept both legacy base64 blob and transient iv:tag:cipher format.
+  if (encrypted.includes(":")) {
+    const parts = encrypted.split(":");
+    if (parts.length !== 3) {
+      throw new Error("Invalid encrypted token format.");
+    }
+    const [ivB64, authTagB64, ciphertextB64] = parts;
+    return {
+      iv: Buffer.from(ivB64, "base64"),
+      authTag: Buffer.from(authTagB64, "base64"),
+      ciphertext: Buffer.from(ciphertextB64, "base64"),
+    };
+  }
+
   const data = Buffer.from(encrypted, "base64");
+  if (data.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
+    throw new Error("Invalid encrypted token payload.");
+  }
 
-  const iv = data.subarray(0, IV_LENGTH);
-  const tag = data.subarray(data.length - TAG_LENGTH);
-  const ciphertext = data.subarray(IV_LENGTH, data.length - TAG_LENGTH);
+  return {
+    iv: data.subarray(0, IV_LENGTH),
+    ciphertext: data.subarray(IV_LENGTH, data.length - AUTH_TAG_LENGTH),
+    authTag: data.subarray(data.length - AUTH_TAG_LENGTH),
+  };
+}
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, keyBuffer, iv);
-  decipher.setAuthTag(tag);
+export function encryptToken(plaintext: string): string {
+  const key = getKey();
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+
+  const ciphertext = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+
+  // Canonical format: base64(iv + ciphertext + authTag).
+  return Buffer.concat([iv, ciphertext, authTag]).toString("base64");
+}
+
+export function decryptToken(encrypted: string): string {
+  const key = getKey();
+  const parts = parseEncryptedToken(encrypted);
+
+  const decipher = createDecipheriv(ALGORITHM, key, parts.iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  decipher.setAuthTag(parts.authTag);
 
   const decrypted = Buffer.concat([
-    decipher.update(ciphertext),
+    decipher.update(parts.ciphertext),
     decipher.final(),
   ]);
 
   return decrypted.toString("utf8");
 }
-
-// ── Supabase admin client (service role, bypasses RLS) ──────────────────────
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -54,15 +106,10 @@ function getAdminClient() {
   return createClient<Database>(url, serviceKey);
 }
 
-// ── Main export ─────────────────────────────────────────────────────────────
-
-/**
- * Fetch the GHL token for an account, decrypt it, and return an initialized
- * GHLClient scoped to that account's location.
- *
- * This is the primary way application code should obtain a GHL client.
- */
-export async function getGHLClient(accountId: string): Promise<GHLClient> {
+export async function getAccountGhlCredentials(accountId: string): Promise<{
+  locationId: string;
+  token: string;
+}> {
   const supabase = getAdminClient();
 
   const { data: account, error } = await supabase
@@ -76,13 +123,20 @@ export async function getGHLClient(accountId: string): Promise<GHLClient> {
   }
 
   if (!account.ghl_token_encrypted || !account.ghl_location_id) {
-    throw new Error(
-      `Account ${accountId} is not connected to GoHighLevel`,
-    );
+    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
   }
 
-  const token = decryptToken(account.ghl_token_encrypted);
-  return GHLClient.forLocation(account.ghl_location_id, token);
+  return {
+    locationId: account.ghl_location_id,
+    token: decryptToken(account.ghl_token_encrypted),
+  };
+}
+
+export async function getGHLClient(accountId: string): Promise<{
+  locationId: string;
+  token: string;
+}> {
+  return getAccountGhlCredentials(accountId);
 }
 
 /**

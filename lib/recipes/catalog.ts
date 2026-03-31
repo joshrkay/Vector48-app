@@ -7,9 +7,15 @@
 // (sections 7 & 25) when available and replace as needed.
 // ---------------------------------------------------------------------------
 
+<<<<<<< HEAD
+import type { RecipeCatalogEntry } from "./types";
+
+export const RECIPE_CATALOG: RecipeCatalogEntry[] = [
+=======
 import type { RecipeDefinition } from "@/types/recipes";
 
 export const RECIPE_CATALOG: RecipeDefinition[] = [
+>>>>>>> origin/main
   // ── Awareness (2) ─────────────────────────────────────────
   {
     slug: "google-review-booster",
