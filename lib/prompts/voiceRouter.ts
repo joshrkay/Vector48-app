@@ -17,6 +17,7 @@ const VERTICAL_DISPLAY: Record<
   electrical: "Electrical",
   roofing: "Roofing",
   landscaping: "Landscaping",
+  other: "general services",
 };
 
 export function verticalLabelForVoice(vertical: AccountVertical): string {

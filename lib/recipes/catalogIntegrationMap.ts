@@ -5,8 +5,9 @@ export type IntegrationProviderDb =
 
 /** Maps catalog `requiredIntegrations` string keys to DB enum values. */
 const CATALOG_TO_DB: Record<string, IntegrationProviderDb> = {
-  twilio: "twilio",
-  elevenlabs: "elevenlabs",
+  // Voice stack is provisioned via GHL; DB enum has no separate twilio/elevenlabs rows.
+  twilio: "ghl",
+  elevenlabs: "ghl",
   google_business: "google_business",
   jobber: "jobber",
   servicetitan: "servicetitan",

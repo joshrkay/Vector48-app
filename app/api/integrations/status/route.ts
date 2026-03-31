@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { buildIntegrationStatus } from "@/lib/integrations/buildIntegrationStatus";
+import {
+  buildIntegrationStatus,
+  type IntegrationStatusAccountInput,
+} from "@/lib/integrations/buildIntegrationStatus";
 
 // Only the columns buildIntegrationStatus actually reads — avoids fetching
 // sensitive fields like ghl_token_encrypted into the response pipeline.
@@ -34,6 +37,9 @@ export async function GET() {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
-  const payload = await buildIntegrationStatus(supabase, account);
+  const payload = await buildIntegrationStatus(
+    supabase,
+    account as IntegrationStatusAccountInput,
+  );
   return NextResponse.json(payload);
 }

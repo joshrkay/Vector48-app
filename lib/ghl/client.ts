@@ -20,7 +20,7 @@ import type {
   GHLCustomFieldValue,
   GHLConversationsListParams,
   GHLConversationsListResponse,
-  GHLMessagesListParams,
+  GHLMessagesQueryParams,
   GHLMessagesListResponse,
   GHLMessage,
   GHLSendMessagePayload,
@@ -291,6 +291,26 @@ export class GHLClient {
     return this.request<T>("DELETE", path);
   }
 
+  /** Raw HTTP for resource-layer modules (`ghlGet`, `ghlPost`, etc.). */
+  rawGet<T>(
+    path: string,
+    params?: Record<string, string | number | boolean | undefined>,
+  ): Promise<T> {
+    return this.get<T>(path, params);
+  }
+
+  rawPost<T>(path: string, body: unknown): Promise<T> {
+    return this.post<T>(path, body);
+  }
+
+  rawPut<T>(path: string, body: unknown): Promise<T> {
+    return this.put<T>(path, body);
+  }
+
+  rawDelete<T = void>(path: string): Promise<T> {
+    return this.delete<T>(path);
+  }
+
   // ── Contacts ────────────────────────────────────────────────────────────
 
   readonly contacts = {
@@ -349,7 +369,7 @@ export class GHLClient {
 
     getMessages: (
       conversationId: string,
-      params?: GHLMessagesListParams,
+      params?: GHLMessagesQueryParams,
     ) => {
       return this.get<GHLMessagesListResponse>(
         `/conversations/${conversationId}/messages`,
@@ -514,4 +534,54 @@ export class GHLClient {
       return this.delete(`/webhooks/${webhookId}`);
     },
   };
+}
+
+// ── Functional API for resource modules (calendars.ts, contacts.ts, …) ───
+
+export interface GHLClientOptions {
+  token: string;
+  locationId?: string;
+  params?: Record<string, string | number | boolean | undefined>;
+}
+
+function clientFromOpts(opts: GHLClientOptions | undefined): GHLClient {
+  if (!opts?.token) {
+    throw new Error("GHL token is required");
+  }
+  const loc = opts.locationId;
+  if (!loc) {
+    throw new Error("GHL locationId is required");
+  }
+  return GHLClient.forLocation(loc, opts.token);
+}
+
+export function ghlGet<T>(path: string, opts?: GHLClientOptions): Promise<T> {
+  const client = clientFromOpts(opts);
+  return client.rawGet<T>(path, opts?.params);
+}
+
+export function ghlPost<T>(
+  path: string,
+  body: unknown,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  const client = clientFromOpts(opts);
+  return client.rawPost<T>(path, body);
+}
+
+export function ghlPut<T>(
+  path: string,
+  body: unknown,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  const client = clientFromOpts(opts);
+  return client.rawPut<T>(path, body);
+}
+
+export function ghlDelete<T = void>(
+  path: string,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  const client = clientFromOpts(opts);
+  return client.rawDelete<T>(path);
 }

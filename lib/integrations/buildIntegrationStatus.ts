@@ -12,6 +12,20 @@ import type {
 
 export type { IntegrationStatusPayload, GhlUiStatus } from "./integrationStatusTypes";
 
+/** Subset of `accounts` row used by integration status (matches common SELECT lists). */
+export type IntegrationStatusAccountInput = Pick<
+  Database["public"]["Tables"]["accounts"]["Row"],
+  | "id"
+  | "ghl_provisioning_status"
+  | "ghl_location_id"
+  | "ghl_token_encrypted"
+  | "ghl_last_synced_at"
+  | "ghl_voice_agent_id"
+  | "voice_gender"
+  | "greeting_text"
+  | "phone"
+>;
+
 function maskId(id: string | null): string | null {
   if (!id) return null;
   const t = id.trim();
@@ -52,7 +66,7 @@ async function checkN8nHealth(healthUrl: string): Promise<boolean> {
 
 export async function buildIntegrationStatus(
   supabase: SupabaseClient<Database>,
-  account: Database["public"]["Tables"]["accounts"]["Row"],
+  account: IntegrationStatusAccountInput,
 ): Promise<IntegrationStatusPayload> {
   const prov = account.ghl_provisioning_status;
   const ghlStatus = mapGhlProvisioning(prov);

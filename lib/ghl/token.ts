@@ -41,7 +41,7 @@ export function encryptGhlToken(plain: string): string {
  * Decrypt a token that was encrypted with AES-256-GCM.
  * Expected format: base64(iv + ciphertext + authTag)
  */
-function decryptToken(encrypted: string): string {
+export function decryptToken(encrypted: string): string {
   const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
   if (!key) {
     throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
@@ -64,6 +64,9 @@ function decryptToken(encrypted: string): string {
 
   return decrypted.toString("utf8");
 }
+
+/** @deprecated Prefer `encryptGhlToken` — alias for tests and legacy call sites. */
+export const encryptToken = encryptGhlToken;
 
 // ── Supabase admin client (service role, bypasses RLS) ──────────────────────
 

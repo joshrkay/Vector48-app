@@ -209,15 +209,29 @@ export interface GHLMessage {
   attachments?: string[];
 }
 
-export interface GHLMessagesListParams {
+/** Query params for GET `/conversations/{id}/messages` (no path segment). */
+export interface GHLMessagesQueryParams {
   limit?: number;
   lastMessageId?: string;
   type?: GHLMessageType;
 }
 
+/** Resource-layer input: path id plus optional query fields. */
+export type GHLMessagesListParams = GHLMessagesQueryParams & {
+  conversationId: string;
+};
+
 export interface GHLMessagesListResponse {
   messages: GHLMessage[];
   traceId?: string;
+}
+
+/** Payload for POST /conversations/ (create thread). */
+export interface GHLCreateConversationPayload {
+  locationId: string;
+  contactId: string;
+  subject?: string;
+  type?: GHLMessageType;
 }
 
 export interface GHLSendMessagePayload {
@@ -496,6 +510,10 @@ export interface GHLCreateWebhookPayload {
 
 export interface GHLWebhookResponse {
   webhook: GHLWebhook;
+}
+
+export interface GHLWebhooksListResponse {
+  webhooks: GHLWebhook[];
 }
 
 // ── Error Body (raw GHL response shape) ─────────────────────────────────────

@@ -10,6 +10,7 @@ const VERTICAL_DISPLAY: Record<EstimateAuditVertical, string> = {
   electrical: "Electrical",
   roofing: "Roofing",
   landscaping: "Landscaping",
+  other: "General / other trades",
 };
 
 const VERTICAL_KNOWLEDGE: Record<
@@ -130,6 +131,22 @@ const VERTICAL_KNOWLEDGE: Record<
     ],
     pricingNotes:
       "Landscaping labor $35-$75/hour per crew member. Mowing $30-$80 per visit (quarter-acre lot). Full-season contracts $150-$400/month. Hardscape $15-$30/sq ft.",
+  },
+  other: {
+    missedItems: [
+      "Site visit or assessment fee if not quoted ($75-$200)",
+      "Permit and inspection fees if applicable (varies)",
+      "Material markup disclosure (typically 10-25%)",
+      "Warranty terms for labor vs materials",
+      "Change-order process for scope creep",
+    ],
+    upsells: [
+      "Maintenance or service plan if recurring work applies",
+      "Extended warranty or workmanship guarantee",
+      "Priority scheduling for repeat customers",
+    ],
+    pricingNotes:
+      "Use local market rates; verify scope, inclusions/exclusions, and payment schedule before comparing to benchmarks.",
   },
 };
 
