@@ -17,6 +17,7 @@ const STATUS_LABELS: Record<RecipeStatus, string> = {
   active: "Active",
   paused: "Paused",
   error: "Error",
+  deactivated: "Deactivated",
   available: "Available",
   coming_soon: "Coming Soon",
 };
@@ -58,10 +59,10 @@ export function RecipeCard({
   const [activateOpen, setActivateOpen] = useState(false);
   const Icon = getRecipeLucideIcon(recipe.icon);
   const stageStyle = STAGE_STYLES[recipe.funnelStage];
-  const isActive = recipe.status === "active";
-  const isPaused = recipe.status === "paused";
-  const isError = recipe.status === "error";
-  const isComingSoon = recipe.status === "coming_soon";
+  const isActive = recipe.activationStatus === "active";
+  const isPaused = recipe.activationStatus === "paused";
+  const isError = recipe.activationStatus === "error";
+  const isComingSoon = recipe.activationStatus === "coming_soon";
 
   return (
     <>
@@ -92,7 +93,8 @@ export function RecipeCard({
                 isActive && "bg-[var(--v48-accent)] text-white",
                 isPaused && "bg-amber-100 text-amber-700",
                 isError && "bg-red-100 text-red-700",
-                recipe.status === "available" && "bg-gray-100 text-gray-600",
+                recipe.activationStatus === "available" &&
+                  "bg-gray-100 text-gray-600",
                 isComingSoon && "bg-gray-50 text-gray-400",
               )}
             >
@@ -102,7 +104,7 @@ export function RecipeCard({
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
                 </span>
               )}
-              {STATUS_LABELS[recipe.status]}
+              {STATUS_LABELS[recipe.activationStatus]}
             </span>
           </div>
 
@@ -148,7 +150,7 @@ export function RecipeCard({
                 Retry setup
               </Button>
             )}
-            {recipe.status === "available" && (
+            {recipe.activationStatus === "available" && (
               <Button
                 size="sm"
                 className="w-full bg-[var(--v48-accent)] text-white hover:opacity-90"

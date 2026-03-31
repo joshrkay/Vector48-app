@@ -51,18 +51,17 @@ export function isRecipeAvailable(
   recipe: RecipeDefinition,
   planSlug: string,
 ): boolean {
+  if (recipe.marketplaceListing === "coming_soon") {
+    return false;
+  }
+
   switch (recipe.releasePhase) {
-    case "ga":
     case "v1":
       return true;
-    case "coming_soon":
-      return false;
     case "v2":
       return V2_PLANS.has(planSlug);
     case "v3":
       return V3_PLANS.has(planSlug);
-    case "coming_soon":
-      return false;
     default:
       return false;
   }

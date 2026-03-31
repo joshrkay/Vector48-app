@@ -16,7 +16,7 @@ export function getRecipeDefinitionOrThrow(
 ): RecipeDefinition | null {
   const recipe = getRecipeBySlug(slug);
   if (!recipe) return null;
-  if (recipe.releasePhase === "coming_soon") return null;
+  if (recipe.marketplaceListing === "coming_soon") return null;
   return recipe;
 }
 
