@@ -30,8 +30,12 @@ export function ProvisioningBanner({
     setError(initialError);
   }, [initialStatus, initialError]);
 
+  // Key the interval effect on polling mode, not raw `status`, so we do not tear down
+  // and recreate the timer on every pending ↔ in_progress transition while polling.
+  const isPolling = status === "pending" || status === "in_progress";
+
   useEffect(() => {
-    if (status !== "pending" && status !== "in_progress") {
+    if (!isPolling) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -50,7 +54,10 @@ export function ProvisioningBanner({
         setStatus(data.status);
         if (data.error) setError(data.error);
         if (data.status === "complete") {
-          if (intervalRef.current) clearInterval(intervalRef.current);
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
           router.refresh();
         }
       } catch {
@@ -60,9 +67,12 @@ export function ProvisioningBanner({
 
     intervalRef.current = setInterval(poll, 5000);
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [status, router]);
+  }, [isPolling, router]);
 
   if (status === "complete") {
     return null;
