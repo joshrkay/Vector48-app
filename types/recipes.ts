@@ -82,7 +82,7 @@ export interface RecipeActivation {
   account_id: string;
   recipe_slug: string;
   status: RecipeActivationStatus;
-  config: Record<string, unknown>;
+  config: Record<string, unknown> | null;
   n8n_workflow_id: string | null;
   activated_at: string;
   last_triggered_at: string | null;

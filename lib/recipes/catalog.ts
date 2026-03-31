@@ -563,7 +563,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
         label: "Days after job to send follow-up",
         type: "number",
         required: true,
-        defaultValue: "7",
+        defaultValue: 7,
       },
     ],
     verticalMessages: {
@@ -658,7 +658,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
         label: "Consider dormant after (days)",
         type: "number",
         required: true,
-        defaultValue: "90",
+        defaultValue: 90,
       },
     ],
     verticalMessages: {
@@ -702,7 +702,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
         label: "Reactivate estimates older than (days)",
         type: "number",
         required: true,
-        defaultValue: "14",
+        defaultValue: 14,
       },
     ],
     verticalMessages: {
