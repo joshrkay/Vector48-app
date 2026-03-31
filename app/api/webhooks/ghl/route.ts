@@ -70,11 +70,13 @@ export async function POST(req: Request) {
   }
 
   let body: Record<string, unknown>;
+  const parseStartedAt = Date.now();
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  parseMs = Date.now() - parseStartedAt;
 
   const rawLocationId = body.locationId ?? body.location_id;
   const locationId = typeof rawLocationId === "string" && rawLocationId.length > 0 ? rawLocationId : null;
@@ -124,5 +126,5 @@ export async function POST(req: Request) {
     console.error("[ghl-webhook] Side effect error:", err)
   );
 
-  return NextResponse.json({ received: true });
+  return response;
 }
