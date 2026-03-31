@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Settings,
   CreditCard,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -33,6 +34,10 @@ const toolsNavItems: NavItem[] = [
     href: "/recipes/estimate-audit",
     icon: ClipboardList,
   },
+];
+
+const devNavItems: NavItem[] = [
+  { label: "n8n test", href: "/dev/n8n-test", icon: Workflow },
 ];
 
 const crmNavItems: NavItem[] = [
@@ -73,6 +78,10 @@ interface SidebarProps {
   trialEndsAt: string | null;
 }
 
+const showN8nDevNav =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_ENABLE_N8N_DEV_TOOLS === "true";
+
 export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
   const pathname = usePathname();
 
@@ -112,6 +121,19 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
             ))}
           </div>
         </div>
+
+        {showN8nDevNav && (
+          <div className="mt-4">
+            <p className="mx-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+              Dev
+            </p>
+            <div className="space-y-1">
+              {devNavItems.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* CRM section */}
         <div className="mt-4">

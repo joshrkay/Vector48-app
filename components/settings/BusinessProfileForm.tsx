@@ -14,16 +14,14 @@ import type { AccountRow } from "./types";
 const schema = z.object({
   business_name: z.string().min(1, "Business name is required"),
   phone: z.string().max(40).optional().nullable(),
-  business_email: z
+  email: z
     .union([z.string().email(), z.literal("")])
     .optional()
     .nullable(),
-  service_area: z.string().max(500).optional().nullable(),
   address_city: z.string().max(100).optional().nullable(),
   address_state: z.string().max(100).optional().nullable(),
   address_zip: z.string().max(20).optional().nullable(),
   business_hours: businessHoursSchema,
-  owner_display_name: z.string().max(200).optional().nullable(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -40,13 +38,11 @@ export function BusinessProfileForm({ account }: { account: AccountRow }) {
     defaultValues: {
       business_name: account.business_name,
       phone: account.phone ?? "",
-      business_email: account.business_email ?? "",
-      service_area: account.service_area ?? "",
+      email: account.email ?? "",
       address_city: account.address_city ?? "",
       address_state: account.address_state ?? "",
       address_zip: account.address_zip ?? "",
       business_hours: parseHours(account.business_hours),
-      owner_display_name: account.owner_display_name ?? "",
     },
   });
 
@@ -57,17 +53,14 @@ export function BusinessProfileForm({ account }: { account: AccountRow }) {
       body: JSON.stringify({
         business_name: values.business_name,
         phone: values.phone || null,
-        business_email: values.business_email || null,
-        service_area: values.service_area || null,
+        email: values.email || null,
         address_city: values.address_city || null,
         address_state: values.address_state || null,
         address_zip: values.address_zip || null,
         business_hours: values.business_hours,
-        owner_display_name: values.owner_display_name || null,
       }),
     });
     if (!res.ok) {
-      const j = (await res.json().catch(() => ({}))) as { error?: unknown };
       toast.error("Could not save profile");
       return;
     }
@@ -91,23 +84,15 @@ export function BusinessProfileForm({ account }: { account: AccountRow }) {
           </p>
         )}
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="owner_display_name">Owner display name</Label>
-        <Input id="owner_display_name" {...form.register("owner_display_name")} />
-      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="phone">Phone</Label>
           <Input id="phone" {...form.register("phone")} />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="business_email">Business email</Label>
-          <Input id="business_email" type="email" {...form.register("business_email")} />
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" type="email" {...form.register("email")} />
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="service_area">Service area</Label>
-        <Input id="service_area" {...form.register("service_area")} />
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { repairStuckN8nActivations } from "@/lib/n8n/provision";
+import { reconcileProvisioning } from "@/lib/n8n/provision";
 
 /**
  * Retries provisioning for activations that stayed active with null n8n_workflow_id
@@ -12,6 +12,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await repairStuckN8nActivations();
+  const result = await reconcileProvisioning();
   return NextResponse.json(result);
 }

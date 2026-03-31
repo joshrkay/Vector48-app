@@ -62,6 +62,7 @@ export function mergeRecipesWithActivations(
   const statusOrder: Record<RecipeWithStatus["status"], number> = {
     active: 0,
     paused: 1,
+    error: 1,
     available: 2,
     coming_soon: 3,
   };

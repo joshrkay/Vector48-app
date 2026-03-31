@@ -210,7 +210,7 @@ export type GHLWebhookPayload =
   | GHLWebhookAppointmentStatusUpdate
   | GHLWebhookConversationUnreadUpdate;
 
-// ── Normalized event shape written to event_log ───────────────────────────
+// ── Normalized event shape written to automation_events ───────────────────
 
 export interface AutomationEventInsert {
   account_id: string;
@@ -218,6 +218,8 @@ export interface AutomationEventInsert {
   event_type: string;
   ghl_event_type: string;
   contact_id: string | null;
+  contact_phone: string | null;
+  contact_name: string | null;
   ghl_event_id: string | null;
   summary: string;
   detail: Record<string, unknown>;

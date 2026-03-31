@@ -53,16 +53,12 @@ export default function SignupPage() {
       return;
     }
 
-    // 2. Create account row
-    const { data: account, error: accountError } = await supabase
+    // 2. Create account row (trigger auto-sets trial_ends_at and creates account_users row)
+    const { error: accountError } = await supabase
       .from("accounts")
       .insert({
         owner_user_id: user.id,
         business_name: data.businessName,
-        vertical: "hvac", // placeholder — overwritten during onboarding
-        trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        plan_slug: "trial",
-        provisioning_status: "pending",
       })
       .select("id")
       .single();
@@ -72,21 +68,7 @@ export default function SignupPage() {
       return;
     }
 
-    // 3. Create account_users join row
-    const { error: membershipError } = await supabase
-      .from("account_users")
-      .insert({
-        account_id: account.id,
-        user_id: user.id,
-        role: "admin",
-      });
-
-    if (membershipError) {
-      setServerError(membershipError.message);
-      return;
-    }
-
-    // 4. Redirect to onboarding
+    // 3. Redirect to onboarding
     router.push("/onboarding");
   }
 

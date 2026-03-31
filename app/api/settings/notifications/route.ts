@@ -21,23 +21,23 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ success: true });
   }
 
-  const { notification_alert_prefs: prefsPatch, ...rest } = patch;
+  const { notification_preferences: prefsPatch, ...rest } = patch;
 
   const updatePayload: Record<string, unknown> = { ...rest };
 
   if (prefsPatch !== undefined) {
     const { data: existing } = await supabase
       .from("accounts")
-      .select("notification_alert_prefs")
+      .select("notification_preferences")
       .eq("id", session.accountId)
       .single();
 
     const prev =
-      existing?.notification_alert_prefs &&
-      typeof existing.notification_alert_prefs === "object"
-        ? (existing.notification_alert_prefs as Record<string, boolean>)
+      existing?.notification_preferences &&
+      typeof existing.notification_preferences === "object"
+        ? (existing.notification_preferences as Record<string, unknown>)
         : {};
-    updatePayload.notification_alert_prefs = { ...prev, ...prefsPatch };
+    updatePayload.notification_preferences = { ...prev, ...prefsPatch };
   }
 
   const { error } = await supabase

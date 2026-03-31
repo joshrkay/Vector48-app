@@ -6,23 +6,31 @@ export type Database = {
           plan_slug: string;
           display_name: string;
           monthly_price_cents: number;
-          max_active_recipes: number | null;
+          max_active_recipes: number;
           webhooks_enabled: boolean;
-          ghl_cache_ttl_secs: number;
+          ghl_cache_ttl_seconds: number;
           rate_limit_priority: "low" | "standard" | "high";
-          stripe_price_id: string;
+          stripe_price_id: string | null;
+          features: Record<string, unknown>;
           is_active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
         };
         Insert: {
           plan_slug: string;
           display_name: string;
           monthly_price_cents: number;
-          max_active_recipes?: number | null;
+          max_active_recipes?: number;
           webhooks_enabled?: boolean;
-          ghl_cache_ttl_secs?: number;
+          ghl_cache_ttl_seconds?: number;
           rate_limit_priority?: "low" | "standard" | "high";
-          stripe_price_id: string;
+          stripe_price_id?: string | null;
+          features?: Record<string, unknown>;
           is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["pricing_config"]["Insert"]>;
       };
@@ -32,8 +40,12 @@ export type Database = {
           owner_user_id: string;
           business_name: string;
           phone: string | null;
-          vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";
-          ghl_sub_account_id: string | null;
+          email: string | null;
+          address_city: string | null;
+          address_state: string | null;
+          address_zip: string | null;
+          vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
+          business_hours: Record<string, unknown>;
           ghl_location_id: string | null;
           ghl_token_encrypted: string | null;
           ghl_voice_agent_id: string | null;
@@ -45,23 +57,40 @@ export type Database = {
           provisioning_status: "pending" | "in_progress" | "complete" | "error";
           provisioning_error: string | null;
           provisioning_completed_at: string | null;
-          created_at: string;
-          service_area: string | null;
-          business_hours: Record<string, unknown> | null;
-          voice_gender: string | null;
-          voice_greeting: string | null;
-          notification_sms: boolean;
-          notification_email: boolean;
-          notification_contact: string | null;
+          ghl_provisioning_status: "pending" | "in_progress" | "complete" | "failed";
+          ghl_provisioning_error: string | null;
+          ghl_health_status: string;
+          ghl_last_health_check: string | null;
+          elevenlabs_voice_id: string | null;
+          voice_gender: "male" | "female" | null;
+          greeting_text: string | null;
+          greeting_name: string | null;
+          greeting_audio_url: string | null;
+          notification_contact_name: string | null;
+          notification_contact_phone: string | null;
+          notification_preferences: Record<string, unknown>;
           onboarding_step: number;
+          onboarding_completed_at: string | null;
+          activate_recipe_1: boolean;
+          plan_slug: string;
+          trial_ends_at: string | null;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
+          created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
           owner_user_id: string;
-          business_name: string;
+          business_name?: string;
           phone?: string | null;
-          vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";
-          ghl_sub_account_id?: string | null;
+          email?: string | null;
+          address_city?: string | null;
+          address_state?: string | null;
+          address_zip?: string | null;
+          vertical?: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
+          business_hours?: Record<string, unknown>;
           ghl_location_id?: string | null;
           ghl_token_encrypted?: string | null;
           ghl_voice_agent_id?: string | null;
@@ -73,51 +102,47 @@ export type Database = {
           provisioning_status?: "pending" | "in_progress" | "complete" | "error";
           provisioning_error?: string | null;
           provisioning_completed_at?: string | null;
-          created_at?: string;
-          service_area?: string | null;
-          business_hours?: Record<string, unknown> | null;
-          voice_gender?: string | null;
-          voice_greeting?: string | null;
-          notification_sms?: boolean;
-          notification_email?: boolean;
-          notification_contact?: string | null;
+          ghl_provisioning_status?: "pending" | "in_progress" | "complete" | "failed";
+          ghl_provisioning_error?: string | null;
+          ghl_health_status?: string;
+          ghl_last_health_check?: string | null;
+          elevenlabs_voice_id?: string | null;
+          voice_gender?: "male" | "female" | null;
+          greeting_text?: string | null;
+          greeting_name?: string | null;
+          greeting_audio_url?: string | null;
+          notification_contact_name?: string | null;
+          notification_contact_phone?: string | null;
+          notification_preferences?: Record<string, unknown>;
           onboarding_step?: number;
+          onboarding_completed_at?: string | null;
+          activate_recipe_1?: boolean;
+          plan_slug?: string;
+          trial_ends_at?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          subscription_status?: "trialing" | "active" | "past_due" | "canceled" | "paused";
+          created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;
       };
       account_users: {
         Row: {
+          id: string;
           account_id: string;
           user_id: string;
           role: "admin" | "viewer";
-        };
-        Insert: {
-          account_id: string;
-          user_id: string;
-          role?: "admin" | "viewer";
-        };
-        Update: Partial<Database["public"]["Tables"]["account_users"]["Insert"]>;
-      };
-      recipes: {
-        Row: {
-          slug: string;
-          name: string;
-          description: string;
-          category: string;
-          vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
-          is_active: boolean;
           created_at: string;
         };
         Insert: {
-          slug: string;
-          name: string;
-          description?: string;
-          category?: string;
-          vertical?: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping" | null;
-          is_active?: boolean;
+          id?: string;
+          account_id: string;
+          user_id: string;
+          role?: "admin" | "viewer";
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["recipes"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["account_users"]["Insert"]>;
       };
       recipe_activations: {
         Row: {
@@ -125,10 +150,11 @@ export type Database = {
           account_id: string;
           recipe_slug: string;
           status: "active" | "paused" | "error" | "deactivated";
-          config: Record<string, unknown> | null;
+          config: Record<string, unknown>;
           n8n_workflow_id: string | null;
           activated_at: string;
           last_triggered_at: string | null;
+          deactivated_at: string | null;
           error_message: string | null;
         };
         Insert: {
@@ -136,25 +162,28 @@ export type Database = {
           account_id: string;
           recipe_slug: string;
           status?: "active" | "paused" | "error" | "deactivated";
-          config?: Record<string, unknown> | null;
+          config?: Record<string, unknown>;
           n8n_workflow_id?: string | null;
           activated_at?: string;
           last_triggered_at?: string | null;
+          deactivated_at?: string | null;
           error_message?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["recipe_activations"]["Insert"]>;
       };
-      event_log: {
+      automation_events: {
         Row: {
           id: string;
           account_id: string;
           recipe_slug: string | null;
           event_type: string;
           ghl_event_type: string | null;
-          contact_id: string | null;
           ghl_event_id: string | null;
+          contact_id: string | null;
+          contact_phone: string | null;
+          contact_name: string | null;
           summary: string;
-          detail: Record<string, unknown> | null;
+          detail: Record<string, unknown>;
           created_at: string;
         };
         Insert: {
@@ -163,13 +192,15 @@ export type Database = {
           recipe_slug?: string | null;
           event_type: string;
           ghl_event_type?: string | null;
-          contact_id?: string | null;
           ghl_event_id?: string | null;
+          contact_id?: string | null;
+          contact_phone?: string | null;
+          contact_name?: string | null;
           summary: string;
-          detail?: Record<string, unknown> | null;
+          detail?: Record<string, unknown>;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["event_log"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["automation_events"]["Insert"]>;
       };
       integrations: {
         Row: {
@@ -178,7 +209,10 @@ export type Database = {
           provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
           status: "connected" | "disconnected" | "error";
           credentials_encrypted: Record<string, unknown> | null;
-          connected_at: string;
+          metadata: Record<string, unknown>;
+          connected_at: string | null;
+          disconnected_at: string | null;
+          error_message: string | null;
         };
         Insert: {
           id?: string;
@@ -186,7 +220,10 @@ export type Database = {
           provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
           status?: "connected" | "disconnected" | "error";
           credentials_encrypted?: Record<string, unknown> | null;
-          connected_at?: string;
+          metadata?: Record<string, unknown>;
+          connected_at?: string | null;
+          disconnected_at?: string | null;
+          error_message?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["integrations"]["Insert"]>;
       };

@@ -20,7 +20,7 @@ export default async function RecipesPage() {
   const { data: account } = await supabase
     .from("accounts")
     .select(
-      "id, vertical, plan_slug, phone, voice_gender, voice_greeting, business_hours",
+      "id, vertical, plan_slug, phone, voice_gender, greeting_text, business_hours",
     )
     .eq("owner_user_id", user.id)
     .single();
@@ -47,7 +47,7 @@ export default async function RecipesPage() {
   const profile = {
     phone: account.phone,
     voice_gender: account.voice_gender,
-    voice_greeting: account.voice_greeting,
+    greeting_text: account.greeting_text,
     business_hours: account.business_hours,
   };
 
@@ -55,7 +55,6 @@ export default async function RecipesPage() {
     RECIPE_CATALOG,
     activations ?? [],
     account.vertical,
-    account.plan_slug,
   );
 
   const activeCount = recipes.filter((r) => r.status === "active").length;

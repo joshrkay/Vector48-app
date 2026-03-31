@@ -30,11 +30,6 @@ export async function POST(req: Request) {
 
   const { auditLogId, acceptedSuggestions } = parsed.data;
 
-  const acceptedValueTotal =
-    Math.round(
-      acceptedSuggestions.reduce((acc, s) => acc + s.estimatedValue, 0) * 100,
-    ) / 100;
-
   const payload = acceptedSuggestions.map((s) => ({
     item: s.item,
     reason: s.reason,
@@ -45,8 +40,6 @@ export async function POST(req: Request) {
     .from("estimate_audit_log")
     .update({
       accepted_suggestions: payload,
-      accepted_value_total: acceptedValueTotal,
-      updated_at: new Date().toISOString(),
     })
     .eq("id", auditLogId)
     .eq("account_id", account.id)

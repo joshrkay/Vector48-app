@@ -3,13 +3,17 @@
 import * as React from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 
+interface AuditSuggestion {
+  estimatedValue?: number;
+}
+
 interface Row {
   id: string;
   created_at: string;
   job_type: string;
   suggestions: unknown;
   accepted_suggestions: unknown;
-  accepted_value_total: number | null;
+  total_estimated_value_cents: number;
 }
 
 export function AuditHistory() {
@@ -24,7 +28,7 @@ export function AuditHistory() {
     const { data, error: qErr } = await supabase
       .from("estimate_audit_log")
       .select(
-        "id, created_at, job_type, suggestions, accepted_suggestions, accepted_value_total",
+        "id, created_at, job_type, suggestions, accepted_suggestions, total_estimated_value_cents",
       )
       .order("created_at", { ascending: false })
       .limit(50);
@@ -78,13 +82,19 @@ export function AuditHistory() {
             const acceptedCount = Array.isArray(r.accepted_suggestions)
               ? r.accepted_suggestions.length
               : 0;
+            const acceptedTotal = Array.isArray(r.accepted_suggestions)
+              ? (r.accepted_suggestions as AuditSuggestion[]).reduce(
+                  (sum, s) => sum + (s.estimatedValue ?? 0),
+                  0,
+                )
+              : 0;
             const recovered =
-              r.accepted_value_total != null
+              acceptedCount > 0
                 ? new Intl.NumberFormat("en-US", {
                     style: "currency",
                     currency: "USD",
                     maximumFractionDigits: 0,
-                  }).format(r.accepted_value_total)
+                  }).format(acceptedTotal)
                 : "—";
 
             return (
