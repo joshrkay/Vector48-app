@@ -539,7 +539,8 @@ export class GHLClient {
 // ── Functional API for resource modules (calendars.ts, contacts.ts, …) ───
 
 export interface GHLClientOptions {
-  token: string;
+  /** Required for real API calls; optional in spread types until callers merge opts. */
+  token?: string;
   locationId?: string;
   params?: Record<string, string | number | boolean | undefined>;
 }
