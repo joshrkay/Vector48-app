@@ -85,6 +85,7 @@ export type Database = {
           onboarding_step: number;
           onboarding_completed_at: string | null;
           activate_recipe_1: boolean;
+          provisioning_step: number;
           subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at: string;
           updated_at: string;
@@ -139,6 +140,7 @@ export type Database = {
           onboarding_step?: number;
           onboarding_completed_at?: string | null;
           activate_recipe_1?: boolean;
+          provisioning_step?: number;
           subscription_status?: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at?: string;
           updated_at?: string;

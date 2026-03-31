@@ -46,6 +46,7 @@ export function createMockAccount(
     business_hours: {},
     ghl_location_id: null,
     ghl_token_encrypted: null,
+    onboarding_done_at: null,
     ghl_provisioning_status: "pending",
     ghl_provisioning_error: null,
     ghl_health_status: "unknown",
