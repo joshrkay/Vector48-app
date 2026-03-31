@@ -6,6 +6,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/dev/n8n-test": "n8n test",
+  "/recipes/estimate-audit": "Estimate Audit",
   "/recipes": "Recipes",
   "/crm/contacts": "Contacts",
   "/crm/inbox": "Inbox",
@@ -24,17 +26,15 @@ function getPageTitle(pathname: string): string {
 }
 
 function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase() || "V8";
 }
 
 interface TopBarProps {
-  businessName?: string;
+  businessName: string;
 }
 
 export function TopBar({ businessName }: TopBarProps) {
@@ -51,7 +51,7 @@ export function TopBar({ businessName }: TopBarProps) {
         </button>
         <Avatar className="h-8 w-8" title={businessName}>
           <AvatarFallback className="bg-[var(--v48-accent)] text-white text-xs font-medium">
-            {initials}
+            {getInitials(businessName)}
           </AvatarFallback>
         </Avatar>
       </div>

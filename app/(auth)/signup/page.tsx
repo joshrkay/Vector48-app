@@ -1,208 +1,183 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-
-import { createBrowserClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
+import { createBrowserClient } from "@/lib/supabase/client";
 
 const signupSchema = z.object({
   businessName: z.string().min(2, "Business name must be at least 2 characters"),
-  email: z.string().email("Please enter a valid email"),
+  email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 type SignupValues = z.infer<typeof signupSchema>;
 
+const TRIAL_DAYS = 7;
+const MS_PER_DAY = 86_400_000;
+
 export default function SignupPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const form = useForm<SignupValues>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
-    defaultValues: {
-      businessName: "",
-      email: "",
-      password: "",
-    },
   });
 
-  async function onSubmit(values: SignupValues) {
-    setIsLoading(true);
-    try {
-      const supabase = createBrowserClient();
+  async function onSubmit(data: SignupValues) {
+    setServerError(null);
+    const supabase = createBrowserClient();
 
-      // 1. Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
+    // 1. Create auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+    });
+
+    if (authError) {
+      setServerError(authError.message);
+      return;
+    }
+
+    const user = authData.user;
+    if (!user) {
+      setServerError("Signup succeeded but no user was returned. Please try again.");
+      return;
+    }
+
+    // 2. Create account row (trigger auto-sets trial_ends_at and creates account_users row)
+    const { error: accountError } = await supabase
+      .from("accounts")
+      .insert({
+        owner_user_id: user.id,
+        business_name: data.businessName,
+        vertical: "hvac", // placeholder — overwritten during onboarding
+        trial_ends_at: new Date(Date.now() + TRIAL_DAYS * MS_PER_DAY).toISOString(),
+        plan_slug: "trial",
+        provisioning_status: "pending",
+      })
+      .select("id")
+      .single();
+
+    if (accountError) {
+      console.error("Account creation failed:", accountError.message);
+      setServerError("An unexpected error occurred while creating your account. Please try again.");
+      return;
+    }
+
+    // 3. Create account_users join row
+    const { error: membershipError } = await supabase
+      .from("account_users")
+      .insert({
+        account_id: account.id,
+        user_id: user.id,
+        role: "admin",
       });
 
-      if (authError) {
-        toast.error(authError.message);
-        return;
-      }
-
-      const user = authData.user;
-      if (!user) {
-        toast.error("Signup failed. Please try again.");
-        return;
-      }
-
-      // 2. Create account row
-      const trialEndsAt = new Date(
-        Date.now() + 7 * 24 * 60 * 60 * 1000
-      ).toISOString();
-
-      const { data: account, error: accountError } = await supabase
-        .from("accounts")
-        .insert({
-          owner_user_id: user.id,
-          business_name: values.businessName,
-          trial_ends_at: trialEndsAt,
-          plan_slug: "trial",
-          provisioning_status: "pending",
-          vertical: "hvac", // default — updated during onboarding
-        })
-        .select("id")
-        .single();
-
-      if (accountError) {
-        toast.error("Account creation failed: " + accountError.message);
-        return;
-      }
-
-      // 3. Create account_users join row
-      const { error: memberError } = await supabase
-        .from("account_users")
-        .insert({
-          account_id: account.id,
-          user_id: user.id,
-          role: "admin",
-        });
-
-      if (memberError) {
-        toast.error("Failed to link account: " + memberError.message);
-        return;
-      }
-
-      router.push("/onboarding");
-    } catch {
-      toast.error("Something went wrong. Please try again.");
-    } finally {
-      setIsLoading(false);
+    if (membershipError) {
+      console.error("Membership creation failed:", membershipError.message);
+      setServerError("An unexpected error occurred while creating your account. Please try again.");
+      return;
     }
+
+    // 4. Redirect to onboarding
+    router.push("/onboarding");
   }
 
   return (
     <div>
-      <h2 className="font-heading font-bold text-[22px] text-center">
-        Create your account
-      </h2>
-      <p className="text-[14px] text-[#64748B] text-center mt-1">
+      <h1 className="font-heading font-bold text-[22px]">Create your account</h1>
+      <p className="mt-1 text-[13px] text-[#64748B]">
         Start your 7-day free trial. No credit card required.
       </p>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="mt-6 space-y-4">
-          <FormField
-            control={form.control}
-            name="businessName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Business name</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Martinez HVAC & Cooling"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+      <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
+        {/* Business Name */}
+        <div className="space-y-1.5">
+          <Label htmlFor="businessName">Business name</Label>
+          <Input
+            id="businessName"
+            type="text"
+            placeholder="e.g. Martinez HVAC & Cooling"
+            {...register("businessName")}
           />
+          {errors.businessName && (
+            <p className="text-[13px] text-destructive">{errors.businessName.message}</p>
+          )}
+        </div>
 
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email</FormLabel>
-                <FormControl>
-                  <Input
-                    type="email"
-                    placeholder="you@company.com"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+        {/* Email */}
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@company.com"
+            {...register("email")}
           />
+          {errors.email && (
+            <p className="text-[13px] text-destructive">{errors.email.message}</p>
+          )}
+        </div>
 
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Min. 8 characters"
-                      {...field}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[var(--text-primary)]"
-                    >
-                      {showPassword ? (
-                        <EyeOff size={16} />
-                      ) : (
-                        <Eye size={16} />
-                      )}
-                    </button>
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        {/* Password */}
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Password</Label>
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              placeholder="Min. 8 characters"
+              className="pr-10"
+              {...register("password")}
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              onClick={() => setShowPassword((prev) => !prev)}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+          {errors.password && (
+            <p className="text-[13px] text-destructive">{errors.password.message}</p>
+          )}
+        </div>
 
-          <Button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-[#00B4A6] hover:bg-[#00A396] text-white"
-          >
-            {isLoading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : null}
-            Create Account
-          </Button>
-        </form>
-      </Form>
+        {/* Server error */}
+        {serverError && (
+          <p className="text-[13px] text-destructive">{serverError}</p>
+        )}
 
-      <p className="mt-6 text-center text-sm text-[#64748B]">
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="flex w-full items-center justify-center rounded-lg bg-[#00B4A6] text-white font-medium h-11 text-sm transition-colors hover:bg-[#00a396] disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            "Create Account"
+          )}
+        </button>
+      </form>
+
+      <p className="mt-6 text-center text-[13px] text-[#64748B]">
         Already have an account?{" "}
-        <Link href="/login" className="text-[#00B4A6] hover:underline font-medium">
+        <Link href="/login" className="text-[#00B4A6] font-medium hover:underline">
           Sign in &rarr;
         </Link>
       </p>
