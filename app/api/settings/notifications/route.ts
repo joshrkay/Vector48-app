@@ -25,11 +25,6 @@ export async function PATCH(req: Request) {
 
   const updatePayload: Record<string, unknown> = { ...rest };
 
-  if (patch.notification_email !== undefined) {
-    const e = patch.notification_email?.trim();
-    updatePayload.notification_email = e ? e : null;
-  }
-
   if (prefsPatch !== undefined) {
     const { data: existing } = await supabase
       .from("accounts")

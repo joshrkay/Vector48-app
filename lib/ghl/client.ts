@@ -39,7 +39,6 @@ import type {
   GHLCalendarsListResponse,
   GHLCampaignsListResponse,
   GHLCreateLocationPayload,
-  GHLUpdateLocationPayload,
   GHLLocationResponse,
   GHLCreateWebhookPayload,
   GHLCalendarSlot,
@@ -47,7 +46,6 @@ import type {
   GHLOpportunityStatus,
   GHLPaginatedResponse,
   GHLWebhookResponse,
-  GHLVoiceAgentsListResponse,
   GHLTokenExchangeResponse,
 } from "./types";
 import type {
@@ -296,32 +294,8 @@ export class GHLClient {
     return this.request<T>("PUT", path, { body });
   }
 
-  private patch<T>(path: string, body: unknown): Promise<T> {
-    return this.request<T>("PATCH", path, { body });
-  }
-
   private delete<T = void>(path: string): Promise<T> {
     return this.request<T>("DELETE", path);
-  }
-
-  /** Raw HTTP for resource-layer modules (`ghlGet`, `ghlPost`, etc.). */
-  rawGet<T>(
-    path: string,
-    params?: Record<string, string | number | boolean | undefined>,
-  ): Promise<T> {
-    return this.get<T>(path, params);
-  }
-
-  rawPost<T>(path: string, body: unknown): Promise<T> {
-    return this.post<T>(path, body);
-  }
-
-  rawPut<T>(path: string, body: unknown): Promise<T> {
-    return this.put<T>(path, body);
-  }
-
-  rawDelete<T = void>(path: string): Promise<T> {
-    return this.delete<T>(path);
   }
 
   // ── Contacts ────────────────────────────────────────────────────────────
@@ -362,6 +336,17 @@ export class GHLClient {
       return this.get<{ notes: GHLNote[] }>(`/contacts/${contactId}/notes`);
     },
 
+  delete(contactId: string) {
+    return this.client._delete(`/contacts/${contactId}`);
+  }
+
+  /** GHL contacts search uses POST, not GET. */
+  search(params: GHLContactsSearchParams) {
+    return this.client._post<GHLPaginatedResponse<GHLContact>>(
+      "/contacts/search",
+      params,
+    );
+  }
     getCustomFields: (contactId: string) => {
       return this.get<{ customFields: GHLCustomFieldValue[] }>(
         `/contacts/${contactId}/customFields`,
@@ -371,6 +356,19 @@ export class GHLClient {
 
   // ── Conversations ───────────────────────────────────────────────────────
 
+  removeTag(contactId: string, tags: string[]) {
+    return this.client._request<{ contact: GHLContact }>(
+      "DELETE",
+      `/contacts/${contactId}/tags`,
+      { body: { tags } },
+    );
+  }
+
+  getNotes(contactId: string) {
+    return this.client._get<{ notes: GHLNote[] }>(
+      `/contacts/${contactId}/notes`,
+    );
+  }
   readonly conversations = {
     list: (params?: GHLConversationsListParams) => {
       const { locationId, ...rest } = params ?? {};
@@ -461,6 +459,31 @@ export class GHLClient {
       );
     },
 
+  update(opportunityId: string, data: Partial<GHLCreateOpportunityPayload>) {
+    return this.client._put<{ opportunity: GHLOpportunity }>(
+      `/opportunities/${opportunityId}`,
+      data,
+    );
+  }
+
+  updateStage(opportunityId: string, pipelineStageId: string) {
+    return this.client._put<{ opportunity: GHLOpportunity }>(
+      `/opportunities/${opportunityId}`,
+      { pipelineStageId },
+    );
+  }
+
+  updateStatus(opportunityId: string, status: GHLOpportunityStatus) {
+    return this.client._put<{ opportunity: GHLOpportunity }>(
+      `/opportunities/${opportunityId}/status`,
+      { status },
+    );
+  }
+
+  delete(opportunityId: string) {
+    return this.client._delete(`/opportunities/${opportunityId}`);
+  }
+}
     update: (eventId: string, data: GHLUpdateAppointmentPayload) => {
       return this.put<{ event: GHLAppointment }>(
         `/calendars/events/${eventId}`,
@@ -499,6 +522,19 @@ export class GHLClient {
     },
   };
 
+  get(eventId: string) {
+    return this.client._get<{ event: GHLAppointment }>(
+      `/calendars/events/${eventId}`,
+    );
+  }
+
+  create(data: GHLCreateAppointmentPayload) {
+    return this.client._post<{ event: GHLAppointment }>(
+      "/calendars/events",
+      data,
+    );
+  }
+
   readonly customFields = {
     list: (locationId?: string) => {
       const locId = locationId ?? this.locationId;
@@ -510,27 +546,20 @@ export class GHLClient {
 
   // ── Locations (agency-level only) ───────────────────────────────────────
 
+  cancel(eventId: string) {
+    return this.client._put<{ event: GHLAppointment }>(
+      `/calendars/events/${eventId}`,
+      { status: "cancelled" },
+    );
+  }
+
+  delete(eventId: string) {
+    return this.client._delete(`/calendars/events/${eventId}`);
+  }
+}
   readonly locations = {
     create: (data: GHLCreateLocationPayload) => {
       return this.post<GHLLocationResponse>("/locations/", data);
-    },
-
-    /** Update sub-account (location) profile; uses location-scoped token. */
-    update: (locationId: string, data: GHLUpdateLocationPayload) => {
-      return this.put<void>(`/locations/${locationId}`, data);
-    },
-  };
-
-  /** Voice AI agents (HighLevel Voice AI public API). */
-  readonly voiceAi = {
-    listAgents: (params: { locationId: string }) => {
-      return this.get<GHLVoiceAgentsListResponse>("/voice-ai/agents/", {
-        locationId: params.locationId,
-      });
-    },
-
-    patchAgent: (agentId: string, body: Record<string, unknown>) => {
-      return this.patch<unknown>(`/voice-ai/agents/${agentId}`, body);
     },
   };
 
@@ -541,6 +570,24 @@ export class GHLClient {
       return this.post<GHLWebhookResponse>("/webhooks/", data);
     },
 
+  list() {
+    return this.client._get<{ calendars: GHLCalendar[] }>("/calendars/");
+  }
+
+  get(calendarId: string) {
+    return this.client._get<{ calendar: GHLCalendar }>(
+      `/calendars/${calendarId}`,
+    );
+  }
+
+  getSlots(params: GHLCalendarSlotsParams) {
+    const { calendarId, ...rest } = params;
+    return this.client._get<{ slots: Record<string, GHLCalendarSlot[]> }>(
+      `/calendars/${calendarId}/free-slots`,
+      spreadParams(rest as Record<string, unknown>),
+    );
+  }
+}
     delete: (webhookId: string) => {
       return this.delete(`/webhooks/${webhookId}`);
     },
@@ -612,48 +659,51 @@ export class GHLClient {
 }
 
 // ── Function-style wrappers ──────────────────────────────────────────────────
-// Resource modules (calendars.ts, contacts.ts, …) import these helpers.
+// Legacy service files (contacts.ts, calendars.ts, etc.) import these helpers.
 // They create a one-shot GHLClient from the options and delegate.
 
-function clientFromOpts(opts: GHLClientOptions | undefined): GHLClient {
-  const apiKey = opts?.apiKey ?? process.env.GHL_AGENCY_API_KEY;
-  if (!apiKey) {
-    throw new Error("GHL apiKey is required (or set GHL_AGENCY_API_KEY)");
+function clientFromOpts(opts?: GHLClientOptions): GHLClient {
+  if (opts?.locationId) {
+    const token =
+      opts.apiKey ?? process.env.GHL_AGENCY_API_KEY ?? "";
+    return GHLClient.forLocation(opts.locationId, token);
   }
-  const loc = opts?.locationId;
-  if (!loc) {
-    throw new Error("GHL locationId is required");
-  }
-  return GHLClient.forLocation(loc, apiKey);
+  return GHLClient.forAgency(opts?.apiKey);
 }
 
-export function ghlGet<T>(path: string, opts?: GHLClientOptions): Promise<T> {
+export async function ghlGet<T>(
+  path: string,
+  opts?: GHLClientOptions,
+): Promise<T> {
   const client = clientFromOpts(opts);
-  return client.rawGet<T>(path, opts?.params);
+  // Use the class's private request via a thin cast so we can call the
+  // internal method without duplicating fetch logic.
+  return (client as unknown as { request: (m: string, p: string, o?: { params?: Record<string, string | number | boolean | undefined> }) => Promise<T> })
+    .request("GET", path, { params: opts?.params });
 }
 
-export function ghlPost<T>(
+export async function ghlPost<T>(
   path: string,
   body: unknown,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  const client = clientFromOpts(opts);
-  return client.rawPost<T>(path, body);
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
+    .request("POST", path, { body });
 }
 
-export function ghlPut<T>(
+export async function ghlPut<T>(
   path: string,
   body: unknown,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  const client = clientFromOpts(opts);
-  return client.rawPut<T>(path, body);
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
+    .request("PUT", path, { body });
 }
 
-export function ghlDelete<T = void>(
+export async function ghlDelete<T = void>(
   path: string,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  const client = clientFromOpts(opts);
-  return client.rawDelete<T>(path);
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string) => Promise<T> })
+    .request("DELETE", path);
 }
