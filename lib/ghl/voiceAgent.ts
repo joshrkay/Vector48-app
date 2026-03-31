@@ -7,6 +7,17 @@ import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getAccountGhlCredentials, getGHLClient } from "./token";
 
+/** Full spoken greeting for GHL Voice AI (business name + user-written line). */
+export function buildVoiceGreetingLine(
+  businessName: string,
+  userGreeting: string,
+): string {
+  const bn = businessName.trim() || "your business";
+  const g = userGreeting.trim();
+  if (!g) return `Hi, thanks for calling ${bn}.`;
+  return `Hi, thanks for calling ${bn}. ${g}`;
+}
+
 export interface SyncVoiceAgentInput {
   /** Full line spoken when the AI answers (include business name + greeting). */
   greetingMessage: string;

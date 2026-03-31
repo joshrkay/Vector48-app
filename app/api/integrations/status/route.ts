@@ -1,0 +1,25 @@
+import { NextResponse } from "next/server";
+import { createServerClient } from "@/lib/supabase/server";
+import { requireAccountForUser } from "@/lib/auth/account";
+import { buildIntegrationStatus } from "@/lib/integrations/buildIntegrationStatus";
+
+export async function GET() {
+  const supabase = await createServerClient();
+  const session = await requireAccountForUser(supabase);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: account, error } = await supabase
+    .from("accounts")
+    .select("*")
+    .eq("id", session.accountId)
+    .single();
+
+  if (error || !account) {
+    return NextResponse.json({ error: "Account not found" }, { status: 404 });
+  }
+
+  const payload = await buildIntegrationStatus(supabase, account);
+  return NextResponse.json(payload);
+}

@@ -260,3 +260,14 @@
 ?? lib/ghl/voiceAgent.ts
 ?? lib/integrations/buildIntegrationStatus.ts
 [Tue Mar 31 09:31:20 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...
+[Tue Mar 31 09:31:24 MST 2026] Pushed OK
+[Tue Mar 31 09:31:40 MST 2026] Changes detected:
+ M app/api/settings/profile/route.ts
+ M lib/ghl/voiceAgent.ts
+ M lib/validations/settings.ts
+ M watch-push.log
+?? app/api/integrations/status/
+?? app/api/provisioning/retry/
+?? app/api/settings/business/
+?? app/api/settings/voice/route.ts
+[Tue Mar 31 09:32:00 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...

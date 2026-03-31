@@ -59,7 +59,6 @@ export const notificationsPatchSchema = z.object({
   notification_contact_phone: z.string().max(200).nullable().optional(),
   notification_email: z.string().email().max(200).nullable().optional(),
   notifications_enabled: z.boolean().optional(),
-  quiet_hours_enabled: z.boolean().optional(),
   quiet_hours_start: z.string().max(8).nullable().optional(),
   quiet_hours_end: z.string().max(8).nullable().optional(),
   notification_preferences: notificationPreferencesSchema.optional(),
