@@ -3,41 +3,48 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { BusinessProfileForm } from "./BusinessProfileForm";
 import { VoiceSettings } from "./VoiceSettings";
 import { NotificationSettings } from "./NotificationSettings";
-import { SettingsIntegrations } from "./SettingsIntegrations";
-import type { AccountRow } from "./types";
-import type { IntegrationStatusPayload } from "@/lib/integrations/integrationStatusTypes";
+import { IntegrationTile } from "./IntegrationTile";
+import { AccountSection } from "./AccountSection";
+import { BillingSection } from "./BillingSection";
+import type { AccountRow, IntegrationRow, PricingRow } from "./types";
 
 const VALID = new Set([
-  "business",
+  "profile",
   "voice",
   "notifications",
   "integrations",
+  "billing",
+  "account",
 ]);
 
 export function SettingsTabs({
   account,
-  integrationStatus,
+  integrations,
+  pricingConfig,
+  ownerEmail,
+  ownerName,
+  integrationWarnings,
 }: {
   account: AccountRow;
-  integrationStatus: IntegrationStatusPayload;
+  integrations: IntegrationRow[];
+  pricingConfig: PricingRow[];
+  ownerEmail: string;
+  ownerName: string;
+  integrationWarnings: {
+    jobber: boolean;
+    servicetitan: boolean;
+    google_business: boolean;
+  };
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const raw = searchParams.get("tab") ?? "business";
-  const normalized = raw === "profile" ? "business" : raw;
-  const tab = VALID.has(normalized) ? normalized : "business";
-
-  React.useEffect(() => {
-    if (raw === "profile") {
-      const next = new URLSearchParams(searchParams.toString());
-      next.set("tab", "business");
-      router.replace(`/settings?${next.toString()}`, { scroll: false });
-    }
-  }, [raw, router, searchParams]);
+  const raw = searchParams.get("tab") ?? "profile";
+  const tab = VALID.has(raw) ? raw : "profile";
 
   const onTabChange = React.useCallback(
     (v: string) => {
@@ -55,50 +62,87 @@ export function SettingsTabs({
     }
   }, [searchParams, tab]);
 
-  const tabs: { id: string; label: string }[] = [
-    { id: "business", label: "Business Profile" },
-    { id: "voice", label: "AI Voice" },
-    { id: "notifications", label: "Notifications" },
-    { id: "integrations", label: "Integrations" },
-  ];
+  const integrationByProvider = React.useMemo(() => {
+    const m = new Map<
+      IntegrationRow["provider"],
+      IntegrationRow | undefined
+    >();
+    for (const row of integrations) {
+      m.set(row.provider, row);
+    }
+    return m;
+  }, [integrations]);
 
   return (
-    <div className="w-full">
-      <div className="overflow-x-auto border-b border-slate-700/40">
-        <div
-          role="tablist"
-          className="flex min-w-max gap-1 px-0.5 sm:gap-px"
+    <Tabs value={tab} onValueChange={onTabChange} className="w-full">
+      <div className="flex flex-col gap-6 md:flex-row md:items-start">
+        <TabsList
+          className={cn(
+            "flex h-auto w-full flex-row overflow-x-auto md:w-52 md:flex-col md:items-stretch md:overflow-visible",
+            "rounded-xl border bg-card p-1",
+          )}
         >
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              onClick={() => onTabChange(t.id)}
-              className={cn(
-                "border-b-2 px-4 py-3 text-sm font-medium transition-colors",
-                tab === t.id
-                  ? "border-[#00B4A6] text-white"
-                  : "border-transparent text-slate-400 hover:text-slate-300",
-              )}
+          {(
+            [
+              ["profile", "Business"],
+              ["voice", "Voice"],
+              ["notifications", "Alerts"],
+              ["integrations", "Integrations"],
+              ["billing", "Billing"],
+              ["account", "Account"],
+            ] as const
+          ).map(([id, label]) => (
+            <TabsTrigger
+              key={id}
+              value={id}
+              className="justify-start whitespace-nowrap px-3 py-2.5 md:w-full"
             >
-              {t.label}
-            </button>
+              {label}
+            </TabsTrigger>
           ))}
+        </TabsList>
+
+        <div className="min-w-0 flex-1">
+          <TabsContent value="profile" className="mt-0">
+            <BusinessProfileForm account={account} />
+          </TabsContent>
+          <TabsContent value="voice" className="mt-0">
+            <VoiceSettings account={account} />
+          </TabsContent>
+          <TabsContent value="notifications" className="mt-0">
+            <NotificationSettings account={account} />
+          </TabsContent>
+          <TabsContent value="integrations" className="mt-0 space-y-4">
+            <IntegrationTile
+              provider="jobber"
+              label="Jobber"
+              description="Sync jobs and customers."
+              integration={integrationByProvider.get("jobber")}
+              warning={integrationWarnings.jobber}
+            />
+            <IntegrationTile
+              provider="servicetitan"
+              label="ServiceTitan"
+              description="Connect your ServiceTitan account."
+              integration={integrationByProvider.get("servicetitan")}
+              warning={integrationWarnings.servicetitan}
+            />
+            <IntegrationTile
+              provider="google_business"
+              label="Google Business Profile"
+              description="Reviews and business presence."
+              integration={integrationByProvider.get("google_business")}
+              warning={integrationWarnings.google_business}
+            />
+          </TabsContent>
+          <TabsContent value="billing" className="mt-0">
+            <BillingSection pricingConfig={pricingConfig} planSlug={account.plan_slug} />
+          </TabsContent>
+          <TabsContent value="account" className="mt-0">
+            <AccountSection ownerEmail={ownerEmail} ownerName={ownerName} />
+          </TabsContent>
         </div>
       </div>
-
-      <div className="mt-8">
-        {tab === "business" && <BusinessProfileForm account={account} />}
-        {tab === "voice" && <VoiceSettings account={account} />}
-        {tab === "notifications" && (
-          <NotificationSettings account={account} />
-        )}
-        {tab === "integrations" && (
-          <SettingsIntegrations status={integrationStatus} />
-        )}
-      </div>
-    </div>
+    </Tabs>
   );
 }

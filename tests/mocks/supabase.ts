@@ -32,56 +32,32 @@ export function setMockAccount(account: AccountRow) {
 export function createMockAccount(
   overrides: Partial<AccountRow> = {},
 ): AccountRow {
-  const now = new Date().toISOString();
   return {
     id: "acc_test_001",
     owner_user_id: "user_test_001",
     business_name: "Ace Plumbing Co",
     phone: "+15551234567",
-    email: null,
-    address_city: "Dallas",
-    address_state: "TX",
-    address_zip: null,
     vertical: "plumbing",
-    business_hours: {},
     ghl_location_id: null,
     ghl_token_encrypted: null,
-    onboarding_done_at: null,
-    provisioning_status: "pending",
-    provisioning_error: null,
-    provisioning_completed_at: null,
-    provisioning_step: 0,
-    ghl_provisioning_status: "pending",
-    ghl_provisioning_error: null,
-    ghl_health_status: "unknown",
-    ghl_last_health_check: null,
-    ghl_last_synced_at: null,
-    ghl_voice_agent_id: null,
-    elevenlabs_voice_id: null,
-    voice_gender: null,
-    greeting_text: null,
-    greeting_name: null,
-    greeting_audio_url: null,
-    notification_contact_name: null,
-    notification_contact_phone: null,
-    notification_email: null,
-    notifications_enabled: false,
-    quiet_hours_start: null,
-    quiet_hours_end: null,
-    notification_preferences: {},
-    timezone: "America/Chicago",
-    onboarding_step: 8,
-    onboarding_completed_at: null,
-    activate_recipe_1: false,
-    plan_slug: "trial",
     trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
     stripe_customer_id: null,
     stripe_subscription_id: null,
-    subscription_status: "trialing",
-    created_at: now,
-    updated_at: now,
+    plan_slug: "trial",
+    ghl_provisioning_status: "pending",
+    ghl_provisioning_error: null,
+    provisioning_step: 0,
+    created_at: new Date().toISOString(),
+    service_area: "Dallas, TX",
+    business_hours: {},
+    voice_gender: null,
+    voice_greeting: null,
+    notification_sms: false,
+    notification_email: false,
+    notification_contact: null,
+    onboarding_step: 8,
     ...overrides,
-  };
+  } as AccountRow;
 }
 
 // ── Chainable query builder mock ──────────────────────────────────────────
@@ -102,6 +78,7 @@ function createChainableUpdate(data: Record<string, unknown>) {
   return {
     eq(field: string, value: string) {
       updateLog.push({ table: "accounts", data, eqField: field, eqValue: value });
+      // Apply updates to mockAccount so subsequent reads reflect changes
       Object.assign(mockAccount, data);
       return Promise.resolve({ error: null });
     },

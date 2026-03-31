@@ -33,7 +33,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# dev helper scripts
 # Auto-push watcher
 watch-and-push.sh
 watch-push.log

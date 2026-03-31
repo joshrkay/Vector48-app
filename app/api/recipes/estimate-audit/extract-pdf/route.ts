@@ -30,9 +30,11 @@ export async function POST(req: Request) {
 
   let text: string;
   try {
-    const pdfParse = (await import("pdf-parse")).default;
-    const data = await pdfParse(buf);
-    text = typeof data.text === "string" ? data.text : "";
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: new Uint8Array(buf) });
+    const result = await parser.getText();
+    text = result.text ?? "";
+    await parser.destroy();
   } catch (e) {
     console.error("[extract-pdf] parse failed", e);
     return NextResponse.json(
