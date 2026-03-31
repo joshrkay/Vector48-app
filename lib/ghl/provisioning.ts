@@ -14,6 +14,7 @@ import { encryptToken } from "./token";
 import { GHLClient } from "./client";
 import { GHL_DEFAULT_VOICES } from "./voiceTypes";
 import type { GHLCreateVoiceAgentPayload } from "./voiceTypes";
+import type { GHLWebhookEvent } from "./types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -255,12 +256,12 @@ export async function provisionCustomer(
     if (webhookUrl) {
       // Register a single webhook with all needed event types.
       // GHL supports multiple events per webhook registration.
-      const webhookEvents = [
-        "CallStatusUpdate",
-        "OpportunityStatusUpdate",
+      const webhookEvents: GHLWebhookEvent[] = [
+        "CallCompleted",
+        "OpportunityStageUpdate",
         "OpportunityCreate",
         "AppointmentCreate",
-        "AppointmentUpdate",
+        "AppointmentStatusUpdate",
       ];
 
       const webhookRes = await agencyClient.webhooks.create({

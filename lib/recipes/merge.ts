@@ -3,6 +3,7 @@ import type {
   RecipeCatalogEntry,
   RecipeActivationRow,
   RecipeWithStatus,
+  Vertical,
 } from "./types";
 
 /**
@@ -25,8 +26,9 @@ import type {
  *  4. Coming soon — v2/v3 recipes
  */
 export function mergeRecipesWithActivations(
-  catalog: RecipeDefinition[],
+  catalog: RecipeCatalogEntry[],
   activations: RecipeActivationRow[],
+  accountVertical?: Vertical,
 ): RecipeWithStatus[] {
   const activationMap = new Map(
     activations.map((a) => [a.recipe_slug, a]),

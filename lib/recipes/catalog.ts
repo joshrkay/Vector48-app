@@ -59,7 +59,6 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [],
-    vertical: "hvac",
     verticalMessages: {
       hvac: "Seasonal special from {{business_name}} — book your tune-up before peak season fills up.",
       plumbing:

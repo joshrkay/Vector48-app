@@ -69,7 +69,6 @@ export type Database = {
           ghl_health_status: string;
           ghl_last_health_check: string | null;
           ghl_last_synced_at: string | null;
-          ghl_voice_agent_id: string | null;
           elevenlabs_voice_id: string | null;
           voice_gender: "male" | "female" | null;
           greeting_text: string | null;
@@ -86,18 +85,8 @@ export type Database = {
           onboarding_step: number;
           onboarding_completed_at: string | null;
           activate_recipe_1: boolean;
-          plan_slug: string;
-          trial_ends_at: string | null;
-          stripe_customer_id: string | null;
-          stripe_subscription_id: string | null;
           subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at: string;
-          service_area: string | null;
-          voice_greeting: string | null;
-          notification_sms: boolean;
-          notification_email: boolean;
-          notification_contact: string | null;
-          provisioning_step: number;
           updated_at: string;
         };
         Insert: {
@@ -134,7 +123,6 @@ export type Database = {
           ghl_health_status?: string;
           ghl_last_health_check?: string | null;
           ghl_last_synced_at?: string | null;
-          ghl_voice_agent_id?: string | null;
           elevenlabs_voice_id?: string | null;
           voice_gender?: "male" | "female" | null;
           greeting_text?: string | null;
@@ -151,18 +139,8 @@ export type Database = {
           onboarding_step?: number;
           onboarding_completed_at?: string | null;
           activate_recipe_1?: boolean;
-          plan_slug?: string;
-          trial_ends_at?: string | null;
-          stripe_customer_id?: string | null;
-          stripe_subscription_id?: string | null;
           subscription_status?: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at?: string;
-          service_area?: string | null;
-          voice_greeting?: string | null;
-          notification_sms?: boolean;
-          notification_email?: boolean;
-          notification_contact?: string | null;
-          provisioning_step?: number;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;
