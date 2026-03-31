@@ -194,3 +194,11 @@
 [Tue Mar 31 09:21:08 MST 2026] Changes detected:
  M watch-push.log
 [Tue Mar 31 09:21:28 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...
+[Tue Mar 31 09:21:29 MST 2026] Push FAILED
+[Tue Mar 31 09:21:44 MST 2026] Changes detected:
+ M lib/ghl/calendars.ts
+ M watch-push.log
+[Tue Mar 31 09:22:05 MST 2026] Still changing, retrying...
+[Tue Mar 31 09:22:20 MST 2026] Changes detected:
+ M watch-push.log
+[Tue Mar 31 09:22:40 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...
