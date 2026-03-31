@@ -18,27 +18,22 @@ function verifyToken(provided: string | null, expected: string): boolean {
 }
 
 export async function POST(req: Request) {
-  // 1. Verify webhook token — secret must be configured
-  const webhookSecret = process.env.GHL_WEBHOOK_SECRET;
-  if (!webhookSecret) {
-    console.error("[ghl-webhook] GHL_WEBHOOK_SECRET is not set. Rejecting request.");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const startedAt = Date.now();
+  let parseMs = 0;
+  let lookupMs = 0;
+  let insertMs = 0;
 
-  const signature = req.headers.get("x-ghl-signature");
-  if (!verifyToken(signature, webhookSecret)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // 2. Parse body
+  // 1) Parse body
   let body: Record<string, unknown>;
+  const parseStartedAt = Date.now();
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  parseMs = Date.now() - parseStartedAt;
 
-  // 3. Extract and validate location ID (casing varies across GHL events)
+  // 2) Resolve account from location ID
   const rawLocationId = body.locationId ?? body.location_id;
   const locationId =
     typeof rawLocationId === "string" && rawLocationId.length > 0
@@ -57,14 +52,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   }
 
-  // 4. Look up account by GHL location ID
-  // Use .limit(1) instead of .single() to avoid errors when no rows match
   const supabase = getSupabaseAdmin();
+  const lookupStartedAt = Date.now();
   const { data: accounts } = await supabase
     .from("accounts")
     .select("id")
     .eq("ghl_location_id", locationId)
     .limit(1);
+  lookupMs = Date.now() - lookupStartedAt;
 
   const account = accounts?.[0] ?? null;
   if (!account) {
@@ -73,33 +68,68 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   }
 
-  // 5. Parse event type and build normalized event
+  // 3) Verify webhook secret/signature before processing
+  const webhookSecret = process.env.GHL_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error("[ghl-webhook] GHL_WEBHOOK_SECRET is not set. Rejecting request.");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const signature = req.headers.get("x-ghl-signature");
+  if (!verifyToken(signature, webhookSecret)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // 4) Normalize payload
   const ghlEventType = (body.type as string) ?? (body.event as string) ?? "unknown";
   const parsed = parseGHLWebhook(body, ghlEventType);
-
   const eventRow = {
     ...parsed,
     account_id: account.id,
   };
 
-  // 6. Insert into automation_events with idempotency
+  // 5) Attempt deduplicated insert (conflict-safe for retries)
+  const insertStartedAt = Date.now();
   const { error: insertError } = await supabase
     .from("automation_events")
-    .insert(eventRow);
+    .upsert(eventRow, {
+      onConflict: "account_id,ghl_event_id",
+      ignoreDuplicates: true,
+    });
+  insertMs = Date.now() - insertStartedAt;
 
   if (insertError) {
-    // 23505 = unique_violation — duplicate ghl_event_id, skip silently
-    if (insertError.code === "23505") {
-      return NextResponse.json({ received: true, duplicate: true });
-    }
     console.error("[ghl-webhook] Insert failed:", insertError.message);
     return NextResponse.json({ error: "Insert failed" }, { status: 500 });
   }
 
-  // 7. Fire side effects async — must not block the response
-  processSideEffects(account.id, eventRow, body).catch((err) =>
-    console.error("[ghl-webhook] Side effect error:", err)
-  );
+  const ackStartedAt = Date.now();
+  const response = NextResponse.json({ received: true });
 
-  return NextResponse.json({ received: true });
+  // Fire-and-forget side effects after ack path — never throw to response.
+  const scheduleSideEffects = () => {
+    processSideEffects(account.id, eventRow, body).catch((err) => {
+      console.error("[ghl-webhook] Side effect error:", err);
+    });
+  };
+  if (typeof setImmediate === "function") {
+    setImmediate(scheduleSideEffects);
+  } else {
+    queueMicrotask(scheduleSideEffects);
+  }
+
+  const ackMs = Date.now() - ackStartedAt;
+  const totalMs = Date.now() - startedAt;
+  console.info("[ghl-webhook] timing", {
+    parse_ms: parseMs,
+    lookup_ms: lookupMs,
+    insert_ms: insertMs,
+    ack_ms: ackMs,
+    total_ms: totalMs,
+    within_sla_5s: totalMs < 5_000,
+    account_id: account.id,
+    ghl_event_type: ghlEventType,
+  });
+
+  return response;
 }
