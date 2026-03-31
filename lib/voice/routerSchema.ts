@@ -10,8 +10,14 @@ export const voiceRouterActionTypeSchema = z.enum([
 
 const voiceRouterRawSchema = z.object({
   type: voiceRouterActionTypeSchema,
-  route: z.string().optional(),
-  params: z.record(z.string(), z.unknown()).optional(),
+  route: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v == null ? undefined : v)),
+  params: z
+    .union([z.record(z.string(), z.unknown()), z.null()])
+    .optional()
+    .transform((v) => (v == null ? undefined : v)),
   message: z.string(),
   confidence: z.number().min(0).max(1),
 });
