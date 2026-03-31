@@ -13,7 +13,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     const { data: account, error: accountError } = await supabase
       .from("accounts")
       .select("id")
-      .eq("ghl_sub_account_id", locationId)
+      .eq("ghl_location_id", locationId)
       .single();
 
     if (accountError || !account) {

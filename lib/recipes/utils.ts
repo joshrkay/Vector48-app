@@ -3,36 +3,33 @@
 // Pure helpers for filtering and querying the static recipe catalog.
 // ---------------------------------------------------------------------------
 
-import type {
-  FunnelStage,
-  RecipeDefinition,
-  ReleasePhase,
-} from "@/types/recipes";
+import type { RecipeCatalogEntry } from "./types";
+import type { FunnelStage, ReleasePhase } from "@/types/recipes";
 import { RECIPE_CATALOG } from "./catalog";
 
 /** Look up a single recipe by its unique slug. */
 export function getRecipeBySlug(
   slug: string,
-): RecipeDefinition | undefined {
+): RecipeCatalogEntry | undefined {
   return RECIPE_CATALOG.find((r) => r.slug === slug);
 }
 
 /** Return all recipes belonging to a funnel stage. */
 export function getRecipesByStage(
   stage: FunnelStage,
-): RecipeDefinition[] {
+): RecipeCatalogEntry[] {
   return RECIPE_CATALOG.filter((r) => r.funnelStage === stage);
 }
 
 /** Return all recipes belonging to a release phase. */
 export function getRecipesByPhase(
   phase: ReleasePhase,
-): RecipeDefinition[] {
+): RecipeCatalogEntry[] {
   return RECIPE_CATALOG.filter((r) => r.releasePhase === phase);
 }
 
 /** Return the V1 (launch-day) recipes. */
-export function getV1Recipes(): RecipeDefinition[] {
+export function getV1Recipes(): RecipeCatalogEntry[] {
   return getRecipesByPhase("v1");
 }
 
@@ -48,13 +45,15 @@ const V3_PLANS = new Set(["custom"]);
  * Does not check activation limits — only release-phase gating.
  */
 export function isRecipeAvailable(
-  recipe: RecipeDefinition,
+  recipe: RecipeCatalogEntry,
   planSlug: string,
 ): boolean {
   switch (recipe.releasePhase) {
     case "ga":
     case "v1":
       return true;
+    case "coming_soon":
+      return false;
     case "v2":
       return V2_PLANS.has(planSlug);
     case "v3":

@@ -1,0 +1,82 @@
+{
+  "name": "AI Phone Answering — {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-phone-{{TENANT_ID}}",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "InboundWebhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "webhook-ai-phone-{{TENANT_ID}}"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{\n  json: {\n    tenant_id: \"{{TENANT_ID}}\",\n    business_name: \"{{BUSINESS_NAME}}\",\n    business_phone: \"{{BUSINESS_PHONE}}\",\n    notification_phone: \"{{NOTIFICATION_PHONE}}\",\n    vertical: \"{{VERTICAL}}\",\n    elevenlabs_voice_id: \"{{ELEVENLABS_VOICE_ID}}\",\n    webhook_url: \"{{WEBHOOK_URL}}\"\n  }\n}];"
+      },
+      "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "name": "TenantContext",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.webhook_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
+      "name": "GHLHealthProbe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{GHL_CREDENTIAL_ID}}",
+          "name": "ghl_{{TENANT_ID}}"
+        }
+      },
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "InboundWebhook": {
+      "main": [
+        [
+          {
+            "node": "TenantContext",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TenantContext": {
+      "main": [
+        [
+          {
+            "node": "GHLHealthProbe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "tenant_id": "{{TENANT_ID}}"
+  }
+}

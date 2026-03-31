@@ -7,6 +7,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { AutomationEventInsert } from "./webhookTypes";
+import {
+  GHL_EVENT_TO_RECIPES,
+  INBOUND_RECIPES,
+  SCHEDULED_RECIPE_OFFSETS,
+  getN8nWebhookUrl,
+} from "@/lib/recipes/eventMapping";
 
 // Negative sentiment keywords that flag a call for review
 const NEGATIVE_SENTIMENT_KEYWORDS = [
@@ -49,7 +55,7 @@ async function handleMessageReceived(
 
   // A human replied — log that we detected it for the follow-up sequence.
   // Future: pause the n8n workflow via API using followUpRecipe.n8n_workflow_id
-  await supabase.from("event_log").insert({
+  await supabase.from("automation_events").insert({
     account_id: accountId,
     recipe_slug: followUpRecipe.recipe_slug,
     event_type: "sequence_paused",
@@ -91,7 +97,7 @@ async function handleAppointmentUpdated(
   if (!rebookRecipe) return;
 
   // Future: invoke n8n re-booking workflow
-  await supabase.from("event_log").insert({
+  await supabase.from("automation_events").insert({
     account_id: accountId,
     recipe_slug: rebookRecipe.recipe_slug,
     event_type: "rebook_triggered",
@@ -130,7 +136,7 @@ async function handleCallCompleted(
   if (matchedKeywords.length < 2) return;
 
   // Flag call for review — this shows as an alert in the dashboard
-  await supabase.from("event_log").insert({
+  await supabase.from("automation_events").insert({
     account_id: accountId,
     recipe_slug: null,
     event_type: "alert",
@@ -145,10 +151,185 @@ async function handleCallCompleted(
   });
 }
 
+// ── Recipe-aware event routing ──────────────────────────────────────────
+
+/**
+ * Route GHL events to recipes. For inbound recipes (Pattern A), fire directly
+ * to n8n. For scheduled recipes (Pattern B), insert into recipe_triggers.
+ */
+async function routeEventToRecipes(
+  supabase: SupabaseClient,
+  accountId: string,
+  ghlEventType: string,
+  rawPayload: Record<string, unknown>,
+  activeRecipes: RecipeActivation[],
+): Promise<void> {
+  const recipeSlugs = GHL_EVENT_TO_RECIPES[ghlEventType];
+  if (!recipeSlugs?.length) return;
+
+  for (const slug of recipeSlugs) {
+    const activation = activeRecipes.find((r) => r.recipe_slug === slug);
+    if (!activation) continue;
+
+    if (INBOUND_RECIPES.has(slug)) {
+      // Pattern A: Fire directly to n8n webhook
+      await fireInboundRecipe(accountId, slug, rawPayload);
+    } else {
+      // Pattern B: Write scheduled trigger(s)
+      await writeScheduledTriggers(
+        supabase,
+        accountId,
+        slug,
+        ghlEventType,
+        rawPayload,
+      );
+    }
+  }
+}
+
+/** Pattern A: POST event data to n8n immediately. */
+async function fireInboundRecipe(
+  accountId: string,
+  recipeSlug: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const url = getN8nWebhookUrl(recipeSlug, accountId);
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: accountId, ...payload }),
+    });
+  } catch (err) {
+    console.error(
+      `[webhook-side-effects] Failed to fire inbound recipe ${recipeSlug}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/** Pattern B: Insert recipe_triggers rows with appropriate fire_at times. */
+async function writeScheduledTriggers(
+  supabase: SupabaseClient,
+  accountId: string,
+  recipeSlug: string,
+  ghlEventType: string,
+  rawPayload: Record<string, unknown>,
+): Promise<void> {
+  const offsets = SCHEDULED_RECIPE_OFFSETS[recipeSlug];
+  if (!offsets?.length) return;
+
+  const contactId =
+    typeof rawPayload.contactId === "string" ? rawPayload.contactId :
+    typeof rawPayload.contact_id === "string" ? rawPayload.contact_id :
+    null;
+
+  const rows = offsets.map((offset) => {
+    let fireAt: Date;
+
+    if (offset.offsetMinutes < 0) {
+      // Negative offset = before an event timestamp (e.g. appointment reminders)
+      const appointmentTime =
+        typeof rawPayload.startTime === "string"
+          ? new Date(rawPayload.startTime)
+          : typeof rawPayload.start_time === "string"
+            ? new Date(rawPayload.start_time)
+            : new Date();
+      fireAt = new Date(appointmentTime.getTime() + offset.offsetMinutes * 60_000);
+    } else {
+      // Positive offset = after now
+      fireAt = new Date(Date.now() + offset.offsetMinutes * 60_000);
+    }
+
+    // Don't schedule triggers in the past
+    if (fireAt.getTime() < Date.now()) return null;
+
+    return {
+      account_id: accountId,
+      recipe_slug: recipeSlug,
+      ghl_event_type: ghlEventType,
+      contact_id: contactId,
+      fire_at: fireAt.toISOString(),
+      payload: rawPayload,
+    };
+  }).filter(Boolean);
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("recipe_triggers")
+      .insert(rows);
+
+    if (error) {
+      console.error(
+        `[webhook-side-effects] Failed to insert recipe_triggers for ${recipeSlug}:`,
+        error.message,
+      );
+    }
+  }
+}
+
+// ── Missed call detection ──────────────────────────────────────────────
+
+async function handleCallStatusUpdate(
+  supabase: SupabaseClient,
+  accountId: string,
+  event: AutomationEventInsert,
+  rawPayload: Record<string, unknown>,
+  activeRecipes: RecipeActivation[],
+): Promise<void> {
+  const callStatus =
+    typeof rawPayload.status === "string" ? rawPayload.status.toLowerCase() : "";
+  const duration =
+    typeof rawPayload.duration === "number" ? rawPayload.duration : -1;
+
+  const isMissed = callStatus === "missed" || callStatus === "no-answer" || duration === 0;
+  if (!isMissed) return;
+
+  // Route to missed-call-text-back and other matching recipes
+  await routeEventToRecipes(supabase, accountId, "CallStatusUpdate", rawPayload, activeRecipes);
+}
+
+// ── Appointment scheduling (reminders) ────────────────────────────────
+
+async function handleAppointmentCreated(
+  supabase: SupabaseClient,
+  accountId: string,
+  rawPayload: Record<string, unknown>,
+  activeRecipes: RecipeActivation[],
+): Promise<void> {
+  await routeEventToRecipes(supabase, accountId, "AppointmentCreate", rawPayload, activeRecipes);
+}
+
+// ── Opportunity events (estimate follow-up, review request) ───────────
+
+async function handleOpportunityCreated(
+  supabase: SupabaseClient,
+  accountId: string,
+  rawPayload: Record<string, unknown>,
+  activeRecipes: RecipeActivation[],
+): Promise<void> {
+  await routeEventToRecipes(supabase, accountId, "OpportunityCreate", rawPayload, activeRecipes);
+}
+
+async function handleOpportunityStatusUpdate(
+  supabase: SupabaseClient,
+  accountId: string,
+  rawPayload: Record<string, unknown>,
+  activeRecipes: RecipeActivation[],
+): Promise<void> {
+  const status =
+    typeof rawPayload.status === "string" ? rawPayload.status.toLowerCase() : "";
+
+  // Review Request recipe fires only on "won" status
+  if (status !== "won") return;
+
+  await routeEventToRecipes(supabase, accountId, "OpportunityStatusUpdate", rawPayload, activeRecipes);
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────────
 
 /**
- * Process side effects after a webhook event has been written to event_log.
+ * Process side effects after a webhook event has been written to automation_events.
  * This function is fire-and-forget — it must never throw.
  */
 export async function processSideEffects(
@@ -184,8 +365,26 @@ export async function processSideEffects(
       case "call_completed":
         await handleCallCompleted(supabase, accountId, event, rawPayload);
         break;
-      // Other event types: no side effects yet.
-      // Add new cases here as recipes are built.
+    }
+
+    // Route GHL-native event types to recipes (Pattern A + B)
+    const ghlEventType = event.ghl_event_type;
+    if (ghlEventType) {
+      switch (ghlEventType) {
+        case "CallStatusUpdate":
+          await handleCallStatusUpdate(supabase, accountId, event, rawPayload, activeRecipes);
+          break;
+        case "AppointmentCreate":
+        case "AppointmentUpdate":
+          await handleAppointmentCreated(supabase, accountId, rawPayload, activeRecipes);
+          break;
+        case "OpportunityCreate":
+          await handleOpportunityCreated(supabase, accountId, rawPayload, activeRecipes);
+          break;
+        case "OpportunityStatusUpdate":
+          await handleOpportunityStatusUpdate(supabase, accountId, rawPayload, activeRecipes);
+          break;
+      }
     }
   } catch (err) {
     // Never throw from side effects — log and swallow

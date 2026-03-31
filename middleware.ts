@@ -1,9 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const AUTH_ROUTES = ["/login", "/signup"];
-const PUBLIC_ROUTES = [...AUTH_ROUTES, "/forgot-password"];
-const TRIAL_ALLOWED_ROUTES = ["/billing", "/login", "/signup"];
+const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
+const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding"];
+const TRIAL_ALLOWED_ROUTES = ["/billing", "/settings"];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -36,8 +36,8 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Allow API routes through
-  if (pathname.startsWith("/api/")) {
+  // Allow API routes through — they handle their own auth
+  if (pathname.startsWith("/api")) {
     return supabaseResponse;
   }
 
@@ -63,12 +63,12 @@ export async function middleware(request: NextRequest) {
   if (user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
     const { data: account } = await supabase
       .from("accounts")
-      .select("trial_ends_at, plan_slug, onboarding_done_at")
+      .select("trial_ends_at, plan_slug, onboarding_completed_at")
       .single();
 
     if (account) {
       // Onboarding gate — force incomplete onboarding to /onboarding
-      if (!account.onboarding_done_at && !pathname.startsWith("/onboarding")) {
+      if (!account.onboarding_completed_at && !pathname.startsWith("/onboarding")) {
         const url = request.nextUrl.clone();
         url.pathname = "/onboarding";
         return NextResponse.redirect(url);

@@ -46,6 +46,8 @@ export type ConfigFieldType =
   | "text"
   | "number"
   | "boolean"
+  | "toggle"
+  | "phone"
   | "select"
   | "textarea";
 
@@ -67,6 +69,8 @@ export interface RecipeDefinition {
   name: string;
   description: string;
   detailedDescription: string;
+  /** When set, used for vertical-specific recommendations in the recipe grid */
+  vertical?: Vertical | null;
   funnelStage: FunnelStage;
   releasePhase: ReleasePhase;
   /** When set, recipe is scoped to that vertical; null = all verticals */
@@ -86,8 +90,8 @@ export interface RecipeDefinition {
 }
 
 // ── Activation Status ──────────────────────────────────────────────────────
-// DB enum is 'active' | 'paused' | 'error'.
-// 'deactivated' is a UI-derived state: no activation row exists for this recipe.
+// DB enum includes 'deactivated' for explicit deprovision; UI may still derive
+// "deactivated" when no row exists for a recipe.
 
 export type RecipeActivationStatus =
   | "active"
@@ -97,8 +101,12 @@ export type RecipeActivationStatus =
 
 // ── Recipe Activation (maps to recipe_activations DB row) ──────────────────
 
-/** DB-aligned status (does not include 'deactivated' — that's UI-derived) */
-export type RecipeActivationDbStatus = "active" | "paused" | "error";
+/** DB-aligned status */
+export type RecipeActivationDbStatus =
+  | "active"
+  | "paused"
+  | "error"
+  | "deactivated";
 
 export interface RecipeActivation {
   id: string;

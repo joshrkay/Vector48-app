@@ -103,7 +103,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
         label: "Greeting Script",
         type: "textarea",
         required: true,
-        defaultFromProfile: "voice_greeting",
+        defaultFromProfile: "greeting_text",
       },
       {
         name: "forwardingNumber",

@@ -9,7 +9,7 @@ const STAGE_LABELS: Record<FunnelStage, string> = Object.fromEntries(
 
 export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
   const style = STAGE_STYLES[stage];
-
+  const label = FUNNEL_STAGE_META[stage]?.label ?? stage;
   return (
     <span
       className={cn(
@@ -18,7 +18,7 @@ export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
         style.text,
       )}
     >
-      {STAGE_LABELS[stage]}
+      {FUNNEL_STAGE_META[stage].label}
     </span>
   );
 }

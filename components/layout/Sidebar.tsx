@@ -5,15 +5,19 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Zap,
+  ClipboardList,
   Users,
   MessageSquare,
   Kanban,
   CalendarDays,
   Settings,
   CreditCard,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+
+const MS_PER_DAY = 86_400_000;
 
 interface NavItem {
   label: string;
@@ -24,6 +28,18 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Recipes", href: "/recipes", icon: Zap },
+];
+
+const toolsNavItems: NavItem[] = [
+  {
+    label: "Estimate Audit",
+    href: "/recipes/estimate-audit",
+    icon: ClipboardList,
+  },
+];
+
+const devNavItems: NavItem[] = [
+  { label: "n8n test", href: "/dev/n8n-test", icon: Workflow },
 ];
 
 const crmNavItems: NavItem[] = [
@@ -37,6 +53,11 @@ const bottomNavItems: NavItem[] = [
   { label: "Settings", href: "/settings", icon: Settings },
   { label: "Billing", href: "/billing", icon: CreditCard },
 ];
+
+interface SidebarProps {
+  planSlug?: string;
+  trialDaysLeft?: number;
+}
 
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   const isActive =
@@ -64,6 +85,10 @@ interface SidebarProps {
   trialEndsAt: string | null;
 }
 
+const showN8nDevNav =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_ENABLE_N8N_DEV_TOOLS === "true";
+
 export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
   const pathname = usePathname();
 
@@ -72,7 +97,7 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
   if (isTrial && trialEndsAt) {
     daysLeft = Math.max(
       0,
-      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86_400_000)
+      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / MS_PER_DAY)
     );
   }
 
@@ -93,6 +118,30 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
           ))}
         </div>
 
+        <div className="mt-4">
+          <p className="mx-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+            Tools
+          </p>
+          <div className="space-y-1">
+            {toolsNavItems.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} />
+            ))}
+          </div>
+        </div>
+
+        {showN8nDevNav && (
+          <div className="mt-4">
+            <p className="mx-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+              Dev
+            </p>
+            <div className="space-y-1">
+              {devNavItems.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* CRM section */}
         <div className="mt-4">
           <p className="mx-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
@@ -109,17 +158,10 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
         <div className="flex-1" />
 
         {/* Trial badge */}
-        {isTrial && (
+        {planSlug === "trial" && trialDaysLeft !== undefined && (
           <div className="mx-4 mb-3">
-            <div
-              className={cn(
-                "rounded-full px-3 py-1.5 text-center text-[12px]",
-                daysLeft <= 3
-                  ? "bg-amber-500/20 text-amber-400"
-                  : "bg-white/10 text-white/70"
-              )}
-            >
-              {daysLeft} days left in trial
+            <div className="rounded-full bg-amber-500/20 px-3 py-1.5 text-center text-[12px] text-amber-400">
+              {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in trial
             </div>
           </div>
         )}

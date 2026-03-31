@@ -1,5 +1,6 @@
 import type { RecipeDefinition, FunnelStage } from "@/types/recipes";
 import type { Database } from "@/lib/supabase/types";
+import type { RecipeDefinition } from "@/types/recipes";
 
 export type { FunnelStage };
 
@@ -16,3 +17,6 @@ export interface RecipeWithStatus extends RecipeDefinition {
 
 export type RecipeActivationRow =
   Database["public"]["Tables"]["recipe_activations"]["Row"];
+
+/** Alias for backward compatibility — catalog entries use the full definition. */
+export type RecipeCatalogEntry = RecipeDefinition;

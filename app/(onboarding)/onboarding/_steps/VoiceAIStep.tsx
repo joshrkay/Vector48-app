@@ -26,12 +26,12 @@ const GREETING_TEMPLATES: Record<string, string> = {
 
 export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
   const voiceGender = useOnboarding((s) => s.voiceGender);
-  const voiceGreeting = useOnboarding((s) => s.voiceGreeting);
+  const greetingText = useOnboarding((s) => s.greetingText);
   const businessName = useOnboarding((s) => s.businessName);
   const vertical = useOnboarding((s) => s.vertical);
 
   const defaultGreeting =
-    voiceGreeting ||
+    greetingText ||
     (GREETING_TEMPLATES[vertical || "hvac"] || GREETING_TEMPLATES.hvac).replace(
       "{business}",
       businessName || "our company"
@@ -47,13 +47,13 @@ export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
     resolver: zodResolver(voiceAISchema),
     defaultValues: {
       voiceGender: voiceGender || "male",
-      voiceGreeting: defaultGreeting,
+      greetingText: defaultGreeting,
     },
     mode: "onSubmit",
   });
 
   const watchedGender = watch("voiceGender");
-  const watchedGreeting = watch("voiceGreeting");
+  const watchedGreeting = watch("greetingText");
 
   useEffect(() => {
     onValidityChange(watchedGreeting.trim().length > 0);
@@ -92,14 +92,14 @@ export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
 
       {/* Greeting textarea */}
       <textarea
-        {...register("voiceGreeting")}
+        {...register("greetingText")}
         rows={4}
         className="mt-4 w-full resize-none rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         placeholder="Enter your greeting message..."
       />
-      {errors.voiceGreeting && (
+      {errors.greetingText && (
         <p className="mt-2 text-sm text-error">
-          {errors.voiceGreeting.message}
+          {errors.greetingText.message}
         </p>
       )}
       <p className="mt-1 text-xs text-text-secondary">
