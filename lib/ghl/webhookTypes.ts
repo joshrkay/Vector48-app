@@ -4,12 +4,37 @@
 // the inbound webhook data, NOT the API response types (those live in types.ts).
 // ---------------------------------------------------------------------------
 
+export const GHL_EVENT_TYPE_MAP = {
+  ContactCreate: "contact_created",
+  ContactUpdate: "contact_updated",
+  CallCompleted: "call_completed",
+  InboundMessage: "message_received",
+  OpportunityCreate: "opportunity_created",
+  OpportunityStageUpdate: "opportunity_moved",
+  AppointmentCreate: "appointment_created",
+  AppointmentStatusUpdate: "appointment_updated",
+  ConversationUnreadUpdate: "conversation_unread",
+} as const;
+
+export type GHLRawEventType = keyof typeof GHL_EVENT_TYPE_MAP;
+export type GHLNormalizedEventType = (typeof GHL_EVENT_TYPE_MAP)[GHLRawEventType];
+export type GHLNormalizedEventTypeOrUnknown = GHLNormalizedEventType | "ghl_event";
+
+export function normalizeGHLEventType(rawType?: string | null): GHLNormalizedEventTypeOrUnknown {
+  if (!rawType) return "ghl_event";
+  return GHL_EVENT_TYPE_MAP[rawType as GHLRawEventType] ?? "ghl_event";
+}
+
 // ── Base fields present (inconsistently) across all GHL webhooks ──────────
 
 export interface GHLWebhookBase {
   /** GHL event type — may arrive as `type` or `event` */
   type?: string;
   event?: string;
+  /** Verification fields occasionally included in webhook body */
+  token?: string;
+  webhookToken?: string;
+  verificationToken?: string;
   /** Location/sub-account ID — casing varies between events */
   locationId?: string;
   location_id?: string;
@@ -63,8 +88,6 @@ export interface GHLWebhookContactUpdate extends GHLWebhookBase {
 }
 
 // ── CallCompleted ─────────────────────────────────────────────────────────
-// Flag: `callDuration` may be number (seconds) or absent.
-//       `direction` vs `callDirection` varies.
 
 export interface GHLWebhookCallCompleted extends GHLWebhookBase {
   type?: "CallCompleted";
@@ -119,8 +142,6 @@ export interface GHLWebhookOpportunityCreate extends GHLWebhookBase {
 }
 
 // ── OpportunityStageUpdate ────────────────────────────────────────────────
-// Flag: Stage info may be `pipelineStage`, `stageName`, `currentStage`,
-//       or nested under `pipeline.stage.name`.
 
 export interface GHLWebhookOpportunityStageUpdate extends GHLWebhookBase {
   type?: "OpportunityStageUpdate";
@@ -146,7 +167,6 @@ export interface GHLWebhookOpportunityStageUpdate extends GHLWebhookBase {
 }
 
 // ── AppointmentCreate ─────────────────────────────────────────────────────
-// Flag: Date fields may be `startTime`, `start_time`, or `appointmentTime`.
 
 export interface GHLWebhookAppointmentCreate extends GHLWebhookBase {
   type?: "AppointmentCreate";
@@ -209,6 +229,18 @@ export type GHLWebhookPayload =
   | GHLWebhookAppointmentCreate
   | GHLWebhookAppointmentStatusUpdate
   | GHLWebhookConversationUnreadUpdate;
+
+export type GHLWebhookDiscriminatedPayload =
+  | { normalizedType: "contact_created"; payload: GHLWebhookContactCreate }
+  | { normalizedType: "contact_updated"; payload: GHLWebhookContactUpdate }
+  | { normalizedType: "call_completed"; payload: GHLWebhookCallCompleted }
+  | { normalizedType: "message_received"; payload: GHLWebhookInboundMessage }
+  | { normalizedType: "opportunity_created"; payload: GHLWebhookOpportunityCreate }
+  | { normalizedType: "opportunity_moved"; payload: GHLWebhookOpportunityStageUpdate }
+  | { normalizedType: "appointment_created"; payload: GHLWebhookAppointmentCreate }
+  | { normalizedType: "appointment_updated"; payload: GHLWebhookAppointmentStatusUpdate }
+  | { normalizedType: "conversation_unread"; payload: GHLWebhookConversationUnreadUpdate }
+  | { normalizedType: "ghl_event"; payload: GHLWebhookBase & Record<string, unknown> };
 
 // ── Normalized event shape written to automation_events ───────────────────
 
