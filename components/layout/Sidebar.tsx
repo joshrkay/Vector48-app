@@ -5,15 +5,19 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Zap,
+  ClipboardList,
   Users,
   MessageSquare,
   Kanban,
   CalendarDays,
   Settings,
   CreditCard,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+
+const MS_PER_DAY = 86_400_000;
 
 interface NavItem {
   label: string;
@@ -24,6 +28,18 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Recipes", href: "/recipes", icon: Zap },
+];
+
+const toolsNavItems: NavItem[] = [
+  {
+    label: "Estimate Audit",
+    href: "/recipes/estimate-audit",
+    icon: ClipboardList,
+  },
+];
+
+const devNavItems: NavItem[] = [
+  { label: "n8n test", href: "/dev/n8n-test", icon: Workflow },
 ];
 
 const crmNavItems: NavItem[] = [
@@ -64,8 +80,26 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   );
 }
 
-export function Sidebar({ planSlug, trialDaysLeft }: SidebarProps) {
+interface SidebarProps {
+  planSlug: string;
+  trialEndsAt: string | null;
+}
+
+const showN8nDevNav =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_ENABLE_N8N_DEV_TOOLS === "true";
+
+export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
   const pathname = usePathname();
+
+  const isTrial = planSlug === "trial";
+  let daysLeft = 0;
+  if (isTrial && trialEndsAt) {
+    daysLeft = Math.max(
+      0,
+      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / MS_PER_DAY)
+    );
+  }
 
   return (
     <aside className="hidden md:flex md:w-60 md:flex-col fixed left-0 top-0 h-screen bg-[var(--brand)] text-white z-40">
@@ -83,6 +117,30 @@ export function Sidebar({ planSlug, trialDaysLeft }: SidebarProps) {
             <NavLink key={item.href} item={item} pathname={pathname} />
           ))}
         </div>
+
+        <div className="mt-4">
+          <p className="mx-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+            Tools
+          </p>
+          <div className="space-y-1">
+            {toolsNavItems.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} />
+            ))}
+          </div>
+        </div>
+
+        {showN8nDevNav && (
+          <div className="mt-4">
+            <p className="mx-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+              Dev
+            </p>
+            <div className="space-y-1">
+              {devNavItems.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* CRM section */}
         <div className="mt-4">

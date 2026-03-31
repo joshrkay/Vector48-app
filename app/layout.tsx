@@ -29,7 +29,7 @@ export default function RootLayout({
     <html lang="en" className={`${syne.variable} ${dmSans.variable}`}>
       <body className="font-sans antialiased">
         {children}
-        <Toaster />
+        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   );

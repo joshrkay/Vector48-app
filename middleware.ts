@@ -42,7 +42,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Not authenticated — redirect to login for protected routes
-  if (!user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
+  if (
+    !user &&
+    !PUBLIC_ROUTES.some((r) => pathname.startsWith(r)) &&
+    !pathname.startsWith("/onboarding")
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
@@ -55,16 +59,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Consolidated account checks for authenticated users
-  if (user) {
+  // Consolidated account checks for authenticated users on app routes
+  if (user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
     const { data: account } = await supabase
       .from("accounts")
-      .select("trial_ends_at, plan_slug, onboarding_done_at")
+      .select("trial_ends_at, plan_slug, onboarding_completed_at")
       .single();
 
     if (account) {
       // Onboarding gate — force incomplete onboarding to /onboarding
-      if (!account.onboarding_done_at && !pathname.startsWith("/onboarding")) {
+      if (!account.onboarding_completed_at && !pathname.startsWith("/onboarding")) {
         const url = request.nextUrl.clone();
         url.pathname = "/onboarding";
         return NextResponse.redirect(url);
@@ -79,7 +83,12 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith(r)
       );
 
-      if (trialExpired && isTrialPlan && !isAllowedRoute) {
+      if (
+        trialExpired &&
+        isTrialPlan &&
+        !isAllowedRoute &&
+        !pathname.startsWith("/onboarding")
+      ) {
         const url = request.nextUrl.clone();
         url.pathname = "/billing";
         url.searchParams.set("reason", "trial_expired");
@@ -93,6 +102,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -1,5 +1,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/SignOutButton";
+import { redirect } from "next/navigation";
+import { getSessionData } from "@/lib/data/session";
 
 const stats = [
   { label: "Calls Handled", value: "0" },
@@ -62,6 +64,9 @@ export default async function DashboardPage() {
             </p>
             <p className="font-heading font-bold text-[32px] mt-1">
               {stat.value}
+            </p>
+            <p className="text-[12px] text-[var(--text-secondary)] mt-1">
+              This week
             </p>
           </div>
         ))}
