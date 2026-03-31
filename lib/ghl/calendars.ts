@@ -19,7 +19,7 @@ import type {
 // ── Calendars ──────────────────────────────────────────────────────────────
 
 export function getCalendars(opts?: GHLClientOptions) {
-  return ghlGet<GHLCalendarsListResponse>("/calendars", opts);
+  return ghlGet<GHLCalendarsListResponse>("/calendars/", opts);
 }
 
 export function getCalendar(calendarId: string, opts?: GHLClientOptions) {

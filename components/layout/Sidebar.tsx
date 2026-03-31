@@ -54,6 +54,11 @@ const bottomNavItems: NavItem[] = [
   { label: "Billing", href: "/billing", icon: CreditCard },
 ];
 
+interface SidebarProps {
+  planSlug?: string;
+  trialDaysLeft?: number;
+}
+
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   const isActive =
     pathname === item.href || pathname.startsWith(item.href + "/");
@@ -153,10 +158,10 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
         <div className="flex-1" />
 
         {/* Trial badge */}
-        {planSlug === "trial" && daysLeft > 0 && (
+        {planSlug === "trial" && trialDaysLeft !== undefined && (
           <div className="mx-4 mb-3">
             <div className="rounded-full bg-amber-500/20 px-3 py-1.5 text-center text-[12px] text-amber-400">
-              {daysLeft} {daysLeft === 1 ? "day" : "days"} left in trial
+              {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in trial
             </div>
           </div>
         )}

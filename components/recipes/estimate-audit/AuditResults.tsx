@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -22,7 +21,6 @@ const currency = new Intl.NumberFormat("en-US", {
 interface AuditResultsProps {
   auditLogId: string | null;
   suggestions: AuditSuggestion[];
-  summary?: string | null;
   /** Sum of all suggestion values from the latest analysis (API). */
   totalPotentialValue?: number | null;
   onHistoryRefresh?: () => void;
@@ -33,7 +31,6 @@ type RowState = "pending" | "accepted" | "ignored";
 export function AuditResults({
   auditLogId,
   suggestions,
-  summary,
   totalPotentialValue,
   onHistoryRefresh,
 }: AuditResultsProps) {
@@ -136,12 +133,6 @@ export function AuditResults({
         <p className="text-sm text-destructive">{acceptError}</p>
       )}
 
-      {summary && (
-        <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-foreground/90">
-          {summary}
-        </div>
-      )}
-
       <ul className="space-y-3">
         {suggestions.map((s, i) => (
           <li key={`${s.item}-${i}`}>
@@ -152,11 +143,6 @@ export function AuditResults({
               )}
             >
               <CardHeader className="pb-2">
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{s.category.replace("_", " ")}</Badge>
-                  <Badge variant="outline">Confidence: {s.confidence}</Badge>
-                  <Badge variant="outline">Priority: {s.priority}</Badge>
-                </div>
                 <CardTitle className="text-base font-bold leading-snug">
                   {s.item}
                 </CardTitle>

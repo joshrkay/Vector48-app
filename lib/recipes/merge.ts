@@ -1,19 +1,10 @@
-import type { RecipeActivation } from "@/types/recipes";
-import type {
-  RecipeCatalogEntry,
-  RecipeActivationRow,
-  RecipeWithStatus,
-  Vertical,
-} from "./types";
+import type { RecipeDefinition } from "@/types/recipes";
+import type { RecipeActivationRow, RecipeWithStatus, Vertical } from "./types";
 
 /**
  * Merge the static recipe catalog with the customer's activation rows.
  *
  * Status logic:
- *  - activation exists with status "active"           → "active"
- *  - activation exists with status "paused" / "error" → same DB status
- *  - activation exists with status "deactivated"      → "available" (can re-activate)
- *  - no activation                                    → marketplaceListing
  *  - activation exists with status "active"        → "active"
  *  - activation exists with status "paused"/"error" → "paused"
  *  - no activation + releasePhase "ga" / "v1" / "v2" / "v3" → "available"
@@ -26,9 +17,8 @@ import type {
  *  4. Coming soon — v2/v3 recipes
  */
 export function mergeRecipesWithActivations(
-  catalog: RecipeCatalogEntry[],
+  catalog: RecipeDefinition[],
   activations: RecipeActivationRow[],
-  accountVertical?: Vertical,
 ): RecipeWithStatus[] {
   const activationMap = new Map(
     activations.map((a) => [a.recipe_slug, a]),
@@ -37,61 +27,45 @@ export function mergeRecipesWithActivations(
   const merged: RecipeWithStatus[] = catalog.map((entry) => {
     const activation = activationMap.get(entry.slug);
 
-    let activationStatus: RecipeWithStatus["activationStatus"];
+    let status: RecipeWithStatus["status"];
     if (activation && activation.status === "active") {
-      activationStatus = "active";
+      status = "active";
     } else if (
       activation &&
       (activation.status === "paused" || activation.status === "error")
     ) {
-      activationStatus = activation.status;
-    } else if (activation && activation.status === "deactivated") {
-      activationStatus = "available";
+      status = "paused";
+    } else if (entry.releasePhase === "coming_soon") {
+      status = "coming_soon";
     } else {
-      activationStatus = entry.marketplaceListing;
+      status = "available";
     }
-
-    const mappedActivation: RecipeActivation | undefined = activation
-      ? {
-          id: activation.id,
-          account_id: activation.account_id,
-          recipe_slug: activation.recipe_slug,
-          status: activation.status,
-          config: activation.config,
-          n8n_workflow_id: activation.n8n_workflow_id,
-          activated_at: activation.activated_at,
-          last_triggered_at: activation.last_triggered_at,
-          deactivated_at: activation.deactivated_at,
-          error_message: activation.error_message,
-        }
-      : undefined;
 
     return {
       ...entry,
-      activationStatus,
-      activation: mappedActivation,
+      status,
       lastTriggeredAt: activation?.last_triggered_at ?? null,
-      config: activation?.config ?? undefined,
+      activationId: activation?.id ?? null,
+      config: activation?.config ?? null,
     };
   });
 
-  // Sort priority: active (0), available (1), coming_soon (2)
-  const statusOrder: Record<RecipeWithStatus["activationStatus"], number> = {
+  // Sort priority: active (0), paused (1), available (2), coming_soon (3)
+  const statusOrder: Record<RecipeWithStatus["status"], number> = {
     active: 0,
     paused: 1,
     error: 1,
-    deactivated: 2,
     available: 2,
     coming_soon: 3,
   };
 
   return merged.sort((a, b) => {
-    const oa = statusOrder[a.activationStatus];
-    const ob = statusOrder[b.activationStatus];
+    const oa = statusOrder[a.status];
+    const ob = statusOrder[b.status];
     if (oa !== ob) return oa - ob;
 
     // Within active: sort by last_triggered_at desc (nulls last)
-    if (a.activationStatus === "active" && b.activationStatus === "active") {
+    if (a.status === "active" && b.status === "active") {
       if (a.lastTriggeredAt && b.lastTriggeredAt) {
         return b.lastTriggeredAt.localeCompare(a.lastTriggeredAt);
       }
@@ -101,10 +75,7 @@ export function mergeRecipesWithActivations(
     }
 
     // Within available: vertical-matched first, then universal, then non-matching
-    if (
-      a.activationStatus === "available" &&
-      b.activationStatus === "available"
-    ) {
+    if (a.status === "available" && b.status === "available") {
       const aMatch =
         a.vertical === accountVertical ? 0 : a.vertical == null ? 1 : 2;
       const bMatch =
