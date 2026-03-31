@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // POST /api/ghl/cache-invalidate
-// Called by the Supabase Edge Function (ghl-webhook) to bust the in-memory
-// GHL cache when a webhook event arrives.
+// DEPRECATED: Webhook-driven invalidation now runs directly from
+// /api/webhooks/ghl after insert success.
+// This endpoint is retained for backward compatibility only.
 // ---------------------------------------------------------------------------
 
 import { NextResponse } from "next/server";
@@ -38,7 +39,20 @@ export async function POST(request: Request) {
 
     const deleted = invalidateGHLCache(accountId, eventType);
 
-    return NextResponse.json({ ok: true, deleted });
+    return NextResponse.json(
+      {
+        ok: true,
+        deleted,
+        deprecated: true,
+        message:
+          "Deprecated endpoint. Invalidation now runs from /api/webhooks/ghl after insert success.",
+      },
+      {
+        headers: {
+          "X-API-Deprecated": "true",
+        },
+      },
+    );
   } catch {
     return NextResponse.json(
       { error: "Invalid request body" },

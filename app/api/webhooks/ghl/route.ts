@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
+import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
 
 // Timing-safe token comparison — hash both sides to fixed length so
 // timingSafeEqual never leaks the secret's length via early return.
@@ -20,11 +21,13 @@ function verifyToken(provided: string | null, expected: string): boolean {
 export async function POST(req: Request) {
   // 1. Parse body
   let body: Record<string, unknown>;
+  const parseStartedAt = Date.now();
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  parseMs = Date.now() - parseStartedAt;
 
   // 2. Extract and validate location ID (casing varies across GHL events)
   const rawLocationId = body.locationId ?? body.location_id;
@@ -48,11 +51,13 @@ export async function POST(req: Request) {
   // 3. Look up account by GHL location ID
   // Use .limit(1) instead of .single() to avoid errors when no rows match
   const supabase = getSupabaseAdmin();
+  const lookupStartedAt = Date.now();
   const { data: accounts } = await supabase
     .from("accounts")
     .select("id, ghl_webhook_secret")
     .eq("ghl_location_id", locationId)
     .limit(1);
+  lookupMs = Date.now() - lookupStartedAt;
 
   const account = accounts?.[0] ?? null;
   if (!account) {
@@ -83,30 +88,35 @@ export async function POST(req: Request) {
   // 5. Parse event type and build normalized event
   const ghlEventType = (body.type as string) ?? (body.event as string) ?? "unknown";
   const parsed = parseGHLWebhook(body, ghlEventType);
-
   const eventRow = {
     ...parsed,
     account_id: account.id,
   };
 
-  // 6. Insert into automation_events with idempotency
+  // 5) Attempt deduplicated insert (conflict-safe for retries)
+  const insertStartedAt = Date.now();
   const { error: insertError } = await supabase
     .from("automation_events")
-    .insert(eventRow);
+    .upsert(eventRow, {
+      onConflict: "account_id,ghl_event_id",
+      ignoreDuplicates: true,
+    });
+  insertMs = Date.now() - insertStartedAt;
 
   if (insertError) {
-    // 23505 = unique_violation — duplicate ghl_event_id, skip silently
-    if (insertError.code === "23505") {
-      return NextResponse.json({ received: true, duplicate: true });
-    }
     console.error("[ghl-webhook] Insert failed:", insertError.message);
     return NextResponse.json({ error: "Insert failed" }, { status: 500 });
   }
 
-  // 7. Fire side effects async — must not block the response
+  // 7. Fire-and-forget cache invalidation — must not block the response
+  Promise.resolve()
+    .then(() => invalidateGHLCache(account.id, ghlEventType))
+    .catch((err) => console.error("[ghl-webhook] Cache invalidation error:", err));
+
+  // 8. Fire side effects async — must not block the response
   processSideEffects(account.id, eventRow, body).catch((err) =>
     console.error("[ghl-webhook] Side effect error:", err)
   );
 
-  return NextResponse.json({ received: true });
+  return response;
 }
