@@ -4,11 +4,18 @@
 // Server-only.
 // ---------------------------------------------------------------------------
 
+import { revalidateTag } from "next/cache";
 import { cacheStore } from "./cacheStore";
+
+export type GHLCacheResource =
+  | "contacts"
+  | "opportunities"
+  | "appointments"
+  | "conversations";
 
 // ── Event → resource mapping ──────────────────────────────────────────────
 
-const EVENT_RESOURCE_MAP: Record<string, string[]> = {
+const EVENT_RESOURCE_MAP: Record<string, GHLCacheResource[]> = {
   ContactCreate: ["contacts"],
   ContactUpdate: ["contacts"],
   OpportunityCreate: ["opportunities"],
@@ -19,13 +26,24 @@ const EVENT_RESOURCE_MAP: Record<string, string[]> = {
   InboundMessage: ["conversations"],
 };
 
+function buildAccountResourceTag(
+  accountId: string,
+  resource: GHLCacheResource,
+): string {
+  return `account:${accountId}:${resource}`;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 /**
  * Invalidates cached GHL data for the given account based on the webhook
  * event type. Only busts the relevant resource caches.
  *
- * @returns The number of cache entries deleted.
+ * Invalidation targets:
+ * - Next.js tag cache via `revalidateTag(account:{id}:{resource})`
+ * - In-memory GHL cache keys in the form `ghl:{accountId}:{resource}:...`
+ *
+ * @returns The number of in-memory cache entries deleted.
  */
 export function invalidateGHLCache(
   accountId: string,
@@ -33,6 +51,10 @@ export function invalidateGHLCache(
 ): number {
   const resources = EVENT_RESOURCE_MAP[eventType];
   if (!resources || resources.length === 0) return 0;
+
+  for (const resource of resources) {
+    revalidateTag(buildAccountResourceTag(accountId, resource));
+  }
 
   let deleted = 0;
   const prefixes = resources.map((r) => `ghl:${accountId}:${r}:`);
@@ -52,6 +74,17 @@ export function invalidateGHLCache(
  * account disconnect).
  */
 export function invalidateAllForAccount(accountId: string): number {
+  const resources: GHLCacheResource[] = [
+    "contacts",
+    "opportunities",
+    "appointments",
+    "conversations",
+  ];
+
+  for (const resource of resources) {
+    revalidateTag(buildAccountResourceTag(accountId, resource));
+  }
+
   const prefix = `ghl:${accountId}:`;
   let deleted = 0;
 

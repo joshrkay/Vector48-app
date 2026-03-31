@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
+import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
 
 // Timing-safe token comparison — hash both sides to fixed length so
 // timingSafeEqual never leaks the secret's length via early return.
@@ -96,7 +97,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Insert failed" }, { status: 500 });
   }
 
-  // 7. Fire side effects async — must not block the response
+  // 7. Fire-and-forget cache invalidation — must not block the response
+  Promise.resolve()
+    .then(() => invalidateGHLCache(account.id, ghlEventType))
+    .catch((err) => console.error("[ghl-webhook] Cache invalidation error:", err));
+
+  // 8. Fire side effects async — must not block the response
   processSideEffects(account.id, eventRow, body).catch((err) =>
     console.error("[ghl-webhook] Side effect error:", err)
   );
