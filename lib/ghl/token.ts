@@ -9,31 +9,23 @@ import crypto from "node:crypto";
 import type { Database } from "@/lib/supabase/types";
 import { GHLClient } from "./client";
 
-// ── AES-256-GCM helpers ────────────────────────────────────────────────────
+// ── AES-256-GCM decryption ─────────────────────────────────────────────────
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
-const KEY_BYTES = 32; // AES-256 requires exactly 32 bytes (64 hex chars)
-
-function resolveKey(): Buffer {
-  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
-  if (!key) throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
-  const buf = Buffer.from(key, "hex");
-  if (buf.length !== KEY_BYTES) {
-    throw new Error(
-      `GHL_TOKEN_ENCRYPTION_KEY must be ${KEY_BYTES} bytes (${KEY_BYTES * 2} hex chars); got ${buf.length} bytes`,
-    );
-  }
-  return buf;
-}
 
 /**
  * Encrypt a token with AES-256-GCM for storage on accounts.ghl_token_encrypted.
  * Format: base64(iv + ciphertext + authTag) — matches decryptToken.
  */
 export function encryptGhlToken(plain: string): string {
-  const keyBuffer = resolveKey();
+  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
+  }
+
+  const keyBuffer = Buffer.from(key, "hex");
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv);
   const ciphertext = Buffer.concat([
@@ -50,7 +42,12 @@ export function encryptGhlToken(plain: string): string {
  * Expected format: base64(iv + ciphertext + authTag)
  */
 function decryptToken(encrypted: string): string {
-  const keyBuffer = resolveKey();
+  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
+  }
+
+  const keyBuffer = Buffer.from(key, "hex");
   const data = Buffer.from(encrypted, "base64");
 
   const iv = data.subarray(0, IV_LENGTH);
