@@ -306,3 +306,24 @@
 [Tue Mar 31 09:38:33 MST 2026] Changes detected:
  M watch-push.log
 [Tue Mar 31 09:38:54 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...
+[Tue Mar 31 09:39:25 MST 2026] Pushed OK
+[Tue Mar 31 09:39:40 MST 2026] Changes detected:
+ M .env.local.example
+ M app/(onboarding)/onboarding/_steps/VerticalStep.tsx
+ M app/(onboarding)/onboarding/_steps/VoiceAIStep.tsx
+ M components/settings/VoiceSettings.tsx
+ M lib/ghl/client.ts
+ M lib/ghl/index.ts
+ M watch-push.log
+[Tue Mar 31 09:40:00 MST 2026] Still changing, retrying...
+[Tue Mar 31 09:40:16 MST 2026] Changes detected:
+ M .env.local.example
+ M app/(onboarding)/onboarding/_steps/VerticalStep.tsx
+ M app/(onboarding)/onboarding/_steps/VoiceAIStep.tsx
+ M components/recipes/ActivationSheet.tsx
+ M components/settings/VoiceSettings.tsx
+ M lib/ghl/client.ts
+ M lib/ghl/index.ts
+ M lib/recipes/activationValidator.ts
+ M watch-push.log
+[Tue Mar 31 09:40:37 MST 2026] Committing and pushing to feat/ghl-resource-modules-and-tests...

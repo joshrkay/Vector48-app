@@ -22,6 +22,8 @@ const GREETING_TEMPLATES: Record<string, string> = {
     "Hi, this is {business}. If you're dealing with storm damage or a leak, you've called the right place. How can I help?",
   landscaping:
     "Thanks for calling {business}. We'd love to help with your outdoor space. What can we do for you?",
+  other:
+    "Thanks for calling {business}. How can we help you today?",
 };
 
 export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {

@@ -136,6 +136,6 @@ export async function assertPlanAllowsMoreActivations(
     code: "PLAN_LIMIT",
     planDisplayName,
     message: `You've reached your ${planDisplayName} limit for active recipes. Upgrade to Growth for unlimited recipes.`,
-    upgradeHref: "/settings?tab=billing",
+    upgradeHref: "/billing",
   };
 }

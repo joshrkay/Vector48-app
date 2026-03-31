@@ -58,7 +58,7 @@ export function VoiceSettings({ account }: { account: AccountRow }) {
     }
     if (data.warnings?.includes("ghl_voice_agent")) {
       toast.warning(
-        "Saved locally, but we couldn't sync the name to your phone system. We'll retry automatically.",
+        "Saved locally, but we couldn't sync your voice settings to your phone system. We'll retry automatically.",
       );
     } else {
       toast.success("Settings saved");

@@ -493,7 +493,7 @@ export class GHLClient {
   /** Voice AI agents (HighLevel Voice AI public API). */
   readonly voiceAi = {
     listAgents: (params: { locationId: string }) => {
-      return this.get<GHLVoiceAgentsListResponse>("/voice-ai/agents", {
+      return this.get<GHLVoiceAgentsListResponse>("/voice-ai/agents/", {
         locationId: params.locationId,
       });
     },
