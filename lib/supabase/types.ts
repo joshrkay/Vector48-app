@@ -70,13 +70,10 @@ export type Database = {
           subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at: string;
           service_area: string | null;
-          business_hours: Record<string, unknown> | null;
-          voice_gender: string | null;
           voice_greeting: string | null;
           notification_sms: boolean;
           notification_email: boolean;
           notification_contact: string | null;
-          onboarding_step: number;
           provisioning_step: number;
           updated_at: string;
         };
@@ -115,13 +112,10 @@ export type Database = {
           subscription_status?: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at?: string;
           service_area?: string | null;
-          business_hours?: Record<string, unknown> | null;
-          voice_gender?: string | null;
           voice_greeting?: string | null;
           notification_sms?: boolean;
           notification_email?: boolean;
           notification_contact?: string | null;
-          onboarding_step?: number;
           provisioning_step?: number;
           updated_at?: string;
         };

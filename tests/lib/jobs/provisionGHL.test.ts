@@ -87,7 +87,6 @@ describe("provisionGHL", () => {
       createMockAccount({
         provisioning_step: 3,
         ghl_location_id: "loc_mock_001",
-        ghl_sub_account_id: "loc_mock_001",
         ghl_token_encrypted: encryptedToken,
       }),
     );
@@ -128,7 +127,6 @@ describe("provisionGHL", () => {
       createMockAccount({
         provisioning_step: 3,
         ghl_location_id: "loc_mock_001",
-        ghl_sub_account_id: "loc_mock_001",
         ghl_token_encrypted: encryptedToken,
       }),
     );

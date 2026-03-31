@@ -46,6 +46,8 @@ export type ConfigFieldType =
   | "text"
   | "number"
   | "boolean"
+  | "toggle"
+  | "phone"
   | "select"
   | "textarea";
 

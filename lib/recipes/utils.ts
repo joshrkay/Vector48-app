@@ -3,11 +3,8 @@
 // Pure helpers for filtering and querying the static recipe catalog.
 // ---------------------------------------------------------------------------
 
-import type {
-  FunnelStage,
-  RecipeCatalogEntry,
-  ReleasePhase,
-} from "./types";
+import type { RecipeCatalogEntry } from "./types";
+import type { FunnelStage, ReleasePhase } from "@/types/recipes";
 import { RECIPE_CATALOG } from "./catalog";
 
 /** Look up a single recipe by its unique slug. */
