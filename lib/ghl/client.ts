@@ -49,8 +49,6 @@ const GHL_BASE_URL = "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = "2021-07-28";
 const MAX_RETRIES = 3;
 const RETRY_BACKOFF_MS = [1_000, 2_000, 4_000];
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const RETRY_BASE_MS = 1_000;
 const RATE_LIMIT_PER_MIN = 120;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
