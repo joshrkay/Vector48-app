@@ -25,6 +25,31 @@ function mapGhlProvisioning(s: string): GhlUiStatus {
   return "pending";
 }
 
+// ── n8n health check — module-level cache (60 s TTL) ──────────────────────
+// Avoids a live outbound HTTP call on every page load.
+let n8nCacheResult = false;
+let n8nCacheAt = 0;
+const N8N_CACHE_TTL_MS = 60_000;
+
+async function checkN8nHealth(healthUrl: string): Promise<boolean> {
+  const now = Date.now();
+  if (now - n8nCacheAt < N8N_CACHE_TTL_MS) return n8nCacheResult;
+
+  try {
+    const res = await fetch(healthUrl, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(5000),
+    });
+    n8nCacheResult = res.ok;
+  } catch {
+    n8nCacheResult = false;
+  }
+  n8nCacheAt = Date.now();
+  return n8nCacheResult;
+}
+
+// ── Main export ────────────────────────────────────────────────────────────
+
 export async function buildIntegrationStatus(
   supabase: SupabaseClient<Database>,
   account: Database["public"]["Tables"]["accounts"]["Row"],
@@ -44,18 +69,7 @@ export async function buildIntegrationStatus(
   const normalizedBase = base ? base.replace(/\/$/, "") : null;
   const healthUrl = normalizedBase ? `${normalizedBase}/healthz` : null;
 
-  let n8nConnected = false;
-  if (healthUrl) {
-    try {
-      const res = await fetch(healthUrl, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(8000),
-      });
-      n8nConnected = res.ok;
-    } catch {
-      n8nConnected = false;
-    }
-  }
+  const n8nConnected = healthUrl ? await checkN8nHealth(healthUrl) : false;
 
   const provisioned =
     prov === "complete" &&

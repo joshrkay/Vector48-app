@@ -3,6 +3,20 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { buildIntegrationStatus } from "@/lib/integrations/buildIntegrationStatus";
 
+// Only the columns buildIntegrationStatus actually reads — avoids fetching
+// sensitive fields like ghl_token_encrypted into the response pipeline.
+const ACCOUNT_SELECT = [
+  "id",
+  "ghl_provisioning_status",
+  "ghl_location_id",
+  "ghl_token_encrypted",
+  "ghl_voice_agent_id",
+  "ghl_last_synced_at",
+  "voice_gender",
+  "greeting_text",
+  "phone",
+].join(", ");
+
 export async function GET() {
   const supabase = await createServerClient();
   const session = await requireAccountForUser(supabase);
@@ -12,7 +26,7 @@ export async function GET() {
 
   const { data: account, error } = await supabase
     .from("accounts")
-    .select("*")
+    .select(ACCOUNT_SELECT)
     .eq("id", session.accountId)
     .single();
 
