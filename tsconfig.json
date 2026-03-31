@@ -21,6 +21,7 @@
   "exclude": [
     "node_modules",
     "supabase/functions",
-    "lib/ghl/cache.ts"
+    "lib/ghl/cache.ts",
+    "lib/**/*.test.ts"
   ]
 }

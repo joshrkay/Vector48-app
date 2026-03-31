@@ -1,6 +1,6 @@
 "use server";
 
-import { provisionRecipe } from "@/lib/n8n/provision";
+import { inngest } from "@/lib/inngest/client";
 import { createServerClient } from "@/lib/supabase/server";
 
 // Maps step index to the DB columns that step updates
@@ -101,12 +101,13 @@ export async function completeOnboarding(
     return { error: "Not authenticated" };
   }
 
-  // Set onboarding as complete
+  // Set onboarding as complete + begin provisioning
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
-      onboarding_completed_at: new Date().toISOString(),
-      onboarding_step: 7,
+      onboarding_done_at: new Date().toISOString(),
+      onboarding_step: 8,
+      provisioning_status: "in_progress",
     })
     .eq("id", accountId);
 
@@ -114,7 +115,9 @@ export async function completeOnboarding(
     return { error: updateError.message };
   }
 
-  // Activate Recipe 1 if requested
+  // Optionally create Recipe 1 activation row (before background provisioning)
+  let activationId: string | undefined;
+
   if (activateRecipe) {
     const config = voiceConfig
       ? {
@@ -138,19 +141,33 @@ export async function completeOnboarding(
       return { error: recipeError?.message ?? "Failed to create activation" };
     }
 
-    try {
-      await provisionRecipe(
+    activationId = activation.id;
+  }
+
+  // Dispatch background provisioning via Inngest.
+  // GHL sub-account creation + Voice AI setup + n8n recipe activation
+  // all run asynchronously. The user is redirected to the dashboard
+  // immediately while provisioning runs in the background.
+  //
+  // Dashboard contract: show "Setting up your AI..." when
+  // provisioning_status = 'in_progress', full dashboard when 'complete'.
+  try {
+    await inngest.send({
+      name: "app/customer.onboarding.completed",
+      data: {
         accountId,
-        "ai-phone-answering",
-        config,
-        activation.id,
-      );
-    } catch {
-      return {
-        error:
-          "Recipe activation was saved but N8N provisioning failed. Check error_message on the activation or retry later.",
-      };
-    }
+        activateRecipe,
+        voiceConfig,
+        activationId,
+      },
+    });
+  } catch (err) {
+    // Inngest dispatch failure is non-fatal — provisioning can be retried
+    // via the reconciliation cron job.
+    console.error(
+      "[onboarding] Failed to dispatch provisioning event:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   return { success: true };

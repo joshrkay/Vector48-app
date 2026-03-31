@@ -1,32 +1,45 @@
 import { redirect } from "next/navigation";
-import { createServerClient } from "@/lib/supabase/server";
+import { getSessionData } from "@/lib/data/session";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TabBar } from "@/components/layout/TabBar";
 import { TopBar } from "@/components/layout/TopBar";
+import { createServerClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createServerClient();
+  let planSlug: string | undefined;
+  let trialDaysLeft: number | undefined;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+    if (user) {
+      const { data: account } = await supabase
+        .from("accounts")
+        .select("business_name, plan_slug, trial_ends_at")
+        .single();
 
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("business_name, plan_slug, trial_ends_at")
-    .eq("owner_user_id", user.id)
-    .single();
-
-  if (!account) {
-    redirect("/login");
+      if (account) {
+        planSlug = account.plan_slug;
+        if (account.trial_ends_at) {
+          trialDaysLeft = Math.max(
+            0,
+            Math.ceil(
+              (new Date(account.trial_ends_at).getTime() - Date.now()) /
+                86400000
+            )
+          );
+        }
+      }
+    }
+  } catch {
+    // Fail gracefully — sidebar will render without trial info
   }
 
   return (

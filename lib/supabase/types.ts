@@ -55,6 +55,15 @@ export type Database = {
           business_hours: Record<string, unknown>;
           ghl_location_id: string | null;
           ghl_token_encrypted: string | null;
+          ghl_voice_agent_id: string | null;
+          onboarding_done_at: string | null;
+          trial_ends_at: string | null;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          plan_slug: string;
+          provisioning_status: "pending" | "in_progress" | "complete" | "error";
+          provisioning_error: string | null;
+          provisioning_completed_at: string | null;
           ghl_provisioning_status: "pending" | "in_progress" | "complete" | "failed";
           ghl_provisioning_error: string | null;
           ghl_health_status: string;
@@ -83,6 +92,12 @@ export type Database = {
           stripe_subscription_id: string | null;
           subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at: string;
+          service_area: string | null;
+          voice_greeting: string | null;
+          notification_sms: boolean;
+          notification_email: boolean;
+          notification_contact: string | null;
+          provisioning_step: number;
           updated_at: string;
         };
         Insert: {
@@ -105,6 +120,15 @@ export type Database = {
           business_hours?: Record<string, unknown>;
           ghl_location_id?: string | null;
           ghl_token_encrypted?: string | null;
+          ghl_voice_agent_id?: string | null;
+          onboarding_done_at?: string | null;
+          trial_ends_at?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          plan_slug?: string;
+          provisioning_status?: "pending" | "in_progress" | "complete" | "error";
+          provisioning_error?: string | null;
+          provisioning_completed_at?: string | null;
           ghl_provisioning_status?: "pending" | "in_progress" | "complete" | "failed";
           ghl_provisioning_error?: string | null;
           ghl_health_status?: string;
@@ -133,6 +157,12 @@ export type Database = {
           stripe_subscription_id?: string | null;
           subscription_status?: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at?: string;
+          service_area?: string | null;
+          voice_greeting?: string | null;
+          notification_sms?: boolean;
+          notification_email?: boolean;
+          notification_contact?: string | null;
+          provisioning_step?: number;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["accounts"]["Insert"]>;
@@ -239,10 +269,12 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["integrations"]["Insert"]>;
       };
-      estimate_audit_log: {
+      recipe_triggers: {
         Row: {
           id: string;
           account_id: string;
+          recipe_slug: string;
+          ghl_event_type: string;
           contact_id: string | null;
           job_type: string | null;
           vertical:
@@ -263,6 +295,8 @@ export type Database = {
         Insert: {
           id?: string;
           account_id: string;
+          recipe_slug: string;
+          ghl_event_type: string;
           contact_id?: string | null;
           job_type?: string | null;
           vertical?:
@@ -280,7 +314,7 @@ export type Database = {
           total_estimated_value_cents?: number;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["estimate_audit_log"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["recipe_triggers"]["Insert"]>;
       };
     };
     Enums: {
@@ -295,8 +329,6 @@ export type Database = {
       recipe_status: "active" | "paused" | "error" | "deactivated";
       integration_provider: "jobber" | "servicetitan" | "google_business" | "ghl";
       integration_status: "connected" | "disconnected" | "error";
-      provisioning_status: "pending" | "in_progress" | "complete" | "failed";
-      subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
       rate_limit_priority: "low" | "standard" | "high";
     };
   };

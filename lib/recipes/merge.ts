@@ -13,17 +13,20 @@ import type {
  *  - activation exists with status "paused" / "error" → same DB status
  *  - activation exists with status "deactivated"      → "available" (can re-activate)
  *  - no activation                                    → marketplaceListing
+ *  - activation exists with status "active"        → "active"
+ *  - activation exists with status "paused"/"error" → "paused"
+ *  - no activation + releasePhase "ga" / "v1" / "v2" / "v3" → "available"
+ *  - no activation + releasePhase "coming_soon"     → "coming_soon"
  *
  * Sort order:
  *  1. Active — by last_triggered_at desc (nulls last)
  *  2. Paused — previously activated, now paused or errored
- *  3. Available — vertical-matched ("recommended") first, then universal, then non-matching
- *  4. Coming soon
+ *  3. Available — v1 recipes
+ *  4. Coming soon — v2/v3 recipes
  */
 export function mergeRecipesWithActivations(
-  catalog: RecipeCatalogEntry[],
+  catalog: RecipeDefinition[],
   activations: RecipeActivationRow[],
-  accountVertical: Vertical,
 ): RecipeWithStatus[] {
   const activationMap = new Map(
     activations.map((a) => [a.recipe_slug, a]),

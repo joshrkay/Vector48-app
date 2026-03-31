@@ -28,14 +28,19 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [],
+    vertical: null,
     verticalMessages: {
-      hvac: "",
-      plumbing: "",
-      electrical: "",
-      roofing: "",
-      landscaping: "",
+      hvac: "Thanks for choosing {{business_name}}! We'd love a quick Google review if you're happy with our work.",
+      plumbing:
+        "Thanks for trusting {{business_name}} with your plumbing needs. A short Google review helps neighbors find us.",
+      electrical:
+        "We appreciate your business at {{business_name}}. If we did well, a Google review means a lot.",
+      roofing:
+        "Thank you from {{business_name}}! A Google review helps other homeowners choose a roofer they can trust.",
+      landscaping:
+        "Thanks for working with {{business_name}}! A quick Google review helps us grow.",
     },
-    estimatedROI: "—",
+    estimatedROI: "More 5-star reviews improve local search visibility",
   },
   {
     slug: "seasonal-campaign",
@@ -54,14 +59,19 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [],
+    vertical: "hvac",
     verticalMessages: {
-      hvac: "",
-      plumbing: "",
-      electrical: "",
-      roofing: "",
-      landscaping: "",
+      hvac: "Seasonal special from {{business_name}} — book your tune-up before peak season fills up.",
+      plumbing:
+        "A quick note from {{business_name}}: seasonal maintenance offer for past customers.",
+      electrical:
+        "{{business_name}} — limited-time seasonal offer for customers like you.",
+      roofing:
+        "{{business_name}} — schedule a seasonal roof check before storm season.",
+      landscaping:
+        "{{business_name}} — spring/fall service slots are open for past customers.",
     },
-    estimatedROI: "—",
+    estimatedROI: "Repeat business from past customers",
   },
 
   // ── Capture (4) ────────────────────────────────────────────

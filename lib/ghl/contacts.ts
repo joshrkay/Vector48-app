@@ -76,6 +76,7 @@ export function removeContactTag(
 ) {
   return ghlDelete(`/contacts/${contactId}/tags`, {
     ...opts,
+    // Tags to remove are sent as body on DELETE
   } as GHLClientOptions);
 }
 

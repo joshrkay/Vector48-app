@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/recipe-triggers",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}

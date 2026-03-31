@@ -3,10 +3,13 @@ import { STAGE_STYLES } from "@/lib/recipes/stages";
 import type { FunnelStage } from "@/types/recipes";
 import { FUNNEL_STAGE_META } from "@/types/recipes";
 
+const STAGE_LABELS: Record<FunnelStage, string> = Object.fromEntries(
+  (Object.keys(FUNNEL_STAGE_META) as FunnelStage[]).map((k) => [k, FUNNEL_STAGE_META[k].label]),
+) as Record<FunnelStage, string>;
+
 export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
   const style = STAGE_STYLES[stage];
   const label = FUNNEL_STAGE_META[stage]?.label ?? stage;
-
   return (
     <span
       className={cn(
@@ -15,7 +18,7 @@ export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
         style.text,
       )}
     >
-      {label}
+      {FUNNEL_STAGE_META[stage].label}
     </span>
   );
 }

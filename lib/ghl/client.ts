@@ -10,6 +10,7 @@ import {
   classifyGHLError,
 } from "./errors";
 import type {
+  GHLClientOptions,
   GHLContactsListParams,
   GHLContactsListResponse,
   GHLContactResponse,
@@ -41,9 +42,21 @@ import type {
   GHLUpdateLocationPayload,
   GHLLocationResponse,
   GHLCreateWebhookPayload,
+  GHLCalendarSlot,
+  GHLCalendarSlotsParams,
+  GHLOpportunityStatus,
+  GHLPaginatedResponse,
   GHLWebhookResponse,
   GHLVoiceAgentsListResponse,
 } from "./types";
+import type {
+  GHLCreateVoiceAgentPayload,
+  GHLVoiceAgentResponse,
+  GHLCreateAgentActionPayload,
+  GHLAgentActionResponse,
+} from "./voiceTypes";
+
+export type { GHLClientOptions } from "./types";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -210,8 +223,7 @@ export class GHLClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const idx = Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1);
-        const backoff = RETRY_BACKOFF_MS[idx] ?? 1_000;
+        const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)];
         await new Promise((r) => setTimeout(r, backoff));
       }
 
@@ -349,6 +361,17 @@ export class GHLClient {
       return this.get<{ notes: GHLNote[] }>(`/contacts/${contactId}/notes`);
     },
 
+  delete(contactId: string) {
+    return this.client._delete(`/contacts/${contactId}`);
+  }
+
+  /** GHL contacts search uses POST, not GET. */
+  search(params: GHLContactsSearchParams) {
+    return this.client._post<GHLPaginatedResponse<GHLContact>>(
+      "/contacts/search",
+      params,
+    );
+  }
     getCustomFields: (contactId: string) => {
       return this.get<{ customFields: GHLCustomFieldValue[] }>(
         `/contacts/${contactId}/customFields`,
@@ -358,6 +381,19 @@ export class GHLClient {
 
   // ── Conversations ───────────────────────────────────────────────────────
 
+  removeTag(contactId: string, tags: string[]) {
+    return this.client._request<{ contact: GHLContact }>(
+      "DELETE",
+      `/contacts/${contactId}/tags`,
+      { body: { tags } },
+    );
+  }
+
+  getNotes(contactId: string) {
+    return this.client._get<{ notes: GHLNote[] }>(
+      `/contacts/${contactId}/notes`,
+    );
+  }
   readonly conversations = {
     list: (params?: GHLConversationsListParams) => {
       const { locationId, ...rest } = params ?? {};
@@ -369,7 +405,7 @@ export class GHLClient {
 
     getMessages: (
       conversationId: string,
-      params?: GHLMessagesQueryParams,
+      params?: Omit<GHLMessagesListParams, "conversationId">,
     ) => {
       return this.get<GHLMessagesListResponse>(
         `/conversations/${conversationId}/messages`,
@@ -448,6 +484,31 @@ export class GHLClient {
       );
     },
 
+  update(opportunityId: string, data: Partial<GHLCreateOpportunityPayload>) {
+    return this.client._put<{ opportunity: GHLOpportunity }>(
+      `/opportunities/${opportunityId}`,
+      data,
+    );
+  }
+
+  updateStage(opportunityId: string, pipelineStageId: string) {
+    return this.client._put<{ opportunity: GHLOpportunity }>(
+      `/opportunities/${opportunityId}`,
+      { pipelineStageId },
+    );
+  }
+
+  updateStatus(opportunityId: string, status: GHLOpportunityStatus) {
+    return this.client._put<{ opportunity: GHLOpportunity }>(
+      `/opportunities/${opportunityId}/status`,
+      { status },
+    );
+  }
+
+  delete(opportunityId: string) {
+    return this.client._delete(`/opportunities/${opportunityId}`);
+  }
+}
     update: (eventId: string, data: GHLUpdateAppointmentPayload) => {
       return this.put<{ event: GHLAppointment }>(
         `/calendars/events/${eventId}`,
@@ -486,7 +547,18 @@ export class GHLClient {
     },
   };
 
-  // ── Custom Fields ───────────────────────────────────────────────────────
+  get(eventId: string) {
+    return this.client._get<{ event: GHLAppointment }>(
+      `/calendars/events/${eventId}`,
+    );
+  }
+
+  create(data: GHLCreateAppointmentPayload) {
+    return this.client._post<{ event: GHLAppointment }>(
+      "/calendars/events",
+      data,
+    );
+  }
 
   readonly customFields = {
     list: (locationId?: string) => {
@@ -499,6 +571,17 @@ export class GHLClient {
 
   // ── Locations (agency-level only) ───────────────────────────────────────
 
+  cancel(eventId: string) {
+    return this.client._put<{ event: GHLAppointment }>(
+      `/calendars/events/${eventId}`,
+      { status: "cancelled" },
+    );
+  }
+
+  delete(eventId: string) {
+    return this.client._delete(`/calendars/events/${eventId}`);
+  }
+}
   readonly locations = {
     create: (data: GHLCreateLocationPayload) => {
       return this.post<GHLLocationResponse>("/locations/", data);
@@ -530,10 +613,142 @@ export class GHLClient {
       return this.post<GHLWebhookResponse>("/webhooks/", data);
     },
 
+  list() {
+    return this.client._get<{ calendars: GHLCalendar[] }>("/calendars/");
+  }
+
+  get(calendarId: string) {
+    return this.client._get<{ calendar: GHLCalendar }>(
+      `/calendars/${calendarId}`,
+    );
+  }
+
+  getSlots(params: GHLCalendarSlotsParams) {
+    const { calendarId, ...rest } = params;
+    return this.client._get<{ slots: Record<string, GHLCalendarSlot[]> }>(
+      `/calendars/${calendarId}/free-slots`,
+      spreadParams(rest as Record<string, unknown>),
+    );
+  }
+}
     delete: (webhookId: string) => {
       return this.delete(`/webhooks/${webhookId}`);
     },
   };
+
+  // ── Voice AI ────────────────────────────────────────────────────────────
+  // TODO: Verify endpoint paths against GHL Voice AI API docs. These are
+  // based on the best available documentation and may need adjustment.
+
+  readonly voiceAgent = {
+    /** Create a Voice AI agent on a sub-account. Requires location-scoped token. */
+    create: (data: GHLCreateVoiceAgentPayload) => {
+      return this.post<GHLVoiceAgentResponse>(
+        "/conversations/providers/voice-ai/agents",
+        data,
+      );
+    },
+
+    /** Create a custom action (webhook) on a Voice AI agent. */
+    createAction: (agentId: string, data: GHLCreateAgentActionPayload) => {
+      return this.post<GHLAgentActionResponse>(
+        `/conversations/providers/voice-ai/agents/${agentId}/actions`,
+        data,
+      );
+    },
+  };
+
+  // ── Token Exchange (agency → sub-account) ──────────────────────────────
+
+  /**
+   * Exchange the agency token for a sub-account-scoped access token.
+   * This is required because Voice AI and other sub-account-specific APIs
+   * need a location-scoped token, not the agency-level token.
+   *
+   * TODO: Verify the exact endpoint path and payload shape. GHL's token
+   * exchange flow may use /oauth/locationToken or a similar path.
+   */
+  static async exchangeSubAccountToken(
+    companyId: string,
+    locationId: string,
+  ): Promise<GHLTokenExchangeResponse> {
+    const agencyKey = process.env.GHL_AGENCY_API_KEY;
+    if (!agencyKey) {
+      throw new Error(
+        "GHL_AGENCY_API_KEY is required for token exchange",
+      );
+    }
+
+    const url = new URL("/oauth/locationToken", GHL_BASE_URL);
+    const res = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${agencyKey}`,
+        "Content-Type": "application/json",
+        Version: GHL_API_VERSION,
+      },
+      body: JSON.stringify({ companyId, locationId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(
+        `Token exchange failed (${res.status}): ${body.slice(0, 200)}`,
+      );
+    }
+
+    return (await res.json()) as GHLTokenExchangeResponse;
+  }
+}
+
+// ── Function-style wrappers ──────────────────────────────────────────────────
+// Legacy service files (contacts.ts, calendars.ts, etc.) import these helpers.
+// They create a one-shot GHLClient from the options and delegate.
+
+function clientFromOpts(opts?: GHLClientOptions): GHLClient {
+  if (opts?.locationId) {
+    const token =
+      opts.apiKey ?? process.env.GHL_AGENCY_API_KEY ?? "";
+    return GHLClient.forLocation(opts.locationId, token);
+  }
+  return GHLClient.forAgency(opts?.apiKey);
+}
+
+export async function ghlGet<T>(
+  path: string,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  const client = clientFromOpts(opts);
+  // Use the class's private request via a thin cast so we can call the
+  // internal method without duplicating fetch logic.
+  return (client as unknown as { request: (m: string, p: string, o?: { params?: Record<string, string | number | boolean | undefined> }) => Promise<T> })
+    .request("GET", path, { params: opts?.params });
+}
+
+export async function ghlPost<T>(
+  path: string,
+  body: unknown,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
+    .request("POST", path, { body });
+}
+
+export async function ghlPut<T>(
+  path: string,
+  body: unknown,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
+    .request("PUT", path, { body });
+}
+
+export async function ghlDelete<T = void>(
+  path: string,
+  opts?: GHLClientOptions,
+): Promise<T> {
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string) => Promise<T> })
+    .request("DELETE", path);
 }
 
 // ── Functional API for resource modules (calendars.ts, contacts.ts, …) ───

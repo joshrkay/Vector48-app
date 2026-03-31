@@ -17,6 +17,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
+const MS_PER_DAY = 86_400_000;
+
 interface NavItem {
   label: string;
   href: string;
@@ -51,6 +53,11 @@ const bottomNavItems: NavItem[] = [
   { label: "Settings", href: "/settings", icon: Settings },
   { label: "Billing", href: "/billing", icon: CreditCard },
 ];
+
+interface SidebarProps {
+  planSlug?: string;
+  trialDaysLeft?: number;
+}
 
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   const isActive =
@@ -90,7 +97,7 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
   if (isTrial && trialEndsAt) {
     daysLeft = Math.max(
       0,
-      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86_400_000)
+      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / MS_PER_DAY)
     );
   }
 
@@ -151,17 +158,10 @@ export function Sidebar({ planSlug, trialEndsAt }: SidebarProps) {
         <div className="flex-1" />
 
         {/* Trial badge */}
-        {isTrial && (
+        {planSlug === "trial" && trialDaysLeft !== undefined && (
           <div className="mx-4 mb-3">
-            <div
-              className={cn(
-                "rounded-full px-3 py-1.5 text-center text-[12px]",
-                daysLeft <= 3
-                  ? "bg-amber-500/20 text-amber-400"
-                  : "bg-white/10 text-white/70"
-              )}
-            >
-              {daysLeft} days left in trial
+            <div className="rounded-full bg-amber-500/20 px-3 py-1.5 text-center text-[12px] text-amber-400">
+              {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in trial
             </div>
           </div>
         )}
