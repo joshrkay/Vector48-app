@@ -148,8 +148,6 @@ export interface GHLContactsListResponse {
   contacts: GHLContact[];
 }
 
-export type GHLContactResponse = GHLContact;
-
 // ── Notes ───────────────────────────────────────────────────────────────────
 
 export interface GHLNote {
@@ -245,11 +243,6 @@ export interface GHLMessagesListParams {
   lastMessageId?: string;
   type?: GHLMessageType;
 }
-
-/** Resource-layer input: path id plus optional query fields. */
-export type GHLMessagesListParams = GHLMessagesQueryParams & {
-  conversationId: string;
-};
 
 export interface GHLMessagesListResponse {
   messages: GHLMessage[];
@@ -586,18 +579,11 @@ export interface GHLWebhooksListResponse {
   webhooks: GHLWebhook[];
 }
 
-// ── Error Body (raw GHL response shape) ─────────────────────────────────────
-
-export type GHLCampaignStatus = "draft" | "published" | "archived";
-
 export interface GHLTokenExchangeResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
   scope: string;
   locationId: string;
-}
-export interface GHLWebhooksListResponse {
-  webhooks: GHLWebhook[];
 }
 

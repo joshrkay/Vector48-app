@@ -21,7 +21,7 @@ import type {
   GHLCustomFieldValue,
   GHLConversationsListParams,
   GHLConversationsListResponse,
-  GHLMessagesQueryParams,
+  GHLMessagesListParams,
   GHLMessagesListResponse,
   GHLMessage,
   GHLSendMessagePayload,
@@ -48,6 +48,7 @@ import type {
   GHLPaginatedResponse,
   GHLWebhookResponse,
   GHLVoiceAgentsListResponse,
+  GHLTokenExchangeResponse,
 } from "./types";
 import type {
   GHLCreateVoiceAgentPayload,
