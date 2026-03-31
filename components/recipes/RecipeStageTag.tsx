@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { STAGE_STYLES } from "@/lib/recipes/stages";
-import type { FunnelStage } from "@/types/recipes";
+import type { FunnelStage } from "@/lib/recipes/types";
 import { FUNNEL_STAGE_META } from "@/types/recipes";
 
 export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
@@ -14,7 +14,7 @@ export function RecipeStageTag({ stage }: { stage: FunnelStage }) {
         style.text,
       )}
     >
-      {label}
+      {FUNNEL_STAGE_META[stage].label}
     </span>
   );
 }

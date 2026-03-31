@@ -10,6 +10,7 @@ import {
   classifyGHLError,
 } from "./errors";
 import type {
+  GHLClientOptions,
   GHLContactsListParams,
   GHLContactsListResponse,
   GHLContactResponse,
@@ -49,6 +50,8 @@ import type {
   GHLCreateAgentActionPayload,
   GHLAgentActionResponse,
 } from "./voiceTypes";
+
+export type { GHLClientOptions } from "./types";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -215,8 +218,7 @@ export class GHLClient {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const idx = Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1);
-        const backoff = RETRY_BACKOFF_MS[idx] ?? 1_000;
+        const backoff = RETRY_BACKOFF_MS[attempt - 1] ?? 4_000;
         await new Promise((r) => setTimeout(r, backoff));
       }
 
@@ -563,73 +565,52 @@ export class GHLClient {
   }
 }
 
-// ── Legacy function-style API (for backward-compat with service files) ──────
-// These thin wrappers allow service files that predate the OOP refactor to
-// continue working. New code should use GHLClient directly.
+// ── Function-style wrappers ──────────────────────────────────────────────────
+// Legacy service files (contacts.ts, calendars.ts, etc.) import these helpers.
+// They create a one-shot GHLClient from the options and delegate.
 
-export interface GHLClientOptions {
-  locationId?: string;
-  token?: string;
-  params?: Record<string, string | number | boolean | undefined>;
+function clientFromOpts(opts?: GHLClientOptions): GHLClient {
+  if (opts?.locationId) {
+    const token =
+      opts.apiKey ?? process.env.GHL_AGENCY_API_KEY ?? "";
+    return GHLClient.forLocation(opts.locationId, token);
+  }
+  return GHLClient.forAgency(opts?.apiKey);
 }
 
-async function _ghlFetch<T>(
-  method: string,
+export async function ghlGet<T>(
   path: string,
-  opts?: GHLClientOptions & { body?: unknown },
+  opts?: GHLClientOptions,
 ): Promise<T> {
-  const token =
-    opts?.token ??
-    process.env.GHL_AGENCY_API_KEY ??
-    process.env.GHL_LOCATION_API_KEY ??
-    "";
-  const url = new URL(path, GHL_BASE_URL);
-  if (opts?.locationId) url.searchParams.set("locationId", opts.locationId);
-  if (opts?.params) {
-    for (const [k, v] of Object.entries(opts.params)) {
-      if (v !== undefined) url.searchParams.set(k, String(v));
-    }
-  }
-  const res = await fetch(url.toString(), {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Version: GHL_API_VERSION,
-    },
-    body: opts?.body ? JSON.stringify(opts.body) : undefined,
-  });
-  if (res.status === 204) return undefined as T;
-  if (!res.ok) {
-    const msg = await res.text().catch(() => res.statusText);
-    throw new Error(`GHL ${method} ${path} → ${res.status}: ${msg}`);
-  }
-  return res.json() as Promise<T>;
+  const client = clientFromOpts(opts);
+  // Use the class's private request via a thin cast so we can call the
+  // internal method without duplicating fetch logic.
+  return (client as unknown as { request: (m: string, p: string, o?: { params?: Record<string, string | number | boolean | undefined> }) => Promise<T> })
+    .request("GET", path, { params: opts?.params });
 }
 
-export function ghlGet<T>(path: string, opts?: GHLClientOptions): Promise<T> {
-  return _ghlFetch<T>("GET", path, opts);
-}
-
-export function ghlPost<T>(
+export async function ghlPost<T>(
   path: string,
   body: unknown,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  return _ghlFetch<T>("POST", path, { ...opts, body });
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
+    .request("POST", path, { body });
 }
 
-export function ghlPut<T>(
+export async function ghlPut<T>(
   path: string,
   body: unknown,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  return _ghlFetch<T>("PUT", path, { ...opts, body });
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
+    .request("PUT", path, { body });
 }
 
-export function ghlDelete<T = void>(
+export async function ghlDelete<T = void>(
   path: string,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  return _ghlFetch<T>("DELETE", path, opts);
+  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string) => Promise<T> })
+    .request("DELETE", path);
 }
