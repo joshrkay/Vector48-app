@@ -28,7 +28,6 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     requiredIntegrations: [],
     optionalIntegrations: [],
     configFields: [],
-    vertical: null,
     verticalMessages: {
       hvac: "Thanks for choosing {{business_name}}! We'd love a quick Google review if you're happy with our work.",
       plumbing:

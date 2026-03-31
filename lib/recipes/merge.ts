@@ -1,4 +1,4 @@
-import type { RecipeActivation, Vertical } from "@/types/recipes";
+import type { RecipeActivation } from "@/types/recipes";
 import type {
   RecipeCatalogEntry,
   RecipeActivationRow,
