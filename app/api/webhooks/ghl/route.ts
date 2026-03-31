@@ -19,12 +19,7 @@ function verifyToken(provided: string | null, expected: string): boolean {
 }
 
 export async function POST(req: Request) {
-  const startedAt = Date.now();
-  let parseMs = 0;
-  let lookupMs = 0;
-  let insertMs = 0;
-
-  // 1) Parse body
+  // 1. Parse body
   let body: Record<string, unknown>;
   const parseStartedAt = Date.now();
   try {
@@ -34,7 +29,7 @@ export async function POST(req: Request) {
   }
   parseMs = Date.now() - parseStartedAt;
 
-  // 2) Resolve account from location ID
+  // 2. Extract and validate location ID (casing varies across GHL events)
   const rawLocationId = body.locationId ?? body.location_id;
   const locationId =
     typeof rawLocationId === "string" && rawLocationId.length > 0
@@ -53,11 +48,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   }
 
+  // 3. Look up account by GHL location ID
+  // Use .limit(1) instead of .single() to avoid errors when no rows match
   const supabase = getSupabaseAdmin();
   const lookupStartedAt = Date.now();
   const { data: accounts } = await supabase
     .from("accounts")
-    .select("id")
+    .select("id, ghl_webhook_secret")
     .eq("ghl_location_id", locationId)
     .limit(1);
   lookupMs = Date.now() - lookupStartedAt;
@@ -69,19 +66,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   }
 
-  // 3) Verify webhook secret/signature before processing
-  const webhookSecret = process.env.GHL_WEBHOOK_SECRET;
-  if (!webhookSecret) {
-    console.error("[ghl-webhook] GHL_WEBHOOK_SECRET is not set. Rejecting request.");
+  // 4. Verify webhook token using account-level shared secret
+  const providedTokenFromHeader = req.headers.get("x-ghl-signature");
+  const providedTokenFromBody =
+    (typeof body.token === "string" && body.token.length > 0
+      ? body.token
+      : null) ??
+    (typeof body.webhookSecret === "string" && body.webhookSecret.length > 0
+      ? body.webhookSecret
+      : null) ??
+    (typeof body.webhook_secret === "string" && body.webhook_secret.length > 0
+      ? body.webhook_secret
+      : null);
+
+  const providedToken = providedTokenFromHeader ?? providedTokenFromBody;
+  const expectedToken = account.ghl_webhook_secret;
+  if (!expectedToken || !verifyToken(providedToken, expectedToken)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const signature = req.headers.get("x-ghl-signature");
-  if (!verifyToken(signature, webhookSecret)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // 4) Normalize payload
+  // 5. Parse event type and build normalized event
   const ghlEventType = (body.type as string) ?? (body.event as string) ?? "unknown";
   const parsed = parseGHLWebhook(body, ghlEventType);
   const eventRow = {
