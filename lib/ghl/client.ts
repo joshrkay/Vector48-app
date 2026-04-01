@@ -9,6 +9,7 @@ import {
   GHLRateLimitError,
   classifyGHLError,
 } from "./errors";
+import { acquireRateLimit } from "./rateLimiter";
 import type {
   GHLClientOptions,
   GHLContactsListParams,
@@ -63,66 +64,6 @@ const GHL_BASE_URL = "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = "2021-07-28";
 const MAX_RETRIES = 3;
 const RETRY_BACKOFF_MS = [1_000, 2_000, 4_000];
-const RATE_LIMIT_PER_MIN = 120;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-
-// ── Per-location rate limiter (120 req / 60 s) ─────────────────────────────
-
-const RATE_LIMIT = 120;
-const RATE_WINDOW_MS = 60_000;
-
-interface RateBucket {
-  tokens: number;
-  lastRefill: number;
-}
-
-/** One bucket per locationId. Agency calls use "__agency__". */
-const rateBuckets = new Map<string, RateBucket>();
-
-/** Evict buckets idle for longer than 2 rate windows to prevent memory leaks. */
-const STALE_THRESHOLD_MS = RATE_WINDOW_MS * 2;
-
-function evictStaleBuckets() {
-  const now = Date.now();
-  rateBuckets.forEach((bucket, key) => {
-    if (now - bucket.lastRefill > STALE_THRESHOLD_MS) {
-      rateBuckets.delete(key);
-    }
-  });
-}
-
-function getBucket(key: string): RateBucket {
-  let bucket = rateBuckets.get(key);
-  if (!bucket) {
-    // Good time to clean up stale entries when creating new ones
-    if (rateBuckets.size > 100) evictStaleBuckets();
-    bucket = { tokens: RATE_LIMIT, lastRefill: Date.now() };
-    rateBuckets.set(key, bucket);
-  }
-  return bucket;
-}
-
-function consumeToken(key: string): boolean {
-  const bucket = getBucket(key);
-  const now = Date.now();
-  if (now - bucket.lastRefill >= RATE_WINDOW_MS) {
-    bucket.tokens = RATE_LIMIT;
-    bucket.lastRefill = now;
-  }
-  if (bucket.tokens > 0) {
-    bucket.tokens--;
-    return true;
-  }
-  return false;
-}
-
-async function waitForToken(key: string): Promise<void> {
-  while (!consumeToken(key)) {
-    const bucket = getBucket(key);
-    const waitMs = RATE_WINDOW_MS - (Date.now() - bucket.lastRefill);
-    await new Promise((r) => setTimeout(r, Math.max(waitMs, 100)));
-  }
-}
 
 // ── Structured logger (no PII) ─────────────────────────────────────────────
 
@@ -165,30 +106,40 @@ function logResponse(
 export class GHLClient {
   private readonly token: string;
   private readonly locationId: string | null;
+  private readonly accountId: string | null;
   private readonly rateLimitKey: string;
 
   // ── Constructors ────────────────────────────────────────────────────────
 
-  private constructor(token: string, locationId: string | null) {
+  private constructor(
+    token: string,
+    locationId: string | null,
+    accountId: string | null = null,
+  ) {
     this.token = token;
     this.locationId = locationId;
+    this.accountId = accountId;
     this.rateLimitKey = locationId ?? "__agency__";
   }
 
   /** Create a client for CRM operations scoped to a specific location. */
-  static forLocation(locationId: string, token: string): GHLClient {
-    return new GHLClient(token, locationId);
+  static forLocation(
+    locationId: string,
+    token: string,
+    accountId?: string,
+  ): GHLClient {
+    return new GHLClient(token, locationId, accountId ?? null);
   }
 
   /** Create a client for agency-level admin operations. */
-  static forAgency(apiKey?: string): GHLClient {
+  static forAgency(apiKey?: string, accountId?: string): GHLClient {
     const key = apiKey ?? process.env.GHL_AGENCY_API_KEY;
     if (!key) {
       throw new Error(
         "GHL agency API key is required. Set GHL_AGENCY_API_KEY or pass apiKey.",
       );
     }
-    return new GHLClient(key, null);
+    return new GHLClient(key, null, accountId ?? null);
   }
 
   // ── Core fetch wrapper ──────────────────────────────────────────────────
@@ -201,7 +152,10 @@ export class GHLClient {
       params?: Record<string, string | number | boolean | undefined>;
     },
   ): Promise<T> {
-    await waitForToken(this.rateLimitKey);
+    await acquireRateLimit({
+      accountId: this.accountId,
+      locationId: this.locationId,
+    });
 
     const url = new URL(path, GHL_BASE_URL);
     if (opts?.params) {
@@ -595,9 +549,9 @@ function clientFromOpts(opts?: GHLClientOptions): GHLClient {
   if (opts?.locationId) {
     const token =
       opts.apiKey ?? process.env.GHL_AGENCY_API_KEY ?? "";
-    return GHLClient.forLocation(opts.locationId, token);
+    return GHLClient.forLocation(opts.locationId, token, opts.accountId);
   }
-  return GHLClient.forAgency(opts?.apiKey);
+  return GHLClient.forAgency(opts?.apiKey, opts?.accountId);
 }
 
 export async function ghlGet<T>(
