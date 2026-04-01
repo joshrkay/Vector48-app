@@ -114,7 +114,7 @@ export async function completeOnboarding(
     .update({
       onboarding_done_at: new Date().toISOString(),
       onboarding_step: 8,
-      activate_recipe_1: activateRecipe1,
+      activate_recipe_1: activateRecipe,
     })
     .eq("id", accountId);
 
