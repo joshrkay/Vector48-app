@@ -27,6 +27,16 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   notificationContactPhone: "notification_contact_phone",
 };
 
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("message" in error)) {
+    return undefined;
+  }
+
+  const maybeMessage = (error as { message?: unknown }).message;
+  return typeof maybeMessage === "string" ? maybeMessage : undefined;
+}
+
 export async function saveOnboardingStep(
   accountId: string,
   step: number,
@@ -138,7 +148,7 @@ export async function completeOnboarding(
       .single();
 
     if (recipeError || !activation) {
-      return { error: recipeError?.message ?? "Failed to create activation" };
+      return { error: getErrorMessage(recipeError) ?? "Failed to create activation" };
     }
 
     activationId = activation.id;

@@ -57,7 +57,7 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
       if (!storeRef.current) return;
       setIsSaving(true);
 
-      const store = storeRef.current.getState();
+      const onboardingState = storeRef.current.getState();
 
       // Save step data to store
       storeRef.current.getState().setStepData(data);
@@ -71,8 +71,8 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
           accountId,
           (data.activateRecipe1 as boolean) ?? true,
           {
-            voiceGender: store.voiceGender,
-            greetingText: store.greetingText,
+            voiceGender: onboardingState.voiceGender,
+            greetingText: onboardingState.greetingText,
           }
         );
       }
