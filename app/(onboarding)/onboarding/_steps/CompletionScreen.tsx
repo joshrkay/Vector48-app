@@ -24,11 +24,8 @@ export function CompletionScreen() {
       <div className="w-full max-w-lg rounded-2xl bg-white p-8 text-center shadow-xl">
         <motion.div
           initial={{ scale: 0.7, opacity: 0 }}
-          animate={{ scale: [1, 1.08, 1], opacity: 1 }}
-          transition={{
-            opacity: { duration: 0.3, delay: 0.1 },
-            scale: { duration: 1.4, repeat: Infinity, repeatDelay: 0.2, ease: "easeInOut", delay: 0.1 },
-          }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 220, damping: 16, delay: 0.1 }}
           className="mx-auto"
         >
           <CheckCircle2 className="h-16 w-16 text-teal-500" strokeWidth={2.5} />
