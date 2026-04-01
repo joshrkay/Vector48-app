@@ -99,6 +99,12 @@ export interface GHLContactsListParams extends GHLListParams {
   email?: string;
   phone?: string;
   tag?: string;
+  /**
+   * Canonical GHL date window query params for contact creation timestamp.
+   * Sent as query-string keys: dateAdded[gte] / dateAdded[lte]
+   */
+  "dateAdded[gte]"?: string;
+  "dateAdded[lte]"?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }
@@ -608,4 +614,3 @@ export interface GHLWebhooksListResponse {
 }
 
 // ── (duplicate declarations removed — end of file) ─────────────────────────
-
