@@ -444,10 +444,6 @@ export class GHLClient {
       return this.get<{ event: GHLAppointment }>(`/calendars/events/${eventId}`);
     },
 
-    create: (data: GHLCreateAppointmentPayload) => {
-      return this.post<{ event: GHLAppointment }>("/calendars/events", data);
-    },
-
     update: (eventId: string, data: GHLUpdateAppointmentPayload) => {
       return this.put<{ event: GHLAppointment }>(`/calendars/events/${eventId}`, data);
     },
@@ -485,6 +481,7 @@ export class GHLClient {
     },
   };
 
+
   readonly customFields = {
     list: (locationId?: string) => {
       const locId = locationId ?? this.locationId;
@@ -495,14 +492,6 @@ export class GHLClient {
   };
 
   // ── Campaigns (read-only) ───────────────────────────────────────────────
-
-  readonly campaigns = {
-    list: () => {
-      return this.get<GHLCampaignsListResponse>("/campaigns/");
-    },
-  };
-
-  // ── Locations (agency-level only) ───────────────────────────────────────
 
   readonly locations = {
     create: (data: GHLCreateLocationPayload) => {
