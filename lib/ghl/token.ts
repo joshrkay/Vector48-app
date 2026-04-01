@@ -6,19 +6,27 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
+type EncryptedTokenParts = {
+  iv: Buffer;
+  ciphertext: Buffer;
+  authTag: Buffer;
+};
+
 function getKey(): Buffer {
   const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
   if (!key) {
     throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
   }
-  return Buffer.from(key, "hex");
+
+  const keyBuffer = Buffer.from(key, "hex");
+  if (keyBuffer.length !== 32) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY must be a 64-char hex string");
+  }
+
+  return keyBuffer;
 }
 
-function parseEncryptedToken(encrypted: string): {
-  iv: Buffer;
-  ciphertext: Buffer;
-  authTag: Buffer;
-} {
+function parseEncryptedToken(encrypted: string): EncryptedTokenParts {
   const data = Buffer.from(encrypted, "base64");
   if (data.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
     throw new Error("Invalid encrypted token payload.");
