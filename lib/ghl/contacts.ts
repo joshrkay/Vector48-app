@@ -24,7 +24,7 @@ export function getContacts(
   return ghlGet<GHLContactsListResponse>("/contacts/", {
     ...opts,
     locationId: locationId ?? opts?.locationId,
-    params: rest as Record<string, string | number | boolean | undefined>,
+    params: rest,
   });
 }
 

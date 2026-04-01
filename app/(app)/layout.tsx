@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-import { getSessionData } from "@/lib/data/session";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TabBar } from "@/components/layout/TabBar";
 import { TopBar } from "@/components/layout/TopBar";
@@ -10,8 +8,9 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  let planSlug: string | undefined;
-  let trialDaysLeft: number | undefined;
+  let businessName = "";
+  let planSlug = "";
+  let trialEndsAt: string | null = null;
 
   try {
     const supabase = await createServerClient();
@@ -26,30 +25,20 @@ export default async function AppLayout({
         .single();
 
       if (account) {
-        planSlug = account.plan_slug;
-        if (account.trial_ends_at) {
-          trialDaysLeft = Math.max(
-            0,
-            Math.ceil(
-              (new Date(account.trial_ends_at).getTime() - Date.now()) /
-                86400000
-            )
-          );
-        }
+        businessName = account.business_name ?? "";
+        planSlug = account.plan_slug ?? "";
+        trialEndsAt = account.trial_ends_at;
       }
     }
   } catch {
-    // Fail gracefully — sidebar will render without trial info
+    // Fail gracefully — layout will render with fallback account values
   }
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
-      <Sidebar
-        planSlug={account.plan_slug}
-        trialEndsAt={account.trial_ends_at}
-      />
+      <Sidebar planSlug={planSlug} trialEndsAt={trialEndsAt} />
       <div className="md:ml-60">
-        <TopBar businessName={account.business_name} />
+        <TopBar businessName={businessName} />
         <main className="p-4 md:p-6 pb-20 md:pb-6 max-w-6xl mx-auto">
           {children}
         </main>
