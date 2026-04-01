@@ -16,7 +16,10 @@ import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 const QUERY_CACHE_TTL_MS = 30_000;
 const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
 
-async function searchContacts(query: string): Promise<CRMContactSearchItem[]> {
+async function searchContacts([
+  ,
+  query,
+]: readonly [string, string]): Promise<CRMContactSearchItem[]> {
   const cached = queryCache.get(query);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.contacts;

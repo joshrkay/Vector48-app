@@ -209,9 +209,9 @@ function StepRenderer({
     case 0:
       return <BusinessNameStep {...props} />;
     case 1:
-      return <VerticalStep {...props} />;
-    case 2:
       return <PhoneStep {...props} />;
+    case 2:
+      return <VerticalStep {...props} />;
     case 3:
       return <BusinessHoursStep {...props} />;
     case 4:
