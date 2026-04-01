@@ -6,10 +6,11 @@ import useSWR from "@/hooks/useSWR";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { upsertContactsInCache } from "@/lib/crm/contactCache";
 import {
   type CRMContactSearchItem,
-  upsertContactsInCache,
-} from "@/lib/crm/contactCache";
+  type CRMContactSearchResponse,
+} from "@/lib/crm/types";
 
 const QUERY_CACHE_TTL_MS = 30_000;
 
