@@ -144,12 +144,6 @@ export interface GHLCreateContactPayload {
 export interface GHLUpdateContactPayload
   extends Partial<Omit<GHLCreateContactPayload, "locationId">> {}
 
-export interface GHLContactsListResponse {
-  contacts: GHLContact[];
-}
-
-export type GHLContactResponse = GHLContact;
-
 // ── Notes ───────────────────────────────────────────────────────────────────
 
 export interface GHLNote {
@@ -264,10 +258,6 @@ export interface GHLSendMessagePayload {
   emailTo?: string;
   emailCc?: string[];
   emailBcc?: string[];
-}
-
-export interface GHLConversationsListResponse {
-  conversations: GHLConversation[];
 }
 
 export interface GHLMessagesListResponse {
@@ -450,13 +440,6 @@ export interface GHLCalendarSlot {
   endTime: string;
 }
 
-export interface GHLCalendarSlotsParams {
-  calendarId: string;
-  startDate: string;
-  endDate: string;
-  timezone?: string;
-}
-
 // ── Campaigns ──────────────────────────────────────────────────────────────
 
 export type GHLCampaignStatus = "draft" | "published" | "archived";
@@ -569,6 +552,12 @@ export interface GHLWebhook {
 }
 
 export interface GHLCreateWebhookPayload {
+  locationId: string;
+  url: string;
+  events: GHLWebhookEvent[];
+  secret?: string;
+}
+
 export interface GHLWebhookResponse {
   webhook: GHLWebhook;
 }
@@ -585,27 +574,3 @@ export interface GHLTokenExchangeResponse {
 export interface GHLWebhooksListResponse {
   webhooks: GHLWebhook[];
 }
-
-// ── Error ──────────────────────────────────────────────────────────────────
-
-export interface GHLCampaign {
-  id: string;
-  name: string;
-  locationId: string;
-  url: string;
-  events: string[];
-  secret?: string;
-}
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  nextPage: boolean;
-  lastMessageId?: string;
-}
-
-export interface GHLWebhooksListResponse {
-  webhooks: GHLWebhook[];
-}
-
-// ── (duplicate declarations removed — end of file) ─────────────────────────
-
