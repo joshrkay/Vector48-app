@@ -2,6 +2,8 @@
 /**
  * Creates a confirmed Supabase Auth user and a matching `accounts` row (local / staging).
  * `account_users` is created automatically by trigger `trg_accounts_create_owner`.
+ * If migration `005_handle_new_auth_user.sql` is applied, `on_auth_user_created` also
+ * creates the `accounts` row when the auth user is inserted (no manual insert needed).
  *
  * Requirements:
  *   - NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in `.env.local` (or env)
@@ -87,6 +89,7 @@ async function main() {
       email,
       password,
       email_confirm: true,
+      user_metadata: { business_name: "Test Office (local)" },
     });
     if (error) {
       console.error("createUser failed:", error.message);
@@ -98,15 +101,23 @@ async function main() {
     console.log("Auth user already exists:", user.id);
   }
 
-  const { data: existingAccount, error: accLookupErr } = await supabase
-    .from("accounts")
-    .select("id, business_name")
-    .eq("owner_user_id", user.id)
-    .maybeSingle();
+  let existingAccount = null;
+  for (let i = 0; i < 15; i += 1) {
+    const { data, error: accLookupErr } = await supabase
+      .from("accounts")
+      .select("id, business_name")
+      .eq("owner_user_id", user.id)
+      .maybeSingle();
 
-  if (accLookupErr) {
-    console.error("accounts lookup failed:", accLookupErr.message);
-    process.exit(1);
+    if (accLookupErr) {
+      console.error("accounts lookup failed:", accLookupErr.message);
+      process.exit(1);
+    }
+    if (data) {
+      existingAccount = data;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 150));
   }
 
   if (existingAccount) {
