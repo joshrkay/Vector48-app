@@ -2,6 +2,13 @@ import type { GHLConversation } from "@/lib/ghl/types";
 
 export type InboxFilterTab = "all" | "unread" | "ai_handled" | "needs_reply";
 
+export function parseInboxFilterTab(raw: string | undefined): InboxFilterTab {
+  if (raw === "unread" || raw === "ai_handled" || raw === "needs_reply") {
+    return raw;
+  }
+  return "all";
+}
+
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
 function parseLastMessageTime(iso: string | null): number | null {
