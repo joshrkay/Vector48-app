@@ -111,11 +111,15 @@ export function BusinessProfileForm({ account }: { account: AccountRow }) {
       <div>
         <Label className="mb-2 block">Business hours</Label>
         <BusinessHoursFields
-          value={{ preset: form.watch("business_hours.preset") }}
+          value={{
+            preset: form.watch("business_hours.preset"),
+            customHours: form.watch("business_hours.customHours"),
+          }}
           onChange={(next) =>
             form.setValue("business_hours", {
               ...form.getValues("business_hours"),
               preset: next.preset,
+              customHours: next.customHours,
             })
           }
         />

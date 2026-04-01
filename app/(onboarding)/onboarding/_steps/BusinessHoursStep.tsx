@@ -20,11 +20,15 @@ export function BusinessHoursStep({ onNext, onValidityChange }: StepProps) {
 
   const { handleSubmit, setValue, watch } = useForm<BusinessHoursData>({
     resolver: zodResolver(businessHoursSchema),
-    defaultValues: { preset: businessHours.preset || "weekday_8_5" },
+    defaultValues: {
+      preset: businessHours.preset || "weekday_8_5",
+      customHours: businessHours.customHours,
+    },
     mode: "onSubmit",
   });
 
   const selected = watch("preset");
+  const customHours = watch("customHours");
 
   useEffect(() => {
     onValidityChange(true);
@@ -43,10 +47,11 @@ export function BusinessHoursStep({ onNext, onValidityChange }: StepProps) {
       </p>
       <BusinessHoursFields
         className="mt-6"
-        value={{ preset: selected }}
-        onChange={(next) =>
+        value={{ preset: selected, customHours }}
+        onChange={(next) => {
           setValue("preset", next.preset, { shouldValidate: true })
-        }
+          setValue("customHours", next.customHours, { shouldValidate: true });
+        }}
       />
     </form>
   );
