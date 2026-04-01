@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   type InboxFilterTab,
@@ -35,17 +35,24 @@ interface Props {
   conversations: GHLConversation[];
 }
 
+const HREF_TIME_REFRESH_MS = 60_000;
+
 export function InboxFilterTabs({ active, conversationId, conversations }: Props) {
-  const hrefs = useMemo(
-    () =>
-      TABS.reduce(
-        (acc, tab) => {
-          acc[tab.id] = buildHref(tab.id, conversationId, conversations);
-          return acc;
-        },
-        {} as Record<InboxFilterTab, string>,
-      ),
-    [conversationId, conversations],
+  const [, setHrefTimeTick] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setHrefTimeTick((t) => t + 1);
+    }, HREF_TIME_REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const hrefs = TABS.reduce(
+    (acc, tab) => {
+      acc[tab.id] = buildHref(tab.id, conversationId, conversations);
+      return acc;
+    },
+    {} as Record<InboxFilterTab, string>,
   );
 
   return (
