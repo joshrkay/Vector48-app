@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "@/hooks/useSWR";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -13,7 +14,6 @@ import {
 import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const QUERY_CACHE_TTL_MS = 30_000;
-const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
 
 interface ContactSearchPayload {
   contacts: CRMContactSearchItem[];
@@ -48,8 +48,6 @@ export function CRMSearchBar() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [contacts, setContacts] = useState<CRMContactSearchItem[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -59,11 +57,16 @@ export function CRMSearchBar() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  useEffect(() => {
-    if (!debouncedQuery) {
-      setContacts([]);
-      return;
+  const { data, isLoading, isValidating } = useSWR(
+    debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
+    searchContacts,
+    {
+      dedupingInterval: QUERY_CACHE_TTL_MS,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
     }
+  );
 
     let cancelled = false;
 
@@ -148,7 +151,7 @@ export function CRMSearchBar() {
 
       {open && debouncedQuery ? (
         <div className="absolute z-30 mt-2 w-full rounded-lg border bg-white shadow-lg">
-          {isLoading ? (
+          {isLoading || isValidating ? (
             <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">Searching...</p>
           ) : visibleContacts.length ? (
             <ul className="max-h-80 overflow-auto py-1">
