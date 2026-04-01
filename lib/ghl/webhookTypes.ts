@@ -3,6 +3,7 @@ export type GHLWebhookEventType =
   | "InboundMessage"
   | "ContactCreate"
   | "ContactUpdate"
+  | "ConversationUnread"
   | "OpportunityCreate"
   | "OpportunityStageUpdate"
   | "AppointmentCreate"
@@ -140,11 +141,21 @@ export interface GHLWebhookConversationUnreadUpdate extends GHLWebhookBase {
   contact?: GHLWebhookContactRef;
 }
 
+export interface GHLWebhookConversationUnread extends GHLWebhookBase {
+  type?: "ConversationUnread";
+  conversationId?: string;
+  unreadCount?: number;
+  contactId?: string;
+  contact_id?: string;
+  contact?: GHLWebhookContactRef;
+}
+
 export type GHLWebhookPayload =
   | GHLWebhookCallCompleted
   | GHLWebhookInboundMessage
   | GHLWebhookContactCreate
   | GHLWebhookContactUpdate
+  | GHLWebhookConversationUnread
   | GHLWebhookOpportunityCreate
   | GHLWebhookOpportunityStageUpdate
   | GHLWebhookAppointmentCreate

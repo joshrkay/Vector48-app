@@ -5,7 +5,7 @@ describe("parseGHLWebhook", () => {
   const cases: Array<{ type: string; payload: Record<string, unknown>; expectedEventType: string }> = [
     {
       type: "ContactCreate",
-      expectedEventType: "contact_created",
+      expectedEventType: "lead_created",
       payload: {
         id: "contact-1",
         location_id: "loc-1",
@@ -14,37 +14,8 @@ describe("parseGHLWebhook", () => {
       },
     },
     {
-      type: "ContactUpdate",
-      expectedEventType: "contact_updated",
-      payload: {
-        id: "contact-2",
-        dateUpdated: "2026-03-31T10:00:00.000Z",
-        contact: { name: "Updated Person", phone: "+15550001111" },
-      },
-    },
-    {
-      type: "CallCompleted",
-      expectedEventType: "call_completed",
-      payload: {
-        id: "call-1",
-        contact: { id: "contact-3", firstName: "Callie" },
-        duration: 125,
-        direction: "inbound",
-      },
-    },
-    {
-      type: "InboundMessage",
-      expectedEventType: "message_received",
-      payload: {
-        id: "msg-1",
-        contact_id: "contact-4",
-        message: "Hello there from inbound message",
-        webhookToken: "strip-me",
-      },
-    },
-    {
       type: "OpportunityCreate",
-      expectedEventType: "opportunity_created",
+      expectedEventType: "lead_created",
       payload: {
         opportunityId: "opp-1",
         name: "Website Redesign",
@@ -53,17 +24,8 @@ describe("parseGHLWebhook", () => {
       },
     },
     {
-      type: "OpportunityStageUpdate",
-      expectedEventType: "opportunity_moved",
-      payload: {
-        opportunityId: "opp-2",
-        pipeline: { stage: { name: "Qualified" } },
-        contact: { id: "contact-6", name: "Mover" },
-      },
-    },
-    {
       type: "AppointmentCreate",
-      expectedEventType: "appointment_created",
+      expectedEventType: "appointment_confirmed",
       payload: {
         appointmentId: "apt-1",
         appointmentTime: "2026-04-02T16:30:00.000Z",
@@ -72,17 +34,17 @@ describe("parseGHLWebhook", () => {
     },
     {
       type: "AppointmentStatusUpdate",
-      expectedEventType: "appointment_updated",
+      expectedEventType: "alert",
       payload: {
         appointmentId: "apt-2",
         start_time: "2026-04-05T19:00:00.000Z",
-        appointmentStatus: "confirmed",
+        appointmentStatus: "cancelled",
         contact: { id: "contact-8", name: "Status Person" },
       },
     },
     {
       type: "ConversationUnreadUpdate",
-      expectedEventType: "conversation_unread",
+      expectedEventType: "lead_outreach_sent",
       payload: {
         conversationId: "conv-1",
         unreadCount: 2,
@@ -96,8 +58,14 @@ describe("parseGHLWebhook", () => {
     it(`parses ${testCase.type} with fallback fields`, () => {
       const parsed = parseGHLWebhook(testCase.payload, testCase.type);
 
+      expect(parsed).not.toBeNull();
+      if (!parsed) {
+        throw new Error("Expected parsed webhook");
+      }
+
       expect(parsed.event_type).toBe(testCase.expectedEventType);
       expect(parsed.ghl_event_type).toBe(testCase.type);
+      expect(parsed.recipe_slug).toBe("system");
       expect(parsed.summary.length).toBeGreaterThan(0);
       expect(parsed.summary.includes("\n")).toBe(false);
       expect(parsed.detail.token).toBeUndefined();
@@ -109,12 +77,17 @@ describe("parseGHLWebhook", () => {
   it("uses nested contact id as fallback", () => {
     const parsed = parseGHLWebhook(
       {
-        type: "InboundMessage",
-        id: "msg-2",
+        type: "ConversationUnread",
+        conversationId: "conv-2",
         contact: { id: "nested-1", phone: "+15559990000", name: "Nested Contact" },
       },
-      "InboundMessage"
+      "ConversationUnread"
     );
+
+    expect(parsed).not.toBeNull();
+    if (!parsed) {
+      throw new Error("Expected parsed webhook");
+    }
 
     expect(parsed.contact_id).toBe("nested-1");
     expect(parsed.contact_phone).toBe("+15559990000");
@@ -132,7 +105,36 @@ describe("parseGHLWebhook", () => {
       "ContactCreate"
     );
 
+    expect(parsed).not.toBeNull();
+    if (!parsed) {
+      throw new Error("Expected parsed webhook");
+    }
+
     expect(parsed.detail.location_id).toBe("loc-xyz");
     expect(parsed.detail.token).toBeUndefined();
+  });
+
+  it("returns null for unsupported webhook events", () => {
+    const parsed = parseGHLWebhook(
+      {
+        type: "ContactUpdate",
+        id: "contact-2",
+      },
+      "ContactUpdate"
+    );
+
+    expect(parsed).toBeNull();
+  });
+
+  it("returns null for non-cancelled appointment status updates", () => {
+    const parsed = parseGHLWebhook(
+      {
+        type: "AppointmentStatusUpdate",
+        appointmentStatus: "confirmed",
+      },
+      "AppointmentStatusUpdate"
+    );
+
+    expect(parsed).toBeNull();
   });
 });
