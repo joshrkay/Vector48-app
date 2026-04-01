@@ -52,7 +52,7 @@ function ensureCleanup() {
   }
 }
 
-async function runExclusive<T>(bucket: Bucket, fn: () => T | Promise<T>): Promise<T> {
+async function runExclusive<T>(bucket: Bucket, fn: () => T): Promise<Awaited<T>> {
   const previous = bucket.lock;
   let release!: () => void;
   bucket.lock = new Promise<void>((resolve) => {
@@ -174,10 +174,9 @@ export async function acquireRateLimit(accountId: string): Promise<void> {
   const bucket = await getBucket(accountId);
   await runExclusive(bucket, () => refreshBudget(bucket));
 
-  let wakePromise: Promise<void> | null = null;
-
   while (true) {
-    wakePromise = await runExclusive<Promise<void> | null>(bucket, () => {
+    let wakePromise: Promise<void> | null = null;
+    const acquired = await runExclusive(bucket, () => {
       const now = Date.now();
       bucket.lastAccess = now;
       pruneExpired(bucket, now);
@@ -185,18 +184,18 @@ export async function acquireRateLimit(accountId: string): Promise<void> {
       // Preserve ordering: while there is a queue, all new callers join it.
       if (bucket.requestTimestamps.length < bucket.budget && bucket.queue.length === 0) {
         bucket.requestTimestamps.push(now);
-        return null;
+        return true;
       }
 
-      const waiter = new Promise<void>((resolve) => {
+      wakePromise = new Promise<void>((resolve) => {
         bucket.queue.push(resolve);
       });
 
       scheduleNextWake(bucket);
-      return waiter;
+      return false;
     });
 
-    if (!wakePromise) {
+    if (acquired) {
       // Successfully recorded this request timestamp.
       await runExclusive(bucket, () => {
         if (bucket.queue.length > 0) {
