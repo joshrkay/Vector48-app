@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "@/hooks/useSWR";
 import { Search } from "lucide-react";
+import useSWR from "swr";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { upsertContactsInCache } from "@/lib/crm/contactCache";
@@ -12,16 +13,22 @@ import {
   type CRMContactSearchResponse,
 } from "@/lib/crm/types";
 
-const QUERY_CACHE_TTL_MS = 30_000;
+async function searchContacts([endpoint, query]: readonly unknown[]) {
+  if (typeof endpoint !== "string" || typeof query !== "string") {
+    return [];
+  }
 
-async function searchContacts([url, query]: readonly [string, string]) {
-  const res = await fetch(`${url}?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`${endpoint}?q=${encodeURIComponent(query)}`);
   if (!res.ok) {
     throw new Error("Failed to search contacts");
   }
 
-  const payload = (await res.json()) as { contacts: CRMContactSearchItem[] };
-  return payload.contacts;
+  const payload = (await res.json()) as {
+    items?: CRMContactSearchItem[];
+    contacts?: CRMContactSearchItem[];
+  };
+
+  return payload.items ?? payload.contacts ?? [];
 }
 
 export function CRMSearchBar() {
@@ -31,6 +38,17 @@ export function CRMSearchBar() {
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  const { data: contacts = [], isLoading } = useSWR<CRMContactSearchItem[]>(
+    debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
+    searchContacts,
+    {
+      dedupingInterval: 30_000,
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      keepPreviousData: true,
+    }
+  );
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(query.trim());
@@ -39,26 +57,13 @@ export function CRMSearchBar() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { data, isLoading, isValidating } = useSWR(
-    debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
-    searchContacts,
-    {
-      dedupingInterval: QUERY_CACHE_TTL_MS,
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      revalidateIfStale: false,
-    }
-  );
-
-  const contacts = data ?? [];
+  const visibleContacts = useMemo(() => contacts, [contacts]);
 
   useEffect(() => {
     if (contacts.length) {
       upsertContactsInCache(contacts);
     }
   }, [contacts]);
-
-  const visibleContacts = useMemo(() => contacts, [contacts]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -119,7 +124,7 @@ export function CRMSearchBar() {
             <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">Searching...</p>
           ) : visibleContacts.length ? (
             <ul className="max-h-80 overflow-auto py-1">
-              {visibleContacts.map((contact, index) => (
+              {visibleContacts.map((contact: CRMContactSearchItem, index: number) => (
                 <li key={contact.id}>
                   <button
                     type="button"
