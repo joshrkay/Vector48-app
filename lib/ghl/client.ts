@@ -409,7 +409,7 @@ function attachLocationIdToParams(
   locationId: string | null,
   params?: Record<string, string | number | boolean | undefined> | null,
 ): Record<string, string | number | boolean | undefined> | undefined {
-  if (!locationId) return params;
+  if (!locationId) return params ?? undefined;
   return { locationId, ...(params ?? {}) };
 }
 
