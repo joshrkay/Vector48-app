@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
+  buildInboxFilterHref,
   type InboxFilterTab,
-  filterConversationsForInbox,
 } from "@/lib/crm/inboxFilters";
 import type { GHLConversation } from "@/lib/ghl/types";
 
@@ -15,19 +15,6 @@ const TABS: { id: InboxFilterTab; label: string }[] = [
   { id: "ai_handled", label: "AI Handled" },
   { id: "needs_reply", label: "Needs Reply" },
 ];
-
-function buildHref(nextFilter: InboxFilterTab, conversationId: string | null, conversations: GHLConversation[]) {
-  const now = Date.now();
-  const underFilter = filterConversationsForInbox(conversations, nextFilter, now);
-  const ids = new Set(underFilter.map((c) => c.id));
-  const keepConv = conversationId && ids.has(conversationId) ? conversationId : null;
-
-  const q = new URLSearchParams();
-  if (nextFilter !== "all") q.set("filter", nextFilter);
-  if (keepConv) q.set("conversation", keepConv);
-  const s = q.toString();
-  return s ? `/crm/inbox?${s}` : "/crm/inbox";
-}
 
 interface Props {
   active: InboxFilterTab;
@@ -49,7 +36,7 @@ export function InboxFilterTabs({ active, conversationId, conversations }: Props
 
   const hrefs = TABS.reduce(
     (acc, tab) => {
-      acc[tab.id] = buildHref(tab.id, conversationId, conversations);
+      acc[tab.id] = buildInboxFilterHref(tab.id, conversationId, conversations, Date.now());
       return acc;
     },
     {} as Record<InboxFilterTab, string>,
