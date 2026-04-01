@@ -4,7 +4,6 @@ import { cacheStore } from "./cacheStore";
 const EVENT_TAG_MAP: Record<string, string[]> = {
   ContactCreate: ["contacts"],
   ContactUpdate: ["contacts"],
-  ConversationUnread: ["conversations"],
   OpportunityCreate: ["opportunities"],
   OpportunityStageUpdate: ["opportunities"],
   AppointmentCreate: ["appointments"],

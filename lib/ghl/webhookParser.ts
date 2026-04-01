@@ -1,15 +1,20 @@
+import crypto from "node:crypto";
 import type {
   AutomationEventInsert,
   GHLWebhookPayload,
 } from "./webhookTypes";
 
 const SUPPORTED_EVENT_TYPES: Record<string, AutomationEventInsert["event_type"]> = {
-  ContactCreate: "lead_created",
-  ConversationUnread: "lead_outreach_sent",
-  ConversationUnreadUpdate: "lead_outreach_sent",
-  AppointmentCreate: "appointment_confirmed",
-  AppointmentStatusUpdate: "alert",
-  OpportunityCreate: "lead_created",
+  CallCompleted: "call_completed",
+  InboundMessage: "message_received",
+  ContactCreate: "contact_created",
+  ContactUpdate: "contact_updated",
+  OpportunityCreate: "opportunity_created",
+  OpportunityStageUpdate: "opportunity_moved",
+  AppointmentCreate: "appointment_created",
+  AppointmentStatusUpdate: "appointment_updated",
+  ConversationUnreadUpdate: "conversation_unread",
+  ConversationUnread: "conversation_unread",
 };
 
 const SECRET_KEYS = new Set(["token", "verificationToken", "webhookToken"]);
@@ -18,16 +23,13 @@ function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function sanitizePayload(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object") {
-    return {};
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
   }
-
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => !SECRET_KEYS.has(key))
-      .map(([key, entry]) => [key, sanitizeValue(entry)]),
-  );
+  return null;
 }
 
 function sanitizeValue(value: unknown): unknown {
@@ -39,11 +41,24 @@ function sanitizeValue(value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .filter(([key]) => !SECRET_KEYS.has(key))
+        .sort(([a], [b]) => a.localeCompare(b))
         .map(([key, entry]) => [key, sanitizeValue(entry)]),
     );
   }
 
   return value;
+}
+
+function sanitizePayload(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  return sanitizeValue(value) as Record<string, unknown>;
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value);
 }
 
 function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
@@ -54,28 +69,36 @@ function pickString(obj: Record<string, unknown>, keys: string[]): string | null
   return null;
 }
 
-function formatContactName(payload: Record<string, unknown>): string | null {
-  const contact =
-    typeof payload.contact === "object" && payload.contact !== null
-      ? (payload.contact as Record<string, unknown>)
-      : null;
+function getContactRecord(payload: Record<string, unknown>): Record<string, unknown> {
+  return typeof payload.contact === "object" && payload.contact !== null
+    ? (payload.contact as Record<string, unknown>)
+    : {};
+}
 
-  const full = pickString(payload, ["contactName", "name"]) ?? pickString(contact ?? {}, ["name"]);
+function formatContactName(payload: Record<string, unknown>): string | null {
+  const contact = getContactRecord(payload);
+  const full = pickString(payload, ["contactName", "name"]) ?? pickString(contact, ["contactName", "name"]);
   if (full) return full;
 
-  const first = pickString(payload, ["firstName"]) ?? pickString(contact ?? {}, ["firstName"]);
-  const last = pickString(payload, ["lastName"]) ?? pickString(contact ?? {}, ["lastName"]);
+  const first = pickString(payload, ["firstName"]) ?? pickString(contact, ["firstName"]);
+  const last = pickString(payload, ["lastName"]) ?? pickString(contact, ["lastName"]);
 
   if (first && last) return `${first} ${last}`;
-  return first;
+  return first ?? last;
 }
 
 function formatPhone(phone: string | null): string | null {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, "");
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   }
+
   return phone;
 }
 
@@ -91,72 +114,148 @@ function formatDateTime(raw: unknown): string | null {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "UTC",
   });
 }
 
-function isCancelledStatus(payload: Record<string, unknown>): boolean {
-  const status = pickString(payload, ["status", "appointmentStatus"]);
-  return status?.toLowerCase() === "cancelled";
+function formatStatus(value: string | null): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/[_-]+/g, " ").trim().toLowerCase();
+  return normalized.length > 0 ? normalized[0].toUpperCase() + normalized.slice(1) : null;
+}
+
+function formatDurationMinutes(payload: Record<string, unknown>): string | null {
+  const duration = asNumber(payload.callDuration) ?? asNumber(payload.duration);
+  if (duration === null) return null;
+
+  const minutes = duration >= 60 ? Math.max(1, Math.round(duration / 60)) : Math.max(1, Math.round(duration));
+  return `${minutes} min`;
+}
+
+function formatDirection(payload: Record<string, unknown>): string | null {
+  const direction = pickString(payload, ["callDirection", "direction"]);
+  return direction ? direction.toLowerCase() : null;
+}
+
+function messagePreview(payload: Record<string, unknown>): string | null {
+  const preview = pickString(payload, ["body", "message"]);
+  if (!preview) return null;
+
+  const normalized = preview.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 60) return normalized;
+  return `${normalized.slice(0, 57)}...`;
 }
 
 function extractContactId(payload: Record<string, unknown>, ghlEventType: string): string | null {
+  const contact = getContactRecord(payload);
+  const explicitContactId = pickString(payload, ["contactId", "contact_id"]) ?? pickString(contact, ["id"]);
+  if (explicitContactId) return explicitContactId;
+
   if (ghlEventType === "ContactCreate" || ghlEventType === "ContactUpdate") {
-    return pickString(payload, ["id", "contactId", "contact_id"]);
+    return pickString(payload, ["id"]);
   }
 
-  const contact =
-    typeof payload.contact === "object" && payload.contact !== null
-      ? (payload.contact as Record<string, unknown>)
-      : {};
-
-  return pickString(payload, ["contactId", "contact_id"]) ?? pickString(contact, ["id"]);
+  return null;
 }
 
-function extractGhlEventId(payload: Record<string, unknown>, ghlEventType: string): string | null {
-  const explicitId = pickString(payload, ["webhookId", "eventId", "id"]);
+function extractContactPhone(payload: Record<string, unknown>): string | null {
+  const contact = getContactRecord(payload);
+  return formatPhone(pickString(payload, ["phone"]) ?? pickString(contact, ["phone"]));
+}
+
+function extractEntityId(payload: Record<string, unknown>, ghlEventType: string): string | null {
+  switch (ghlEventType) {
+    case "CallCompleted":
+      return pickString(payload, ["callId", "id"]);
+    case "InboundMessage":
+    case "ConversationUnread":
+    case "ConversationUnreadUpdate":
+      return pickString(payload, ["conversationId", "id"]);
+    case "ContactCreate":
+    case "ContactUpdate":
+      return pickString(payload, ["contactId", "contact_id", "id"]);
+    case "OpportunityCreate":
+    case "OpportunityStageUpdate":
+      return pickString(payload, ["opportunityId", "opportunity_id", "id"]);
+    case "AppointmentCreate":
+    case "AppointmentStatusUpdate":
+      return pickString(payload, ["appointmentId", "appointment_id", "id"]);
+    default:
+      return pickString(payload, ["id"]);
+  }
+}
+
+function extractEventTimestamp(payload: Record<string, unknown>): string | null {
+  return pickString(payload, ["timestamp", "dateUpdated", "updatedAt", "dateAdded", "createdAt"]);
+}
+
+function extractGhlEventId(
+  payload: Record<string, unknown>,
+  ghlEventType: string,
+  sanitizedPayload: Record<string, unknown>,
+): string | null {
+  const explicitId = pickString(payload, ["webhookId", "eventId"]);
   if (explicitId) return `${ghlEventType}:${explicitId}`;
 
-  const fallbackEntity = pickString(payload, ["contactId", "contact_id", "conversationId", "appointmentId", "opportunityId"]);
-  const fallbackTime = pickString(payload, ["dateUpdated", "dateAdded", "timestamp", "updatedAt", "createdAt"]);
-
-  if (fallbackEntity && fallbackTime) {
-    return `${ghlEventType}:${fallbackEntity}:${fallbackTime}`;
+  const entityId = extractEntityId(payload, ghlEventType);
+  const timestamp = extractEventTimestamp(payload);
+  if (entityId && timestamp) {
+    return `${ghlEventType}:${entityId}:${timestamp}`;
   }
 
-  return fallbackEntity ? `${ghlEventType}:${fallbackEntity}` : null;
+  const digest = crypto
+    .createHash("sha256")
+    .update(stableStringify(sanitizedPayload))
+    .digest("hex")
+    .slice(0, 20);
+
+  return `${ghlEventType}:${digest}`;
 }
 
 function summaryForEvent(ghlEventType: string, payload: Record<string, unknown>): string {
   const contactName = formatContactName(payload);
-  const contact =
-    typeof payload.contact === "object" && payload.contact !== null
-      ? (payload.contact as Record<string, unknown>)
-      : {};
-  const phone = formatPhone(pickString(payload, ["phone"]) ?? pickString(contact, ["phone"]));
+  const phone = extractContactPhone(payload);
+  const who = contactName ?? phone ?? "contact";
+  const opportunityName = pickString(payload, ["opportunityName", "name"]) ?? "opportunity";
+  const stageName =
+    pickString(payload, ["stageName", "pipelineStage", "currentStage"]) ?? "Updated";
+  const when = formatDateTime(payload.startTime ?? payload.start_time ?? payload.appointmentTime);
+  const appointmentStatus = formatStatus(
+    pickString(payload, ["appointmentStatus", "status"]),
+  );
 
   switch (ghlEventType) {
-    case "ContactCreate": {
-      const who = contactName ?? phone ?? "contact";
-      return `New contact ${who} added`;
+    case "CallCompleted": {
+      const duration = formatDurationMinutes(payload);
+      const direction = formatDirection(payload);
+      const parts = [duration, direction].filter(Boolean).join(", ");
+      return parts.length > 0
+        ? `Call completed with ${who} — ${parts}`
+        : `Call completed with ${who}`;
     }
-    case "OpportunityCreate": {
-      const name = pickString(payload, ["name"]) ?? contactName ?? "opportunity";
-      return `New opportunity: ${name}`;
+    case "InboundMessage": {
+      const preview = messagePreview(payload);
+      return preview ? `New message from ${who} — "${preview}"` : `New message from ${who}`;
     }
-    case "AppointmentCreate": {
-      const who = contactName ?? phone ?? "contact";
-      const at = formatDateTime(payload.startTime ?? payload.start_time ?? payload.appointmentTime);
-      return at ? `Appointment booked with ${who} for ${at}` : `Appointment booked with ${who}`;
-    }
-    case "AppointmentStatusUpdate": {
-      const who = contactName ?? phone ?? "contact";
-      return `Appointment cancelled by ${who}`;
-    }
+    case "ContactCreate":
+      return contactName && phone ? `New contact: ${contactName}, ${phone}` : `New contact: ${who}`;
+    case "ContactUpdate":
+      return contactName && phone ? `Contact updated: ${contactName}, ${phone}` : `Contact updated: ${who}`;
+    case "OpportunityCreate":
+      return `Opportunity created: ${opportunityName}${contactName ? ` for ${contactName}` : ""}`;
+    case "OpportunityStageUpdate":
+      return `Lead moved to '${stageName}' stage — ${opportunityName}${contactName ? ` for ${contactName}` : ""}`;
+    case "AppointmentCreate":
+      return when ? `Appointment created: ${who}, ${when}` : `Appointment created: ${who}`;
+    case "AppointmentStatusUpdate":
+      return when && appointmentStatus
+        ? `Appointment ${appointmentStatus.toLowerCase()}: ${who}, ${when}`
+        : appointmentStatus
+          ? `Appointment ${appointmentStatus.toLowerCase()}: ${who}`
+          : `Appointment updated: ${who}`;
     case "ConversationUnread":
-    case "ConversationUnreadUpdate": {
-      const who = contactName ?? phone ?? "contact";
-      return `Message received from ${who}`;
-    }
+    case "ConversationUnreadUpdate":
+      return `Conversation has unread messages from ${who}`;
     default:
       return "Customer activity received";
   }
@@ -174,29 +273,14 @@ export function parseGHLWebhook(
     return null;
   }
 
-  if (ghlEventType === "AppointmentStatusUpdate" && !isCancelledStatus(payload)) {
-    return null;
-  }
-
-  const contact =
-    typeof payload.contact === "object" && payload.contact !== null
-      ? (payload.contact as Record<string, unknown>)
-      : {};
-
-  const contactPhone = formatPhone(
-    pickString(payload, ["phone"]) ?? pickString(contact, ["phone"]),
-  );
-
-  const contactName = formatContactName(payload);
-
   return {
-    recipe_slug: "system",
+    recipe_slug: null,
     event_type: eventType,
     ghl_event_type: ghlEventType,
-    ghl_event_id: extractGhlEventId(payload, ghlEventType),
+    ghl_event_id: extractGhlEventId(payload, ghlEventType, sanitizedPayload),
     contact_id: extractContactId(payload, ghlEventType),
-    contact_phone: contactPhone,
-    contact_name: contactName,
+    contact_phone: extractContactPhone(payload),
+    contact_name: formatContactName(payload),
     summary: summaryForEvent(ghlEventType, payload),
     detail: sanitizedPayload,
   };
