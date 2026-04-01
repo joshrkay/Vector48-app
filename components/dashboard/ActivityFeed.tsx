@@ -13,12 +13,14 @@ interface ActivityFeedProps {
   initialItems: AutomationEvent[];
   initialNextCursor: string | null;
   accountId: string;
+  showWarmupEmptyState: boolean;
 }
 
 export function ActivityFeed({
   initialItems,
   initialNextCursor,
   accountId,
+  showWarmupEmptyState,
 }: ActivityFeedProps) {
   const [items, setItems] = useState<AutomationEvent[]>(initialItems);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
@@ -120,12 +122,47 @@ export function ActivityFeed({
     return (
       <section className="rounded-2xl border border-[#E2E8F0] bg-white p-10">
         <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 text-center">
-          <div className="rounded-full bg-slate-100 p-4">
-            <Inbox className="h-8 w-8 text-[#64748B]" />
-          </div>
-          <p className="text-[14px] text-[#64748B]">
-            No activity yet. Activate a recipe to get started.
-          </p>
+          {showWarmupEmptyState ? (
+            <>
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F8FAFC_0%,#E2E8F0_100%)]">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 80 80"
+                  className="h-14 w-14 text-[#0F766E]"
+                  fill="none"
+                >
+                  <circle cx="54" cy="22" r="7" fill="#F59E0B" opacity="0.2" />
+                  <path
+                    d="M54 15.5l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5 1.5-4Z"
+                    fill="#F59E0B"
+                  />
+                  <path
+                    d="M39.3 23.1a4 4 0 0 1 1.4 0l2.2-4.8 5.6 2.3-1.9 5a18.4 18.4 0 0 1 3.4 3.4l5-1.9 2.3 5.6-4.8 2.2a4 4 0 0 1 0 1.4l4.8 2.2-2.3 5.6-5-1.9a18.4 18.4 0 0 1-3.4 3.4l1.9 5-5.6 2.3-2.2-4.8a4 4 0 0 1-1.4 0l-2.2 4.8-5.6-2.3 1.9-5a18.4 18.4 0 0 1-3.4-3.4l-5 1.9-2.3-5.6 4.8-2.2a4 4 0 0 1 0-1.4l-4.8-2.2 2.3-5.6 5 1.9a18.4 18.4 0 0 1 3.4-3.4l-1.9-5 5.6-2.3 2.2 4.8Z"
+                    stroke="#0F766E"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx="40" cy="36" r="7.5" stroke="#0F766E" strokeWidth="3" />
+                </svg>
+              </div>
+              <p className="font-heading text-[18px] text-[#0F1923]">
+                Your first automation is warming up.
+              </p>
+              <p className="max-w-[320px] text-[14px] text-[#64748B]">
+                Activity will appear here once a recipe triggers.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="rounded-full bg-slate-100 p-4">
+                <Inbox className="h-8 w-8 text-[#64748B]" />
+              </div>
+              <p className="text-[14px] text-[#64748B]">
+                No activity yet. Activate a recipe to get started.
+              </p>
+            </>
+          )}
         </div>
       </section>
     );
