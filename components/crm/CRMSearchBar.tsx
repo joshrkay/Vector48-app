@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "@/hooks/useSWR";
 import { Search } from "lucide-react";
+import useSWR from "swr";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { upsertContactsInCache } from "@/lib/crm/contactCache";
@@ -13,7 +14,10 @@ import {
 } from "@/lib/crm/contactCache";
 import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
-const QUERY_CACHE_TTL_MS = 30_000;
+async function searchContacts([endpoint, query]: readonly unknown[]) {
+  if (typeof endpoint !== "string" || typeof query !== "string") {
+    return [];
+  }
 
 interface ContactSearchPayload {
   contacts: CRMContactSearchItem[];
@@ -49,22 +53,14 @@ export function CRMSearchBar() {
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(query.trim());
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  const { data, isLoading, isValidating } = useSWR(
+  const { data: contacts = [], isLoading } = useSWR<CRMContactSearchItem[]>(
     debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
     searchContacts,
     {
-      dedupingInterval: QUERY_CACHE_TTL_MS,
+      dedupingInterval: 30_000,
       revalidateOnFocus: false,
-      revalidateOnReconnect: false,
       revalidateIfStale: false,
+      keepPreviousData: true,
     }
   );
 
@@ -93,8 +89,6 @@ export function CRMSearchBar() {
       cancelled = true;
     };
   }, [debouncedQuery]);
-
-  const visibleContacts = useMemo(() => contacts, [contacts]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -155,7 +149,7 @@ export function CRMSearchBar() {
             <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">Searching...</p>
           ) : visibleContacts.length ? (
             <ul className="max-h-80 overflow-auto py-1">
-              {visibleContacts.map((contact, index) => (
+              {visibleContacts.map((contact: CRMContactSearchItem, index: number) => (
                 <li key={contact.id}>
                   <button
                     type="button"
