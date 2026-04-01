@@ -3,15 +3,12 @@ import { requireAccountForUser } from "@/lib/auth/account";
 import { getContacts } from "@/lib/ghl/contacts";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
-import {
-  type CRMContactSearchItem,
-  type CRMContactSearchResponse,
-} from "@/lib/crm/types";
+import type { CRMContactSearchItem } from "@/lib/crm/contactCache";
+import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_FETCH_LIMIT = 25;
 const MAX_RESULTS = 10;
-
 
 function normalizeContact(raw: {
   id?: string | null;
@@ -43,7 +40,7 @@ function scoreContact(contact: CRMContactSearchItem, query: string): number {
   const normalizedPhoneQuery = q.replace(/\D/g, "");
 
   const name = contact.name.toLowerCase();
-  const email = contact.email?.toLowerCase() ?? "";
+  const email = (contact.email ?? "").toLowerCase();
   const phoneDigits = (contact.phone ?? "").replace(/\D/g, "");
 
   if (name === q || email === q || (normalizedPhoneQuery && phoneDigits === normalizedPhoneQuery)) {
@@ -77,13 +74,13 @@ export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   if (!q) {
-    return NextResponse.json<CRMContactSearchResponse>({ items: [], error: null });
+    return NextResponse.json<CRMContactSearchResponse>({ contacts: [], error: null });
   }
 
   if (q.length < MIN_QUERY_LENGTH) {
     return NextResponse.json<CRMContactSearchResponse>(
       {
-        items: [],
+        contacts: [],
         error: null,
       },
     );
@@ -94,7 +91,7 @@ export async function GET(request: NextRequest) {
 
   if (!session) {
     return NextResponse.json<CRMContactSearchResponse>(
-      { items: [], error: { message: "Unauthorized" } },
+      { contacts: [], error: { message: "Unauthorized" } },
       { status: 401 },
     );
   }
@@ -120,13 +117,13 @@ export async function GET(request: NextRequest) {
 
     const sorted = sortByRelevance(normalized, q).slice(0, MAX_RESULTS);
 
-    return NextResponse.json<CRMContactSearchResponse>({ items: sorted, error: null });
+    return NextResponse.json<CRMContactSearchResponse>({ contacts: sorted, error: null });
   } catch (error) {
     console.error("[ghl-contact-search] failed", error);
 
     return NextResponse.json<CRMContactSearchResponse>(
       {
-        items: [],
+        contacts: [],
         error: {
           message: "Unable to search contacts right now.",
         },

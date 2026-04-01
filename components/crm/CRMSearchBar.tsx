@@ -9,25 +9,32 @@ import { cn } from "@/lib/utils";
 import { upsertContactsInCache } from "@/lib/crm/contactCache";
 import {
   type CRMContactSearchItem,
-  type CRMContactSearchResponse,
-} from "@/lib/crm/types";
+  upsertContactsInCache as cacheContacts,
+} from "@/lib/crm/contactCache";
+import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
-async function searchContacts([endpoint, query]: readonly unknown[]) {
-  if (typeof endpoint !== "string" || typeof query !== "string") {
-    return [];
+const QUERY_CACHE_TTL_MS = 30_000;
+const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
+
+async function searchContacts(query: string): Promise<CRMContactSearchItem[]> {
+  const cached = queryCache.get(query);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.contacts;
   }
 
-  const res = await fetch(`${endpoint}?q=${encodeURIComponent(query)}`);
-  if (!res.ok) {
-    throw new Error("Failed to search contacts");
+  const response = await fetch(`/api/ghl/contacts/search?q=${encodeURIComponent(query)}`);
+  const payload: CRMContactSearchResponse = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed to search contacts");
   }
 
-  const payload = (await res.json()) as {
-    items?: CRMContactSearchItem[];
-    contacts?: CRMContactSearchItem[];
-  };
+  queryCache.set(query, {
+    contacts: payload.contacts,
+    expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
+  });
 
-  return payload.items ?? payload.contacts ?? [];
+  return payload.contacts;
 }
 
 export function CRMSearchBar() {
@@ -55,20 +62,20 @@ export function CRMSearchBar() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const visibleContacts = useMemo(() => contacts, [contacts]);
-
   useEffect(() => {
     if (contacts.length) {
       upsertContactsInCache(contacts);
     }
   }, [contacts]);
 
+  const visibleContacts = useMemo(() => contacts, [contacts]);
+
   useEffect(() => {
     setSelectedIndex(0);
   }, [debouncedQuery]);
 
   const handleSelect = (contact: CRMContactSearchItem) => {
-    upsertContactsInCache([contact]);
+    cacheContacts([contact]);
     setQuery("");
     setDebouncedQuery("");
     setOpen(false);
@@ -128,13 +135,15 @@ export function CRMSearchBar() {
                     type="button"
                     className={cn(
                       "w-full px-3 py-2 text-left",
-                      index === selectedIndex ? "bg-[var(--v48-accent-light)]" : "hover:bg-gray-50"
+                      index === selectedIndex ? "bg-[var(--v48-accent-light)]" : "hover:bg-gray-50",
                     )}
                     onMouseEnter={() => setSelectedIndex(index)}
                     onClick={() => handleSelect(contact)}
                   >
                     <p className="text-sm font-medium">{contact.name}</p>
-                    <p className="text-xs text-[var(--text-secondary)]">{contact.email ?? contact.phone ?? "No email or phone"}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      {contact.email ?? contact.phone ?? "No email or phone"}
+                    </p>
                   </button>
                 </li>
               ))}
