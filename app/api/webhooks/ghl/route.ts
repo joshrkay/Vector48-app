@@ -96,9 +96,9 @@ export async function POST(req: Request) {
 
   if (insertError) {
     console.error("[ghl-webhook] failed to write automation event", insertError.message);
+  } else {
+    invalidateGHLCache(account.id, ghlEventType, { invalidateInMemoryFallback: true });
   }
-
-  invalidateGHLCache(account.id, ghlEventType);
 
   // Fire-and-forget side effects. Do not await so webhook returns quickly.
   queueMicrotask(() => {

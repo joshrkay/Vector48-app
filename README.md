@@ -10,3 +10,12 @@ The required status check to enforce in branch protection is:
 ## Contributor note
 
 If dependencies change, run `npm install` and commit `package-lock.json`.
+
+## GHL cache invalidation deployment notes
+
+- Webhook/cache invalidation uses Next.js `revalidateTag` with tags in the format
+  `ghl:{accountId}:{resource}`.
+- Tag invalidation is only reliably distributed when your deployment uses a shared
+  Next incremental/data cache backend across instances.
+- If your environment does not provide that shared backend, add a Redis-based
+  distributed invalidation fallback so all app instances receive cache bust events.
