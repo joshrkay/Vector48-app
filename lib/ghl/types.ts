@@ -144,12 +144,6 @@ export interface GHLCreateContactPayload {
 export interface GHLUpdateContactPayload
   extends Partial<Omit<GHLCreateContactPayload, "locationId">> {}
 
-export interface GHLContactsListResponse {
-  contacts: GHLContact[];
-}
-
-export type GHLContactResponse = GHLContact;
-
 // ── Notes ───────────────────────────────────────────────────────────────────
 
 export interface GHLNote {
@@ -569,6 +563,13 @@ export interface GHLWebhook {
 }
 
 export interface GHLCreateWebhookPayload {
+  locationId: string;
+  url: string;
+  events: GHLWebhookEvent[];
+  headers?: Record<string, string>;
+  secret?: string;
+}
+
 export interface GHLWebhookResponse {
   webhook: GHLWebhook;
 }
@@ -603,9 +604,4 @@ export interface GHLMessagesListResponse {
   lastMessageId?: string;
 }
 
-export interface GHLWebhooksListResponse {
-  webhooks: GHLWebhook[];
-}
-
 // ── (duplicate declarations removed — end of file) ─────────────────────────
-
