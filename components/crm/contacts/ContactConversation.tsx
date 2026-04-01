@@ -15,7 +15,7 @@ interface Props {
   contactId: string;
 }
 
-function typeLabel(type: GHLMessageType): string {
+function typeLabel(type: string): string {
   const map: Record<string, string> = {
     TYPE_SMS: "SMS",
     TYPE_EMAIL: "Email",
@@ -69,14 +69,16 @@ function Thread({ conversation, messages: initialMsgs, contactId }: ThreadProps)
     setSending(true);
 
     try {
+      const payload: { type: GHLMessageType; message: string; contactId: string } = {
+        type: "TYPE_SMS",
+        message: text,
+        contactId,
+      };
+
       const res = await fetch(`/api/ghl/conversations/${conversation.id}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "TYPE_SMS" as GHLMessageType,
-          message: text,
-          contactId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error("Send failed");
@@ -184,9 +186,12 @@ export function ContactConversation({ conversations, initialMessages, contactId 
   // Group messages by conversationId
   const msgsByConv = new Map<string, GHLMessage[]>();
   for (const msg of initialMessages) {
-    const list = msgsByConv.get(msg.conversationId) ?? [];
+    const conversationId = msg.conversationId;
+    if (!conversationId) continue;
+
+    const list = msgsByConv.get(conversationId) ?? [];
     list.push(msg);
-    msgsByConv.set(msg.conversationId, list);
+    msgsByConv.set(conversationId, list);
   }
 
   return (

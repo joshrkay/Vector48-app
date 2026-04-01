@@ -195,7 +195,12 @@ export async function provisionGHL(accountId: string): Promise<void> {
       account.ghl_sub_account_id = location.id;
 
       // Step 2: Store credentials (combined with step 1 for atomicity)
-      const encryptedToken = encryptToken(location.apiKey);
+      if (!location.apiKey) {
+        throw new Error("GHL location creation did not return an API key");
+      }
+
+      const apiKey = location.apiKey;
+      const encryptedToken = encryptToken(apiKey);
 
       await updateAccount(accountId, {
         ghl_location_id: location.id,

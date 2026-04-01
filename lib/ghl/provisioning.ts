@@ -116,7 +116,7 @@ export async function provisionCustomer(
 
     const agencyClient = GHLClient.forAgency();
 
-    const locationRes = await agencyClient.locations.create({
+    const location = await agencyClient.locations.create({
       companyId,
       name: account.business_name,
       phone: account.phone ?? undefined,
@@ -126,7 +126,7 @@ export async function provisionCustomer(
       email: userEmail || undefined,
     });
 
-    const locationId = locationRes.location.id;
+    const locationId = location.id;
 
     // Store sub-account ID immediately so we can recover on retry
     await supabase
@@ -267,13 +267,13 @@ export async function provisionCustomer(
         "ConversationUnreadUpdate",
       ];
 
-      const webhookRes = await agencyClient.webhooks.create({
+      const webhook = await agencyClient.webhooks.create({
         locationId,
         url: webhookUrl,
         events: webhookEvents,
       });
 
-      log("step_6_complete", accountId, `webhookId=${webhookRes.webhook.id}`);
+      log("step_6_complete", accountId, `webhookId=${webhook.id}`);
     } else {
       console.warn(
         `[ghl-provisioning] NEXT_PUBLIC_APP_URL not set — skipping webhook registration for ${accountId}`,
