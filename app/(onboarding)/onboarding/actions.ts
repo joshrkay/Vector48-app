@@ -6,8 +6,8 @@ import { createServerClient } from "@/lib/supabase/server";
 // Maps step index to the DB columns that step updates
 const STEP_COLUMN_MAP: Record<number, string[]> = {
   0: ["business_name"],
-  1: ["vertical"],
-  2: ["phone"],
+  1: ["phone"],
+  2: ["vertical"],
   3: ["business_hours"],
   4: ["voice_gender", "greeting_text"],
   5: ["notification_contact_name", "notification_contact_phone"],
