@@ -73,7 +73,7 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
 
         await completeOnboarding(accountId, shouldActivateRecipe, {
           voiceGender: onboardingState.voiceGender,
-          greetingText: onboardingState.greetingText,
+          voiceGreeting: onboardingState.greetingText,
         });
       }
 

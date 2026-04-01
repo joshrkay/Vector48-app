@@ -163,7 +163,31 @@ export async function completeOnboarding(
     }
   }
 
-  console.log("GHL provisioning job queued for", accountId);
+  // Dispatch background provisioning via Inngest.
+  // GHL sub-account creation + Voice AI setup + n8n recipe activation
+  // all run asynchronously. The user is redirected to the dashboard
+  // immediately while provisioning runs in the background.
+  //
+  // Dashboard contract: show "Setting up your AI..." when
+  // provisioning_status = 'in_progress', full dashboard when 'complete'.
+  try {
+    await inngest.send({
+      name: "app/customer.onboarding.completed",
+      data: {
+        accountId,
+        activateRecipe,
+        voiceConfig,
+        activationId,
+      },
+    });
+  } catch (err) {
+    // Inngest dispatch failure is non-fatal — provisioning can be retried
+    // via the reconciliation cron job.
+    console.error(
+      "[onboarding] Failed to dispatch provisioning event:",
+      getErrorMessage(err) ?? err,
+    );
+  }
 
   return { success: true };
 }
