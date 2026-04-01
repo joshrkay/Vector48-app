@@ -555,6 +555,7 @@ export interface GHLCreateWebhookPayload {
   locationId: string;
   url: string;
   events: GHLWebhookEvent[];
+  headers?: Record<string, string>;
   secret?: string;
 }
 
@@ -574,3 +575,22 @@ export interface GHLTokenExchangeResponse {
 export interface GHLWebhooksListResponse {
   webhooks: GHLWebhook[];
 }
+
+// ── Error ──────────────────────────────────────────────────────────────────
+
+export interface GHLCampaign {
+  id: string;
+  name: string;
+  locationId: string;
+  url: string;
+  events: string[];
+  secret?: string;
+}
+
+export interface GHLMessagesListResponse {
+  messages: GHLMessage[];
+  nextPage: boolean;
+  lastMessageId?: string;
+}
+
+// ── (duplicate declarations removed — end of file) ─────────────────────────

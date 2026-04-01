@@ -37,22 +37,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const deleted = invalidateGHLCache(accountId, eventType);
+    invalidateGHLCache(accountId, eventType);
 
-    return NextResponse.json(
-      {
-        ok: true,
-        deleted,
-        deprecated: true,
-        message:
-          "Deprecated endpoint. Invalidation now runs from /api/webhooks/ghl after insert success.",
-      },
-      {
-        headers: {
-          "X-API-Deprecated": "true",
-        },
-      },
-    );
+    return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(
       { error: "Invalid request body" },
