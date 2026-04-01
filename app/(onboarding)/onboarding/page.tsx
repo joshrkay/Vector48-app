@@ -71,6 +71,11 @@ export default async function OnboardingPage() {
         businessHours: account.business_hours
           ? {
               preset: (account.business_hours as Record<string, string>).preset as "weekday_8_5" | "weekday_7_6" | "all_week" | "custom" || "weekday_8_5",
+              customHours: (account.business_hours as Record<string, unknown>)
+                .customHours as Record<
+                  string,
+                  { open: string; close: string; closed: boolean }
+                > | undefined,
             }
           : { preset: "weekday_8_5" as const },
         voiceGender: (account.voice_gender as "male" | "female") || "male",

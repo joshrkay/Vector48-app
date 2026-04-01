@@ -144,8 +144,11 @@ export async function completeOnboarding(
       .select("id")
       .single();
 
-    if (recipeError || !activation) {
-      return { error: recipeError?.message ?? "Failed to create activation" };
+    if (recipeError) {
+      return { error: recipeError.message };
+    }
+    if (!activation) {
+      return { error: "Failed to create activation" };
     }
 
     if (recipeError) {

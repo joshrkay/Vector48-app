@@ -8,11 +8,11 @@ import {
   type VerticalData,
 } from "@/lib/validations/onboarding";
 import {
-  Flame,
+  Thermometer,
   Droplets,
   Zap,
   Home,
-  TreePine,
+  Leaf,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOnboarding } from "./WizardShell";
@@ -23,11 +23,11 @@ interface StepProps {
 }
 
 const VERTICALS = [
-  { value: "hvac" as const, label: "HVAC", icon: Flame },
+  { value: "hvac" as const, label: "HVAC", icon: Thermometer },
   { value: "plumbing" as const, label: "Plumbing", icon: Droplets },
   { value: "electrical" as const, label: "Electrical", icon: Zap },
   { value: "roofing" as const, label: "Roofing", icon: Home },
-  { value: "landscaping" as const, label: "Landscaping", icon: TreePine },
+  { value: "landscaping" as const, label: "Landscaping", icon: Leaf },
 ];
 
 export function VerticalStep({ onNext, onValidityChange }: StepProps) {
@@ -56,7 +56,7 @@ export function VerticalStep({ onNext, onValidityChange }: StepProps) {
       <p className="mt-2 text-center text-sm text-text-secondary">
         We&apos;ll customize your automations for your trade.
       </p>
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mt-6 grid grid-cols-2 gap-3">
         {VERTICALS.map((v) => {
           const Icon = v.icon;
           const isSelected = selected === v.value;
@@ -70,8 +70,8 @@ export function VerticalStep({ onNext, onValidityChange }: StepProps) {
               className={cn(
                 "flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-xl border-2 p-4 text-sm font-medium transition-all",
                 isSelected
-                  ? "border-accent bg-accent-light text-accent ring-2 ring-accent/20"
-                  : "border-border text-text-secondary hover:border-accent/40"
+                  ? "border-accent bg-accent-light text-accent shadow-sm ring-2 ring-accent/20"
+                  : "border-border bg-white text-text-secondary hover:border-accent/40"
               )}
             >
               <Icon className="h-6 w-6" />

@@ -89,6 +89,33 @@ export function ActivateRecipeStep({ onNext, onValidityChange }: StepProps) {
           </span>
         </div>
       </button>
+
+      <div className="mt-6 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() =>
+            setValue("activateRecipe1", false, { shouldValidate: true })
+          }
+          className={cn(
+            "text-sm font-medium underline-offset-4 transition-colors hover:underline",
+            !isActive ? "text-text-primary" : "text-text-secondary"
+          )}
+        >
+          I&apos;ll do this later
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            setValue("activateRecipe1", true, { shouldValidate: true })
+          }
+          className={cn(
+            "rounded-xl px-4 py-2 text-sm font-semibold text-white transition-colors",
+            isActive ? "bg-teal-600 hover:bg-teal-700" : "bg-accent hover:bg-accent/90"
+          )}
+        >
+          Activate Now
+        </button>
+      </div>
     </form>
   );
 }

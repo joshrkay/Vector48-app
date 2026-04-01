@@ -11,6 +11,13 @@ interface StepProps {
   onValidityChange: (valid: boolean) => void;
 }
 
+function formatPhoneInput(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 export function PhoneStep({ onNext, onValidityChange }: StepProps) {
   const phone = useOnboarding((s) => s.phone);
 
@@ -21,13 +28,13 @@ export function PhoneStep({ onNext, onValidityChange }: StepProps) {
     formState: { errors },
   } = useForm<PhoneData>({
     resolver: zodResolver(phoneSchema),
-    defaultValues: { phone },
+    defaultValues: { phone: formatPhoneInput(phone) },
     mode: "onSubmit",
   });
 
   const watched = watch("phone");
   useEffect(() => {
-    onValidityChange(watched.trim().length >= 10);
+    onValidityChange(watched.replace(/\D/g, "").length === 10);
   }, [watched, onValidityChange]);
 
   return (
@@ -43,8 +50,13 @@ export function PhoneStep({ onNext, onValidityChange }: StepProps) {
         through AI.
       </p>
       <input
-        {...register("phone")}
+        {...register("phone", {
+          onChange: (e) => {
+            e.target.value = formatPhoneInput(e.target.value);
+          },
+        })}
         type="tel"
+        inputMode="tel"
         placeholder="(555) 123-4567"
         autoFocus
         className="mt-6 w-full rounded-xl border border-border bg-white px-4 py-3 text-lg text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
