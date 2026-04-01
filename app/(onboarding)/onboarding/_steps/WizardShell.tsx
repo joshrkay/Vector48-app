@@ -57,7 +57,7 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
       if (!storeRef.current) return;
       setIsSaving(true);
 
-      const store = storeRef.current.getState();
+      const onboardingState = storeRef.current.getState();
 
       // Save step data to store
       storeRef.current.getState().setStepData(data);
@@ -67,14 +67,15 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
         await saveOnboardingStep(accountId, currentStep, data);
       } else {
         // Last step — complete onboarding
-        await completeOnboarding(
-          accountId,
-          (data.activateRecipe1 as boolean) ?? true,
-          {
-            voiceGender: store.voiceGender,
-            greetingText: store.greetingText,
-          }
-        );
+        const shouldActivateRecipe =
+          typeof data.activateRecipe1 === "boolean"
+            ? data.activateRecipe1
+            : onboardingState.activateRecipe1;
+
+        await completeOnboarding(accountId, shouldActivateRecipe, {
+          voiceGender: onboardingState.voiceGender,
+          voiceGreeting: onboardingState.greetingText,
+        });
       }
 
       setDirection(1);

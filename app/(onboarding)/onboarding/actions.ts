@@ -27,6 +27,16 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   notificationContactPhone: "notification_contact_phone",
 };
 
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("message" in error)) {
+    return undefined;
+  }
+
+  const maybeMessage = (error as { message?: unknown }).message;
+  return typeof maybeMessage === "string" ? maybeMessage : undefined;
+}
+
 export async function saveOnboardingStep(
   accountId: string,
   step: number,
@@ -80,7 +90,7 @@ export async function saveOnboardingStep(
     .eq("id", accountId);
 
   if (error) {
-    return { error: error.message };
+    return { error: getErrorMessage(error) ?? "Failed to save onboarding step" };
   }
 
   return { success: true };
@@ -89,7 +99,7 @@ export async function saveOnboardingStep(
 export async function completeOnboarding(
   accountId: string,
   activateRecipe: boolean,
-  voiceConfig?: { voiceGender: string; greetingText: string }
+  voiceConfig?: { voiceGender: string; voiceGreeting: string }
 ) {
   const supabase = await createServerClient();
 
@@ -112,7 +122,7 @@ export async function completeOnboarding(
     .eq("id", accountId);
 
   if (updateError) {
-    return { error: updateError.message };
+    return { error: getErrorMessage(updateError) ?? "Failed to complete onboarding" };
   }
 
   // Optionally create Recipe 1 activation row (before background provisioning)
@@ -122,7 +132,7 @@ export async function completeOnboarding(
     const config = voiceConfig
       ? {
           voice_gender: voiceConfig.voiceGender,
-          greeting_text: voiceConfig.greetingText,
+          voice_greeting: voiceConfig.voiceGreeting,
         }
       : null;
 
@@ -138,7 +148,7 @@ export async function completeOnboarding(
       .single();
 
     if (recipeError || !activation) {
-      return { error: recipeError?.message ?? "Failed to create activation" };
+      return { error: getErrorMessage(recipeError) ?? "Failed to create activation" };
     }
 
     activationId = activation.id;
@@ -166,7 +176,7 @@ export async function completeOnboarding(
     // via the reconciliation cron job.
     console.error(
       "[onboarding] Failed to dispatch provisioning event:",
-      err instanceof Error ? err.message : err,
+      getErrorMessage(err) ?? err,
     );
   }
 
