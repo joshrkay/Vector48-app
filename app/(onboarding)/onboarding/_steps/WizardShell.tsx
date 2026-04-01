@@ -65,13 +65,14 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
         await saveOnboardingStep(accountId, currentStep, data);
       } else {
         // Last step — complete onboarding
+        const state = storeRef.current.getState();
         await completeOnboarding(
           accountId,
           (data.activateRecipe1 as boolean) ?? true,
           {
-            voiceGender: store.voiceGender,
-            voiceGreeting: store.voiceGreeting,
-          }
+            voiceGender: state.voiceGender,
+            voiceGreeting: state.voiceGreeting,
+          },
         );
       }
 

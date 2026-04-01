@@ -123,8 +123,6 @@ export async function completeOnboarding(
   }
 
   // Optionally create Recipe 1 activation row (before background provisioning)
-  let activationId: string | undefined;
-
   if (activateRecipe) {
     const config = voiceConfig
       ? {
@@ -146,10 +144,6 @@ export async function completeOnboarding(
 
     if (recipeError || !activation) {
       return { error: recipeError?.message ?? "Failed to create activation" };
-    }
-
-    if (recipeError) {
-      return { error: recipeError.message };
     }
   }
 
