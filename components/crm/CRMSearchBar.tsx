@@ -13,6 +13,7 @@ import {
 import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const QUERY_CACHE_TTL_MS = 30_000;
+type ContactSearchKey = readonly [string, string];
 const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
 
 async function searchContacts([, query]: readonly unknown[]): Promise<CRMContactSearchItem[]> {
