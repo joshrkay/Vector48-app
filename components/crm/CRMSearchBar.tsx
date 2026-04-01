@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { upsertContactsInCache } from "@/lib/crm/contactCache";
 import {
   type CRMContactSearchItem,
-  upsertContactsInCache,
+  upsertContactsInCache as cacheContacts,
 } from "@/lib/crm/contactCache";
 import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
@@ -73,7 +73,7 @@ export function CRMSearchBar() {
         const results = await searchContacts(debouncedQuery);
         if (!cancelled) {
           setContacts(results);
-          upsertContactsInCache(results);
+          cacheContacts(results);
         }
       } catch {
         if (!cancelled) {
@@ -98,7 +98,7 @@ export function CRMSearchBar() {
   }, [debouncedQuery]);
 
   const handleSelect = (contact: CRMContactSearchItem) => {
-    upsertContactsInCache([contact]);
+    cacheContacts([contact]);
     setQuery("");
     setDebouncedQuery("");
     setOpen(false);
