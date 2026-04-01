@@ -548,6 +548,7 @@ export interface GHLCreateWebhookPayload {
   locationId: string;
   url: string;
   events: GHLWebhookEvent[];
+  secret?: string;
 }
 
 export interface GHLWebhookResponse {
