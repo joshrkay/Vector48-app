@@ -20,7 +20,7 @@ function parseLastMessageTime(iso: string | null): number | null {
 /** PRD: unread + no outbound message in last 2 hours (inferred from last message on thread). */
 export function conversationNeedsReply(
   unreadCount: number,
-  lastMessageDirection: "inbound" | "outbound" | null,
+  lastMessageDirection: "inbound" | "outbound" | null | undefined,
   lastMessageDate: string | null,
   nowMs: number,
 ): boolean {
@@ -66,4 +66,26 @@ export function filterConversationsForInbox(
   nowMs: number,
 ): GHLConversation[] {
   return conversations.filter((c) => conversationMatchesInboxFilter(c, filter, nowMs));
+}
+
+export function buildInboxFilterHref(
+  nextFilter: InboxFilterTab,
+  conversationId: string | null,
+  conversations: GHLConversation[],
+  nowMs: number,
+): string {
+  const underFilter = filterConversationsForInbox(conversations, nextFilter, nowMs);
+  const ids = new Set(underFilter.map((c) => c.id));
+  const keepConversation = conversationId && ids.has(conversationId) ? conversationId : null;
+
+  const query = new URLSearchParams();
+  if (nextFilter !== "all") {
+    query.set("filter", nextFilter);
+  }
+  if (keepConversation) {
+    query.set("conversation", keepConversation);
+  }
+
+  const search = query.toString();
+  return search ? `/crm/inbox?${search}` : "/crm/inbox";
 }

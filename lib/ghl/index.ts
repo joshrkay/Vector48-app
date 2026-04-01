@@ -9,8 +9,10 @@ export { GHLClient } from "./client";
 export {
   encryptToken,
   decryptToken,
+  getDecryptedToken,
   getAccountGhlCredentials,
   getGHLClient,
+  getAgencyClient,
 } from "./token";
 
 // Errors
