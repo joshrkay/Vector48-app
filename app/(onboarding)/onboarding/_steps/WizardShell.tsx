@@ -67,7 +67,11 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
         // Last step — complete onboarding
         await completeOnboarding(
           accountId,
-          (data.activateRecipe1 as boolean) ?? true
+          (data.activateRecipe1 as boolean) ?? true,
+          {
+            voiceGender: store.voiceGender,
+            voiceGreeting: store.voiceGreeting,
+          }
         );
       }
 

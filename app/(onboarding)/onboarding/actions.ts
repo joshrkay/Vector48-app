@@ -8,8 +8,8 @@ const STEP_COLUMN_MAP: Record<number, string[]> = {
   1: ["phone"],
   2: ["vertical"],
   3: ["business_hours"],
-  4: ["voice_gender", "greeting_text"],
-  5: ["notification_contact_name", "notification_contact_phone"],
+  4: ["voice_gender", "voice_greeting"],
+  5: ["notification_contact", "notification_sms"],
   6: [], // activate recipe — handled separately
 };
 
@@ -96,7 +96,8 @@ export async function saveOnboardingStep(
 
 export async function completeOnboarding(
   accountId: string,
-  activateRecipe1: boolean,
+  activateRecipe: boolean,
+  voiceConfig?: { voiceGender: string; voiceGreeting: string }
 ) {
   const supabase = await createServerClient();
 
@@ -121,12 +122,31 @@ export async function completeOnboarding(
     return { error: updateError.message };
   }
 
-  if (activateRecipe1) {
-    const { error: recipeError } = await supabase.from("recipe_activations").insert({
-      account_id: accountId,
-      recipe_slug: "ai-phone-answering",
-      status: "active",
-    });
+  // Optionally create Recipe 1 activation row (before background provisioning)
+  let activationId: string | undefined;
+
+  if (activateRecipe) {
+    const config = voiceConfig
+      ? {
+          voice_gender: voiceConfig.voiceGender,
+          voice_greeting: voiceConfig.voiceGreeting,
+        }
+      : null;
+
+    const { data: activation, error: recipeError } = await supabase
+      .from("recipe_activations")
+      .insert({
+        account_id: accountId,
+        recipe_slug: "ai-phone-answering",
+        status: "active",
+        config,
+      })
+      .select("id")
+      .single();
+
+    if (recipeError || !activation) {
+      return { error: recipeError?.message ?? "Failed to create activation" };
+    }
 
     if (recipeError) {
       return { error: recipeError.message };
