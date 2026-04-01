@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-import { getSessionData } from "@/lib/data/session";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TabBar } from "@/components/layout/TabBar";
 import { TopBar } from "@/components/layout/TopBar";
@@ -10,9 +8,9 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  let planSlug: string | undefined;
+  let businessName = "";
+  let planSlug = "";
   let trialEndsAt: string | null = null;
-  let businessName: string | undefined;
 
   try {
     const supabase = await createServerClient();
@@ -27,23 +25,20 @@ export default async function AppLayout({
         .single();
 
       if (account) {
-        planSlug = account.plan_slug;
-        trialEndsAt = account.trial_ends_at ?? null;
-        businessName = account.business_name ?? undefined;
+        businessName = account.business_name ?? "";
+        planSlug = account.plan_slug ?? "";
+        trialEndsAt = account.trial_ends_at;
       }
     }
   } catch {
-    // Fail gracefully — sidebar will render without trial info
+    // Fail gracefully — layout will render with fallback account values
   }
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
-      <Sidebar
-        planSlug={planSlug ?? ""}
-        trialEndsAt={trialEndsAt}
-      />
+      <Sidebar planSlug={planSlug} trialEndsAt={trialEndsAt} />
       <div className="md:ml-60">
-        <TopBar businessName={businessName ?? ""} />
+        <TopBar businessName={businessName} />
         <main className="p-4 md:p-6 pb-20 md:pb-6 max-w-6xl mx-auto">
           {children}
         </main>
