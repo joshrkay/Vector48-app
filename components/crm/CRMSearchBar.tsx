@@ -35,7 +35,7 @@ async function searchContacts(query: string): Promise<CRMContactSearchItem[]> {
     expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
   });
 
-  return payload.items ?? payload.contacts ?? [];
+  return payload.items;
 }
 
 export function CRMSearchBar() {
