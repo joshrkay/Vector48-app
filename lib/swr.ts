@@ -133,12 +133,15 @@ export default function useSWR<Data>(
         .then((result) => setData(result))
         .catch((fetchError: unknown) => {
           setError(fetchError instanceof Error ? fetchError : new Error("Failed to fetch data"));
+          if (!keepPreviousData) {
+            setData(undefined);
+          }
         });
     };
 
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [fetcher, key, revalidateOnFocus, serializedKey]);
+  }, [fetcher, keepPreviousData, key, revalidateOnFocus, serializedKey]);
 
   useEffect(() => {
     if (!refreshIntervalMs || refreshIntervalMs < 1e3 || !serializedKey || !key) {
@@ -150,12 +153,15 @@ export default function useSWR<Data>(
         .then((result) => setData(result))
         .catch((fetchError: unknown) => {
           setError(fetchError instanceof Error ? fetchError : new Error("Failed to fetch data"));
+          if (!keepPreviousData) {
+            setData(undefined);
+          }
         });
     };
 
     const id = window.setInterval(tick, refreshIntervalMs);
     return () => window.clearInterval(id);
-  }, [fetcher, key, refreshIntervalMs, serializedKey]);
+  }, [fetcher, keepPreviousData, key, refreshIntervalMs, serializedKey]);
 
   return { data, error, isLoading };
 }
