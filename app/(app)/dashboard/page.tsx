@@ -29,7 +29,7 @@ export default async function DashboardPage() {
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, business_name")
+    .select("id, business_name, ghl_provisioning_status, ghl_provisioning_error")
     .eq("owner_user_id", user.id)
     .single();
 
@@ -77,6 +77,32 @@ export default async function DashboardPage() {
   const unresolvedAlerts = (alertRows ?? []).filter(
     (row) => !isAlertResolved(row.detail),
   ) as AutomationEvent[];
+  const provisioningAlert =
+    account.ghl_provisioning_status === "failed"
+      ? ({
+          id: `ghl-provisioning-failed:${account.id}`,
+          account_id: account.id,
+          recipe_slug: null,
+          event_type: "alert",
+          ghl_event_type: null,
+          ghl_event_id: null,
+          contact_id: null,
+          contact_phone: null,
+          contact_name: null,
+          summary:
+            account.ghl_provisioning_error ??
+            "Vector 48 setup failed. Retry provisioning to continue.",
+          detail: {
+            kind: "ghl_provisioning_failed",
+            retry_account_id: account.id,
+            dismissible: false,
+          },
+          created_at: new Date().toISOString(),
+        } satisfies AutomationEvent)
+      : null;
+  const bannerAlerts = provisioningAlert
+    ? [provisioningAlert, ...unresolvedAlerts]
+    : unresolvedAlerts;
 
   const greeting = getGreeting();
   const headline = account.business_name ? `${greeting}, ${account.business_name}` : greeting;
@@ -88,7 +114,7 @@ export default async function DashboardPage() {
         <SignOutButton />
       </div>
 
-      <AlertBanner initialAlerts={unresolvedAlerts} />
+      <AlertBanner initialAlerts={bannerAlerts} />
       <GHLSummary />
 
       <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">

@@ -16,17 +16,21 @@ export interface UpdateLogEntry {
 }
 
 export const updateLog: UpdateLogEntry[] = [];
+export const insertLog: Array<{ table: string; data: Record<string, unknown> }> = [];
 
 export function resetUpdateLog() {
   updateLog.length = 0;
+  insertLog.length = 0;
 }
 
 // ── Default mock account ──────────────────────────────────────────────────
 
 let mockAccount: AccountRow;
+let mockAutomationEvents: Array<Record<string, unknown>> = [];
 
 export function setMockAccount(account: AccountRow) {
   mockAccount = account;
+  mockAutomationEvents = [];
 }
 
 export function createMockAccount(
@@ -41,14 +45,21 @@ export function createMockAccount(
     ghl_location_id: null,
     ghl_webhook_secret: null,
     ghl_token_encrypted: null,
+    ghl_voice_agent_id: null,
     trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
     stripe_customer_id: null,
     stripe_subscription_id: null,
     plan_slug: "trial",
+    provisioning_status: "pending",
+    provisioning_error: null,
+    provisioning_completed_at: null,
     ghl_provisioning_status: "pending",
     ghl_provisioning_error: null,
     provisioning_step: 0,
+    onboarding_completed_at: null,
+    onboarding_done_at: null,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     service_area: "Dallas, TX",
     business_hours: {},
     voice_gender: null,
@@ -56,6 +67,7 @@ export function createMockAccount(
     notification_sms: false,
     notification_email: false,
     notification_contact: null,
+    notification_preferences: {},
     onboarding_step: 8,
     ...overrides,
   } as AccountRow;
@@ -63,16 +75,53 @@ export function createMockAccount(
 
 // ── Chainable query builder mock ──────────────────────────────────────────
 
-function createChainableSelect() {
-  return {
-    eq(_field: string, _value: string) {
-      return {
-        single() {
-          return Promise.resolve({ data: mockAccount, error: null });
-        },
-      };
+function createAutomationEventsSelect() {
+  const filters = new Map<string, unknown>();
+
+  const api = {
+    eq(field: string, value: unknown) {
+      filters.set(field, value);
+      return api;
+    },
+    order() {
+      return api;
+    },
+    limit() {
+      return api;
+    },
+    maybeSingle() {
+      const event =
+        mockAutomationEvents.find((candidate) => {
+          for (const [field, value] of filters.entries()) {
+            if (candidate[field] !== value) return false;
+          }
+          return true;
+        }) ?? null;
+      return Promise.resolve({ data: event, error: null });
     },
   };
+
+  return api;
+}
+
+function createChainableSelect(table: string) {
+  const api = {
+    eq(_field: string, _value: string) {
+      return api;
+    },
+    single() {
+      return Promise.resolve({ data: mockAccount, error: null });
+    },
+    maybeSingle() {
+      return Promise.resolve({ data: mockAccount, error: null });
+    },
+  };
+
+  if (table === "automation_events") {
+    return createAutomationEventsSelect();
+  }
+
+  return api;
 }
 
 function createChainableUpdate(data: Record<string, unknown>) {
@@ -86,17 +135,47 @@ function createChainableUpdate(data: Record<string, unknown>) {
   };
 }
 
+function createChainableInsert(table: string) {
+  return {
+    values: null,
+    insert(data: Record<string, unknown>) {
+      insertLog.push({ table, data });
+      mockAutomationEvents.unshift({
+        id: "alert_mock_001",
+        created_at: new Date().toISOString(),
+        ...data,
+      });
+      return Promise.resolve({ error: null });
+    },
+  };
+}
+
 export const mockSupabaseClient = {
   from(table: string) {
-    if (table !== "accounts") {
+    if (!["accounts", "automation_events"].includes(table)) {
       throw new Error(`[mock] Unexpected table: ${table}`);
     }
     return {
       select(_columns: string) {
-        return createChainableSelect();
+        return createChainableSelect(table);
       },
       update(data: Record<string, unknown>) {
+        if (table !== "accounts") {
+          throw new Error(`[mock] Unexpected update table: ${table}`);
+        }
         return createChainableUpdate(data);
+      },
+      insert(data: Record<string, unknown>) {
+        if (table !== "automation_events") {
+          throw new Error(`[mock] Unexpected insert table: ${table}`);
+        }
+        insertLog.push({ table, data });
+        mockAutomationEvents.unshift({
+          id: "alert_mock_001",
+          created_at: new Date().toISOString(),
+          ...data,
+        });
+        return Promise.resolve({ error: null });
       },
     };
   },

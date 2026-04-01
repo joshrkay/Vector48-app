@@ -47,7 +47,11 @@ export default async function OnboardingPage() {
   }
 
   // If onboarding already done, go to dashboard
-  if (account?.onboarding_done_at) {
+  if (
+    account?.onboarding_done_at ||
+    account?.onboarding_completed_at ||
+    account?.ghl_provisioning_status === "failed"
+  ) {
     redirect("/dashboard");
   }
 

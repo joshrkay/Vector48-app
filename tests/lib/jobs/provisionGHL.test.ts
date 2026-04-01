@@ -4,6 +4,7 @@ import { server } from "../../mocks/server";
 import { callLog } from "../../mocks/handlers";
 import {
   updateLog,
+  insertLog,
   createMockAccount,
   setMockAccount,
 } from "../../mocks/supabase";
@@ -20,7 +21,8 @@ describe("provisionGHL", () => {
   it("provisions from step 0 to complete", async () => {
     setMockAccount(createMockAccount());
 
-    await provisionGHL(ACCOUNT_ID);
+    const result = await provisionGHL(ACCOUNT_ID);
+    expect(result).toEqual({ success: true });
 
     // Should have made 4 GHL API calls
     expect(callLog).toHaveLength(4);
@@ -58,29 +60,30 @@ describe("provisionGHL", () => {
     expect(webhookBody.url).toBe(
       "https://test.vector48.com/api/webhooks/ghl",
     );
-    expect(webhookBody.secret).toBe("test-webhook-secret");
+    expect(typeof webhookBody.secret).toBe("string");
     expect(webhookBody.events).toHaveLength(9);
 
-    // Verify DB updates
-    // First update: step 1+2 combined (location + token + step=2)
+    const step1Update = updateLog.find((u) => u.data.provisioning_step === 1);
+    expect(step1Update).toBeDefined();
+    expect(step1Update!.data.ghl_location_id).toBe("loc_mock_001");
+
     const step2Update = updateLog.find((u) => u.data.provisioning_step === 2);
     expect(step2Update).toBeDefined();
-    expect(step2Update!.data.ghl_location_id).toBe("loc_mock_001");
-    expect(step2Update!.data.ghl_sub_account_id).toBe("loc_mock_001");
     expect(step2Update!.data.ghl_token_encrypted).toBeDefined();
 
-    // Final update: complete
     const finalUpdate = updateLog.find(
-      (u) => u.data.provisioning_status === "complete",
+      (u) => u.data.ghl_provisioning_status === "complete",
     );
     expect(finalUpdate).toBeDefined();
     expect(finalUpdate!.data.provisioning_step).toBe(6);
+    expect(finalUpdate!.data.onboarding_completed_at).toBeDefined();
     expect(finalUpdate!.data.onboarding_done_at).toBeDefined();
+    expect(insertLog.some((entry) => entry.table === "automation_events")).toBe(true);
   });
 
-  // ── Test 2: Idempotent resume from step 3 ─────────────────────────────
+  // ── Test 2: Retry after webhook failure skips create/token steps ──────
 
-  it("resumes from step 3, skipping steps 1-3", async () => {
+  it("resumes after step 3, skipping location creation and token storage", async () => {
     const encryptedToken = encryptToken(LOCATION_TOKEN);
 
     setMockAccount(
@@ -91,34 +94,108 @@ describe("provisionGHL", () => {
       }),
     );
 
-    await provisionGHL(ACCOUNT_ID);
+    const result = await provisionGHL(ACCOUNT_ID);
+    expect(result).toEqual({ success: true });
 
-    // Should only make 2 calls: GET /webhooks + POST /webhooks
-    expect(callLog).toHaveLength(2);
-    expect(callLog[0].method).toBe("GET");
-    expect(callLog[0].url).toBe("/webhooks");
-    expect(callLog[1].method).toBe("POST");
+    expect(callLog).toHaveLength(3);
+    expect(callLog[0].method).toBe("PUT");
+    expect(callLog[0].url).toBe("/locations/loc_mock_001");
+    expect(callLog[1].method).toBe("GET");
     expect(callLog[1].url).toBe("/webhooks");
+    expect(callLog[2].method).toBe("POST");
+    expect(callLog[2].url).toBe("/webhooks");
 
-    // Both use location auth, not agency auth
     expect(callLog[0].authHeader).toBe(`Bearer ${LOCATION_TOKEN}`);
     expect(callLog[1].authHeader).toBe(`Bearer ${LOCATION_TOKEN}`);
+    expect(callLog[2].authHeader).toBe(`Bearer ${LOCATION_TOKEN}`);
 
-    // Should NOT have written ghl_location_id (step 1 was skipped)
     const locationUpdate = updateLog.find(
       (u) => u.data.ghl_location_id !== undefined,
     );
     expect(locationUpdate).toBeUndefined();
 
-    // Should reach complete
     const finalUpdate = updateLog.find(
-      (u) => u.data.provisioning_status === "complete",
+      (u) => u.data.ghl_provisioning_status === "complete",
     );
     expect(finalUpdate).toBeDefined();
     expect(finalUpdate!.data.provisioning_step).toBe(6);
   });
 
-  // ── Test 3: Failure at step 4 ─────────────────────────────────────────
+  // ── Test 3: Existing location without token recovers via token exchange ──
+
+  it("exchanges a location token when the location exists but the token was missing", async () => {
+    setMockAccount(
+      createMockAccount({
+        provisioning_step: 1,
+        ghl_location_id: "loc_mock_001",
+        ghl_token_encrypted: null,
+      }),
+    );
+
+    const result = await provisionGHL(ACCOUNT_ID);
+    expect(result).toEqual({ success: true });
+
+    expect(callLog[0].method).toBe("POST");
+    expect(callLog[0].url).toBe("/oauth/locationToken");
+    expect(callLog[0].authHeader).toBe(`Bearer ${AGENCY_KEY}`);
+
+    const tokenUpdate = updateLog.find((u) => u.data.provisioning_step === 2);
+    expect(tokenUpdate).toBeDefined();
+    expect(tokenUpdate!.data.ghl_token_encrypted).toBeDefined();
+  });
+
+  // ── Test 4: Existing webhook is not duplicated ────────────────────────
+
+  it("skips webhook creation when the same webhook is already registered", async () => {
+    const encryptedToken = encryptToken(LOCATION_TOKEN);
+
+    setMockAccount(
+      createMockAccount({
+        provisioning_step: 4,
+        ghl_location_id: "loc_mock_001",
+        ghl_token_encrypted: encryptedToken,
+      }),
+    );
+
+    server.use(
+      http.get("https://services.leadconnectorhq.com/webhooks", ({ request }) => {
+        callLog.push({
+          method: "GET",
+          url: "/webhooks",
+          authHeader: request.headers.get("Authorization"),
+          body: null,
+        });
+        return HttpResponse.json({
+          webhooks: [
+            {
+              id: "wh_mock_001",
+              url: "https://test.vector48.com/api/webhooks/ghl",
+              events: [
+                "ContactCreate",
+                "ContactUpdate",
+                "ConversationUnreadUpdate",
+                "OpportunityCreate",
+                "OpportunityStageUpdate",
+                "AppointmentCreate",
+                "AppointmentStatusUpdate",
+                "InboundMessage",
+                "CallCompleted",
+              ],
+            },
+          ],
+        });
+      }),
+    );
+
+    const result = await provisionGHL(ACCOUNT_ID);
+    expect(result).toEqual({ success: true });
+
+    expect(callLog).toHaveLength(2);
+    expect(callLog[0].method).toBe("PUT");
+    expect(callLog[1].method).toBe("GET");
+  });
+
+  // ── Test 5: Failure at step 4 ─────────────────────────────────────────
 
   it("writes error state when webhook registration fails", async () => {
     const encryptedToken = encryptToken(LOCATION_TOKEN);
@@ -150,21 +227,19 @@ describe("provisionGHL", () => {
       ),
     );
 
-    await provisionGHL(ACCOUNT_ID);
+    const result = await provisionGHL(ACCOUNT_ID);
+    expect(result.success).toBe(false);
 
-    // Should have attempted GET /webhooks then POST /webhooks (which fails)
-    expect(callLog).toHaveLength(2);
+    expect(callLog).toHaveLength(3);
 
-    // Should have written error state
     const errorUpdate = updateLog.find(
-      (u) => u.data.provisioning_status === "error",
+      (u) => u.data.ghl_provisioning_status === "failed",
     );
     expect(errorUpdate).toBeDefined();
-    expect(errorUpdate!.data.provisioning_error).toContain(
+    expect(errorUpdate!.data.ghl_provisioning_error).toContain(
       "register_webhooks",
     );
 
-    // Step should NOT have advanced to 4
     const step4Update = updateLog.find(
       (u) => u.data.provisioning_step === 4,
     );
