@@ -89,7 +89,7 @@ export function QuickActionsBar({
     if (!text || !primaryConversationId) return;
     setSendingMessage(true);
     try {
-      const res = await fetch(`/api/ghl/conversations/${primaryConversationId}/messages`, {
+      const res = await fetch(`/api/ghl/conversations/${primaryConversationId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -31,13 +31,12 @@ async function fetchThreadBundle(key: readonly unknown[]): Promise<ThreadBundle>
   if (!msgRes.ok) {
     throw new Error(msgJson.error ?? "Failed to load messages");
   }
-  if (!actRes.ok) {
-    throw new Error(actJson.error ?? "Failed to load recipe context");
-  }
+
+  const recipeActive = actRes.ok && Boolean(actJson.active);
 
   return {
     messages: msgJson.messages ?? [],
-    recipeActive: Boolean(actJson.active),
+    recipeActive,
   };
 }
 
@@ -51,14 +50,17 @@ interface Props {
   conversationId: string | null;
   contactId: string | null;
   draftMessage: GHLMessage | null;
+  threadBump: number;
   onRecipeContext: (active: boolean) => void;
 }
 
-export function MessageThread({ conversationId, contactId, draftMessage, onRecipeContext }: Props) {
+export function MessageThread({ conversationId, contactId, draftMessage, threadBump, onRecipeContext }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const swrKey =
-    conversationId && contactId ? (["inbox-thread", conversationId, contactId] as const) : null;
+    conversationId && contactId
+      ? (["inbox-thread", conversationId, contactId, threadBump] as const)
+      : null;
 
   const { data, error, isLoading } = useSWR<ThreadBundle>(swrKey, fetchThreadBundle, {
     dedupingInterval: 8_000,
@@ -82,10 +84,18 @@ export function MessageThread({ conversationId, contactId, draftMessage, onRecip
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [merged.length, conversationId]);
 
-  if (!conversationId || !contactId) {
+  if (!conversationId) {
     return (
       <div className="flex flex-1 items-center justify-center p-6 text-sm text-[var(--text-secondary)]">
         Select a conversation to view messages.
+      </div>
+    );
+  }
+
+  if (!contactId) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6 text-sm text-[var(--text-secondary)]">
+        Loading conversation…
       </div>
     );
   }
@@ -126,36 +136,28 @@ export function MessageThread({ conversationId, contactId, draftMessage, onRecip
                 <div
                   title={fullTs}
                   className={cn(
-                    "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm md:max-w-[72%]",
+                    "group max-w-[85%] rounded-2xl px-3.5 py-2 text-sm md:max-w-[72%]",
                     isOutbound
                       ? "rounded-br-sm bg-teal-600 text-white"
                       : "rounded-bl-sm bg-slate-100 text-slate-800",
                     pending && "opacity-70",
                   )}
                 >
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {ai ? (
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "text-[10px] font-semibold uppercase",
-                          isOutbound ? "border-teal-200/40 bg-teal-700 text-white" : "",
-                        )}
-                      >
-                        AI
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words">{msg.body}</p>
-                  <p
-                    className={cn(
-                      "mt-1 text-[10px] opacity-0 transition-opacity group-hover:opacity-100",
-                      isOutbound ? "text-teal-100" : "text-slate-400",
-                    )}
-                  />
+                  {ai ? (
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "mb-1 text-[10px] font-semibold uppercase",
+                        isOutbound ? "border-teal-200/40 bg-teal-700 text-white hover:bg-teal-700" : "",
+                      )}
+                    >
+                      AI
+                    </Badge>
+                  ) : null}
+                  <p className="whitespace-pre-wrap break-words">{msg.body}</p>
                   <p className={cn("mt-1 text-[10px]", isOutbound ? "text-teal-100" : "text-slate-400")}>
-                    <span className="sr-only">Sent </span>
-                    {pending ? "Sending…" : formatRelativeTime(msg.dateAdded)}
+                    <span className="group-hover:hidden">{pending ? "Sending…" : formatRelativeTime(msg.dateAdded)}</span>
+                    <span className="hidden group-hover:inline">{fullTs}</span>
                   </p>
                 </div>
               </div>
