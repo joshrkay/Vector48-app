@@ -4,7 +4,6 @@ import type { RecipeDefinition } from "@/types/recipes";
 import { getRecipeBySlug } from "./utils";
 import { buildRecipeConfigZodSchema } from "./configSchema";
 import { catalogKeysToDbProviders } from "./catalogIntegrationMap";
-import { getTierConfig } from "@/lib/ghl/tierConfig";
 
 export type AccountProfileSlice = Pick<
   Database["public"]["Tables"]["accounts"]["Row"],
@@ -25,7 +24,11 @@ export function validateRecipeConfig(
   config: unknown,
 ): { ok: true; data: Record<string, unknown> } | { ok: false; message: string } {
   if (recipe.configFields.length === 0) {
-    if (config && typeof config === "object" && Object.keys(config as object).length > 0) {
+    if (
+      config &&
+      typeof config === "object" &&
+      Object.keys(config as object).length > 0
+    ) {
       return { ok: false, message: "This recipe does not accept configuration." };
     }
     return { ok: true, data: {} };
@@ -51,7 +54,7 @@ export async function getMissingIntegrations(
 
   const { data, error } = await supabase
     .from("integrations")
-    .select("provider, status")
+    .select("provider")
     .eq("account_id", accountId)
     .in("provider", providers)
     .eq("status", "connected");
@@ -65,12 +68,9 @@ export async function getMissingIntegrations(
   const missing: string[] = [];
   for (const key of requiredCatalogKeys) {
     const mapped = catalogKeysToDbProviders([key]);
-    if (mapped.length === 0) {
+    if (mapped.length === 0 || !connected.has(mapped[0])) {
       missing.push(key);
-      continue;
     }
-    const db = mapped[0];
-    if (!connected.has(db)) missing.push(key);
   }
   return missing;
 }
@@ -92,6 +92,28 @@ export async function countActiveRecipes(
   return count ?? 0;
 }
 
+export async function getExistingRecipeActivation(
+  supabase: SupabaseClient<Database>,
+  accountId: string,
+  recipeSlug: string,
+) {
+  const { data, error } = await supabase
+    .from("recipe_activations")
+    .select("id, status, n8n_workflow_id, recipe_slug")
+    .eq("account_id", accountId)
+    .eq("recipe_slug", recipeSlug)
+    .order("activated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[activationValidator] existing activation", error.message);
+    return null;
+  }
+
+  return data;
+}
+
 export async function assertPlanAllowsMoreActivations(
   accountId: string,
   supabase: SupabaseClient<Database>,
@@ -105,37 +127,97 @@ export async function assertPlanAllowsMoreActivations(
       upgradeHref: string;
     }
 > {
-  const tier = await getTierConfig(accountId);
-  if (tier.maxActiveRecipes === null) {
-    return { ok: true };
-  }
-
-  const active = await countActiveRecipes(supabase, accountId);
-  if (active < tier.maxActiveRecipes) {
-    return { ok: true };
-  }
-
-  const { data: account } = await supabase
+  const { data: account, error: accountError } = await supabase
     .from("accounts")
     .select("plan_slug")
     .eq("id", accountId)
     .single();
 
-  const planSlug = account?.plan_slug ?? "starter";
+  if (accountError || !account) {
+    console.error("[activationValidator] account", accountError?.message);
+    return { ok: true };
+  }
 
   const { data: pricing } = await supabase
     .from("pricing_config")
-    .select("display_name")
-    .eq("plan_slug", planSlug)
+    .select("display_name, max_active_recipes")
+    .eq("plan_slug", account.plan_slug)
     .single();
 
-  const planDisplayName = pricing?.display_name ?? "your current plan";
+  const maxActiveRecipes = pricing?.max_active_recipes ?? 3;
+  if (maxActiveRecipes < 0) {
+    return { ok: true };
+  }
+
+  const active = await countActiveRecipes(supabase, accountId);
+  if (active < maxActiveRecipes) {
+    return { ok: true };
+  }
+
+  const planDisplayName = pricing?.display_name ?? "Starter";
 
   return {
     ok: false,
     code: "PLAN_LIMIT",
     planDisplayName,
-    message: `You've reached your ${planDisplayName} limit for active recipes. Upgrade to Growth for unlimited recipes.`,
+    message: `You've reached your ${planDisplayName} plan limit. Upgrade to Growth for unlimited recipes.`,
     upgradeHref: "/settings?tab=billing",
+  };
+}
+
+export async function validateActivationRequest(
+  supabase: SupabaseClient<Database>,
+  accountId: string,
+  recipe: RecipeDefinition,
+  config: unknown,
+) {
+  const configResult = validateRecipeConfig(recipe, config);
+  if (!configResult.ok) {
+    return { ok: false as const, status: 400, error: configResult.message };
+  }
+
+  const existing = await getExistingRecipeActivation(
+    supabase,
+    accountId,
+    recipe.slug,
+  );
+
+  if (existing?.status === "active") {
+    return {
+      ok: true as const,
+      idempotent: true as const,
+      existingActivationId: existing.id,
+      config: configResult.data,
+    };
+  }
+
+  const missingIntegrations = await getMissingIntegrations(
+    supabase,
+    accountId,
+    recipe.requiredIntegrations,
+  );
+
+  if (missingIntegrations.length > 0) {
+    return {
+      ok: false as const,
+      status: 400,
+      error: "Required integrations are not connected.",
+      code: "MISSING_INTEGRATIONS" as const,
+      missingIntegrations,
+    };
+  }
+
+  const planResult = await assertPlanAllowsMoreActivations(accountId, supabase);
+  if (!planResult.ok) {
+    return {
+      status: 403,
+      ...planResult,
+    };
+  }
+
+  return {
+    ok: true as const,
+    idempotent: false as const,
+    config: configResult.data,
   };
 }
