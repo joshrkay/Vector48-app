@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "@/hooks/useSWR";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -11,25 +12,14 @@ import {
 } from "@/lib/crm/contactCache";
 
 const QUERY_CACHE_TTL_MS = 30_000;
-const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
 
-async function searchContacts(query: string) {
-  const cached = queryCache.get(query);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.contacts;
-  }
-
-  const res = await fetch(`/api/ghl/contacts/search?q=${encodeURIComponent(query)}`);
+async function searchContacts([url, query]: readonly [string, string]) {
+  const res = await fetch(`${url}?q=${encodeURIComponent(query)}`);
   if (!res.ok) {
     throw new Error("Failed to search contacts");
   }
 
   const payload = (await res.json()) as { contacts: CRMContactSearchItem[] };
-  queryCache.set(query, {
-    contacts: payload.contacts,
-    expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
-  });
-
   return payload.contacts;
 }
 
@@ -39,8 +29,6 @@ export function CRMSearchBar() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [contacts, setContacts] = useState<CRMContactSearchItem[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -50,37 +38,24 @@ export function CRMSearchBar() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  useEffect(() => {
-    if (!debouncedQuery) {
-      setContacts([]);
-      return;
+  const { data, isLoading, isValidating } = useSWR(
+    debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
+    searchContacts,
+    {
+      dedupingInterval: QUERY_CACHE_TTL_MS,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
     }
+  );
 
-    let cancelled = false;
+  const contacts = data ?? [];
 
-    (async () => {
-      setIsLoading(true);
-      try {
-        const results = await searchContacts(debouncedQuery);
-        if (!cancelled) {
-          setContacts(results);
-          upsertContactsInCache(results);
-        }
-      } catch {
-        if (!cancelled) {
-          setContacts([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQuery]);
+  useEffect(() => {
+    if (contacts.length) {
+      upsertContactsInCache(contacts);
+    }
+  }, [contacts]);
 
   const visibleContacts = useMemo(() => contacts, [contacts]);
 
@@ -139,7 +114,7 @@ export function CRMSearchBar() {
 
       {open && debouncedQuery ? (
         <div className="absolute z-30 mt-2 w-full rounded-lg border bg-white shadow-lg">
-          {isLoading ? (
+          {isLoading || isValidating ? (
             <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">Searching...</p>
           ) : visibleContacts.length ? (
             <ul className="max-h-80 overflow-auto py-1">
