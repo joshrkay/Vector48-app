@@ -3,24 +3,12 @@ import { requireAccountForUser } from "@/lib/auth/account";
 import { getContacts } from "@/lib/ghl/contacts";
 import { getAccountGhlCredentials } from "@/lib/ghl/token";
 import { createServerClient } from "@/lib/supabase/server";
+import type { CRMContactSearchItem } from "@/lib/crm/contactCache";
+import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_FETCH_LIMIT = 25;
 const MAX_RESULTS = 10;
-
-interface ContactSearchItem {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-}
-
-interface ContactSearchResponse {
-  items: ContactSearchItem[];
-  error: {
-    message: string;
-  } | null;
-}
 
 function normalizeContact(raw: {
   id?: string | null;
@@ -29,7 +17,7 @@ function normalizeContact(raw: {
   lastName?: string | null;
   email?: string | null;
   phone?: string | null;
-}): ContactSearchItem | null {
+}): CRMContactSearchItem | null {
   if (!raw.id) {
     return null;
   }
@@ -44,13 +32,13 @@ function normalizeContact(raw: {
   };
 }
 
-function scoreContact(contact: ContactSearchItem, query: string): number {
+function scoreContact(contact: CRMContactSearchItem, query: string): number {
   const q = query.toLowerCase();
   const normalizedPhoneQuery = q.replace(/\D/g, "");
 
   const name = contact.name.toLowerCase();
-  const email = contact.email.toLowerCase();
-  const phoneDigits = contact.phone.replace(/\D/g, "");
+  const email = (contact.email ?? "").toLowerCase();
+  const phoneDigits = (contact.phone ?? "").replace(/\D/g, "");
 
   if (name === q || email === q || (normalizedPhoneQuery && phoneDigits === normalizedPhoneQuery)) {
     return 0;
@@ -67,7 +55,7 @@ function scoreContact(contact: ContactSearchItem, query: string): number {
   return 7;
 }
 
-function sortByRelevance(items: ContactSearchItem[], query: string): ContactSearchItem[] {
+function sortByRelevance(items: CRMContactSearchItem[], query: string): CRMContactSearchItem[] {
   return items
     .map((item, index) => ({ item, index, score: scoreContact(item, query) }))
     .sort((a, b) => {
@@ -83,13 +71,13 @@ export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   if (!q) {
-    return NextResponse.json<ContactSearchResponse>({ items: [], error: null });
+    return NextResponse.json<CRMContactSearchResponse>({ contacts: [], error: null });
   }
 
   if (q.length < MIN_QUERY_LENGTH) {
-    return NextResponse.json<ContactSearchResponse>(
+    return NextResponse.json<CRMContactSearchResponse>(
       {
-        items: [],
+        contacts: [],
         error: null,
       },
     );
@@ -99,8 +87,8 @@ export async function GET(request: NextRequest) {
   const session = await requireAccountForUser(supabase);
 
   if (!session) {
-    return NextResponse.json<ContactSearchResponse>(
-      { items: [], error: { message: "Unauthorized" } },
+    return NextResponse.json<CRMContactSearchResponse>(
+      { contacts: [], error: { message: "Unauthorized" } },
       { status: 401 },
     );
   }
@@ -122,17 +110,17 @@ export async function GET(request: NextRequest) {
 
     const normalized = (response.contacts ?? [])
       .map(normalizeContact)
-      .filter((item): item is ContactSearchItem => item !== null);
+      .filter((item): item is CRMContactSearchItem => item !== null);
 
     const sorted = sortByRelevance(normalized, q).slice(0, MAX_RESULTS);
 
-    return NextResponse.json<ContactSearchResponse>({ items: sorted, error: null });
+    return NextResponse.json<CRMContactSearchResponse>({ contacts: sorted, error: null });
   } catch (error) {
     console.error("[ghl-contact-search] failed", error);
 
-    return NextResponse.json<ContactSearchResponse>(
+    return NextResponse.json<CRMContactSearchResponse>(
       {
-        items: [],
+        contacts: [],
         error: {
           message: "Unable to search contacts right now.",
         },
