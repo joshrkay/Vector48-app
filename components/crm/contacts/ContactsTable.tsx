@@ -4,43 +4,15 @@ import { useRouter } from "next/navigation";
 import { MessageSquare, StickyNote } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import {
+  deriveStage,
+  nonStageTags,
+  STAGE_CONFIG,
+  displayName,
+  getInitials,
+  formatRelativeTime,
+} from "./contactUtils";
 import type { GHLContact } from "@/lib/ghl/types";
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-const STAGE_TAGS = ["New Lead", "Contacted", "Active Customer", "Inactive"];
-
-const STAGE_COLORS: Record<string, string> = {
-  "New Lead": "bg-blue-50 text-blue-700 border-blue-200",
-  "Contacted": "bg-yellow-50 text-yellow-700 border-yellow-200",
-  "Active Customer": "bg-green-50 text-green-700 border-green-200",
-  "Inactive": "bg-gray-50 text-gray-600 border-gray-200",
-};
-
-function getStageFromContact(contact: GHLContact): string | null {
-  const tag = contact.tags.find((t) => STAGE_TAGS.includes(t));
-  return tag ?? contact.type ?? null;
-}
-
-function formatRelativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffMins = Math.floor(diffMs / 60_000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHrs = Math.floor(diffMins / 60);
-  if (diffHrs < 24) return `${diffHrs}h ago`;
-  const diffDays = Math.floor(diffHrs / 24);
-  if (diffDays < 30) return `${diffDays}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
-function getInitials(contact: GHLContact): string {
-  const first = contact.firstName?.[0] ?? "";
-  const last = contact.lastName?.[0] ?? "";
-  return (first + last).toUpperCase() || "?";
-}
-
-// ── Component ──────────────────────────────────────────────────────────────
 
 interface ContactsTableProps {
   contacts: GHLContact[];
@@ -56,33 +28,22 @@ export function ContactsTable({ contacts, aiContactIds }: ContactsTableProps) {
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 border-b border-border bg-white shadow-[0_1px_0_0_hsl(var(--border))]">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Name
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Phone
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Last Activity
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Stage
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Tags
-              </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Source
-              </th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Phone</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Last Activity</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Stage</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Tags</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Source</th>
               <th className="w-8 px-4 py-3" aria-label="AI" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {contacts.map((contact) => {
-              const stage = getStageFromContact(contact);
-              const stageColor = stage ? (STAGE_COLORS[stage] ?? "bg-gray-50 text-gray-600 border-gray-200") : null;
-              const nonStageTags = contact.tags.filter((t) => !STAGE_TAGS.includes(t));
+              const stage = deriveStage(contact.tags);
+              const stageConfig = stage ? STAGE_CONFIG[stage] : null;
+              const extraTags = nonStageTags(contact.tags);
               const isAI = aiContactIds.has(contact.id);
+              const name = displayName(contact);
 
               return (
                 <tr
@@ -96,9 +57,7 @@ export function ContactsTable({ contacts, aiContactIds }: ContactsTableProps) {
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                         {getInitials(contact)}
                       </span>
-                      <span className="font-medium text-foreground">
-                        {contact.name ?? `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim() || "—"}
-                      </span>
+                      <span className="font-medium text-foreground">{name}</span>
                     </div>
                   </td>
 
@@ -114,9 +73,14 @@ export function ContactsTable({ contacts, aiContactIds }: ContactsTableProps) {
 
                   {/* Stage */}
                   <td className="px-4 py-3">
-                    {stage ? (
-                      <Badge className={cn("border font-normal", stageColor)}>
-                        {stage}
+                    {stageConfig ? (
+                      <Badge
+                        className={cn(
+                          "border-0 font-normal",
+                          stageConfig.className,
+                        )}
+                      >
+                        {stageConfig.label}
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -126,19 +90,25 @@ export function ContactsTable({ contacts, aiContactIds }: ContactsTableProps) {
                   {/* Tags */}
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
-                      {nonStageTags.length > 0 ? (
-                        nonStageTags.slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="secondary" className="font-normal">
-                            {tag}
-                          </Badge>
-                        ))
+                      {extraTags.length > 0 ? (
+                        <>
+                          {extraTags.slice(0, 3).map((tag) => (
+                            <Badge
+                              key={tag}
+                              variant="secondary"
+                              className="font-normal"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                          {extraTags.length > 3 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{extraTags.length - 3}
+                            </span>
+                          )}
+                        </>
                       ) : (
                         <span className="text-muted-foreground">—</span>
-                      )}
-                      {nonStageTags.length > 3 && (
-                        <span className="text-xs text-muted-foreground">
-                          +{nonStageTags.length - 3}
-                        </span>
                       )}
                     </div>
                   </td>
@@ -148,7 +118,7 @@ export function ContactsTable({ contacts, aiContactIds }: ContactsTableProps) {
                     {contact.source ?? "—"}
                   </td>
 
-                  {/* AI Badge + Quick Actions */}
+                  {/* AI badge + quick actions */}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       {/* Quick actions: visible on row hover */}
@@ -167,10 +137,12 @@ export function ContactsTable({ contacts, aiContactIds }: ContactsTableProps) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/crm/contacts/${contact.id}?tab=notes`);
+                            router.push(
+                              `/crm/contacts/${contact.id}?tab=notes`,
+                            );
                           }}
                           className="rounded p-1 text-muted-foreground hover:bg-gray-100 hover:text-foreground"
-                          aria-label="Note"
+                          aria-label="Add note"
                           title="Add note"
                         >
                           <StickyNote className="h-3.5 w-3.5" />
