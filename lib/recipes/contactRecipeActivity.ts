@@ -5,7 +5,7 @@ import {
   getActivationsMatchingContactPhone,
   normalizePhoneDigits,
   type RecipeActivationRow,
-} from "./phoneActivationMatch";
+} from "./phoneActivationMatch.ts";
 
 interface GhlCredentials {
   locationId: string;
