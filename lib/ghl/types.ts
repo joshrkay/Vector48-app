@@ -99,6 +99,12 @@ export interface GHLContactsListParams extends GHLListParams {
   email?: string;
   phone?: string;
   tag?: string;
+  /**
+   * Canonical GHL date window query params for contact creation timestamp.
+   * Sent as query-string keys: dateAdded[gte] / dateAdded[lte]
+   */
+  "dateAdded[gte]"?: string;
+  "dateAdded[lte]"?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }
@@ -143,12 +149,6 @@ export interface GHLCreateContactPayload {
 
 export interface GHLUpdateContactPayload
   extends Partial<Omit<GHLCreateContactPayload, "locationId">> {}
-
-export interface GHLContactsListResponse {
-  contacts: GHLContact[];
-}
-
-export type GHLContactResponse = GHLContact;
 
 // ── Notes ───────────────────────────────────────────────────────────────────
 
@@ -264,10 +264,6 @@ export interface GHLSendMessagePayload {
   emailTo?: string;
   emailCc?: string[];
   emailBcc?: string[];
-}
-
-export interface GHLConversationsListResponse {
-  conversations: GHLConversation[];
 }
 
 export interface GHLMessagesListResponse {
@@ -450,13 +446,6 @@ export interface GHLCalendarSlot {
   endTime: string;
 }
 
-export interface GHLCalendarSlotsParams {
-  calendarId: string;
-  startDate: string;
-  endDate: string;
-  timezone?: string;
-}
-
 // ── Campaigns ──────────────────────────────────────────────────────────────
 
 export type GHLCampaignStatus = "draft" | "published" | "archived";
@@ -569,6 +558,13 @@ export interface GHLWebhook {
 }
 
 export interface GHLCreateWebhookPayload {
+  locationId: string;
+  url: string;
+  events: GHLWebhookEvent[];
+  headers?: Record<string, string>;
+  secret?: string;
+}
+
 export interface GHLWebhookResponse {
   webhook: GHLWebhook;
 }
@@ -603,9 +599,4 @@ export interface GHLMessagesListResponse {
   lastMessageId?: string;
 }
 
-export interface GHLWebhooksListResponse {
-  webhooks: GHLWebhook[];
-}
-
 // ── (duplicate declarations removed — end of file) ─────────────────────────
-
