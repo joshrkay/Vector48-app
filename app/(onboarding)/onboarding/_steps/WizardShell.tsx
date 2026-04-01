@@ -19,8 +19,9 @@ import { VoiceAIStep } from "./VoiceAIStep";
 import { NotificationsStep } from "./NotificationsStep";
 import { ActivateRecipeStep } from "./ActivateRecipeStep";
 import { CompletionScreen } from "./CompletionScreen";
+import { WelcomeStep } from "./WelcomeStep";
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 8;
 
 interface WizardShellProps {
   accountId: string;
@@ -207,18 +208,20 @@ function StepRenderer({
   const props = { onNext, onValidityChange };
   switch (step) {
     case 0:
-      return <BusinessNameStep {...props} />;
+      return <WelcomeStep {...props} />;
     case 1:
-      return <VerticalStep {...props} />;
+      return <BusinessNameStep {...props} />;
     case 2:
       return <PhoneStep {...props} />;
     case 3:
-      return <BusinessHoursStep {...props} />;
+      return <VerticalStep {...props} />;
     case 4:
-      return <VoiceAIStep {...props} />;
+      return <BusinessHoursStep {...props} />;
     case 5:
-      return <NotificationsStep {...props} />;
+      return <VoiceAIStep {...props} />;
     case 6:
+      return <NotificationsStep {...props} />;
+    case 7:
       return <ActivateRecipeStep {...props} />;
     default:
       return null;
