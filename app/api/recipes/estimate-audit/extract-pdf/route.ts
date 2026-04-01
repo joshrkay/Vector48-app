@@ -30,7 +30,8 @@ export async function POST(req: Request) {
 
   let text: string;
   try {
-    const { PDFParse } = await import("pdf-parse");
+    // @ts-ignore – pdf-parse is an optional runtime dep; webpackIgnore skips bundling
+    const { PDFParse } = await import(/* webpackIgnore: true */ "pdf-parse");
     const parser = new PDFParse({ data: new Uint8Array(buf) });
     const result = await parser.getText();
     text = result.text ?? "";

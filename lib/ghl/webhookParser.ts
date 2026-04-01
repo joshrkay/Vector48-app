@@ -189,31 +189,6 @@ export function parseGHLWebhook(
 
   const contactName = formatContactName(payload);
 
-  const parsed = (() => {
-    switch (eventType) {
-      case "contact_created":
-        return parseContactCreated(rawPayload as GHLWebhookContactCreate);
-      case "contact_updated":
-        return parseContactUpdated(rawPayload as GHLWebhookContactUpdate);
-      case "call_completed":
-        return parseCallCompleted(rawPayload as GHLWebhookCallCompleted);
-      case "message_received":
-        return parseInboundMessage(rawPayload as GHLWebhookInboundMessage);
-      case "opportunity_created":
-        return parseOpportunityCreated(rawPayload as GHLWebhookOpportunityCreate);
-      case "opportunity_moved":
-        return parseOpportunityMoved(rawPayload as GHLWebhookOpportunityStageUpdate);
-      case "appointment_created":
-        return parseAppointmentCreated(rawPayload as GHLWebhookAppointmentCreate);
-      case "appointment_updated":
-        return parseAppointmentUpdated(rawPayload as GHLWebhookAppointmentStatusUpdate);
-      case "conversation_unread":
-        return parseConversationUnread(rawPayload as GHLWebhookConversationUnreadUpdate);
-      default:
-        return parseUnknown(rawPayload as GHLWebhookBase, ghlEventType);
-    }
-  })();
-
   return {
     recipe_slug: null,
     event_type: EVENT_TYPE_MAP[ghlEventType] ?? "ghl_event",

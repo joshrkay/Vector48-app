@@ -6,7 +6,6 @@
 
 // ── Generic Pagination ──────────────────────────────────────────────────────
 
-/** Cursor-based pagination meta used by most GHL v2 list endpoints. */
 export interface GHLPaginationMeta {
   total: number;
   count: number;
@@ -15,7 +14,6 @@ export interface GHLPaginationMeta {
   prevPage: number | null;
 }
 
-/** Generic paginated wrapper. Some endpoints use startAfterId cursors. */
 export interface GHLPaginatedResponse<T> {
   data: T[];
   meta: {
@@ -31,7 +29,6 @@ export interface GHLListParams {
   locationId?: string;
 }
 
-/** Normalized error shape returned from the client (not thrown). */
 export interface GHLError {
   code: string;
   message: string;
@@ -47,6 +44,21 @@ export interface GHLClientOptions {
 }
 
 // ── Contacts ────────────────────────────────────────────────────────────────
+
+export interface GHLCustomFieldValue {
+  id: string;
+  fieldValue: string | string[] | number | boolean | null;
+}
+
+export interface GHLCustomField {
+  id: string;
+  name: string;
+  fieldKey: string;
+  dataType: string;
+  placeholder: string | null;
+  position: number;
+  isMultipleFile: boolean;
+}
 
 export interface GHLContact {
   id: string;
@@ -75,35 +87,21 @@ export interface GHLContact {
   assignedTo: string | null;
 }
 
-export interface GHLCustomFieldValue {
-  id: string;
-  fieldValue: string | string[] | number | boolean | null;
-}
-
-/**
- * Standalone custom field definition (from GET /locations/{id}/customFields).
- * Distinct from GHLCustomFieldValue which is a contact-level key-value pair.
- */
-export interface GHLCustomField {
-  id: string;
-  name: string;
-  fieldKey: string;
-  dataType: string;
-  placeholder: string | null;
-  position: number;
-  isMultipleFile: boolean;
-}
-
 export interface GHLContactsListParams extends GHLListParams {
   query?: string;
   email?: string;
   phone?: string;
   tag?: string;
+  /**
+   * Canonical GHL date window query params for contact creation timestamp.
+   * Sent as query-string keys: dateAdded[gte] / dateAdded[lte]
+   */
+  "dateAdded[gte]"?: string;
+  "dateAdded[lte]"?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }
 
-/** GHL v2 contacts list response */
 export interface GHLContactsListResponse {
   contacts: GHLContact[];
   meta?: GHLPaginationMeta;
@@ -144,7 +142,7 @@ export interface GHLCreateContactPayload {
 export interface GHLUpdateContactPayload
   extends Partial<Omit<GHLCreateContactPayload, "locationId">> {}
 
-// ── Notes ───────────────────────────────────────────────────────────────────
+// ── Notes / Tasks / Tags ───────────────────────────────────────────────────
 
 export interface GHLNote {
   id: string;
@@ -154,10 +152,7 @@ export interface GHLNote {
   dateAdded: string;
 }
 
-/** Alias used by service files for contact-level notes. */
 export type GHLContactNote = GHLNote;
-
-// ── Contact Tasks ──────────────────────────────────────────────────────────
 
 export interface GHLContactTask {
   id: string;
@@ -169,8 +164,6 @@ export interface GHLContactTask {
   completed: boolean;
   dateAdded: string;
 }
-
-// ── Tags ────────────────────────────────────────────────────────────────────
 
 export interface GHLTag {
   id: string;
@@ -262,6 +255,8 @@ export interface GHLSendMessagePayload {
 
 export interface GHLMessagesListResponse {
   messages: GHLMessage[];
+  nextPage?: boolean;
+  lastMessageId?: string;
 }
 
 // ── Opportunities / Pipeline ────────────────────────────────────────────────
@@ -384,6 +379,11 @@ export interface GHLCalendarSlotsParams {
   timezone?: string;
 }
 
+export interface GHLCalendarSlot {
+  startTime: string;
+  endTime: string;
+}
+
 export interface GHLCalendarSlotsResponse {
   slots: { startTime: string; endTime: string }[];
 }
@@ -413,7 +413,6 @@ export interface GHLAppointmentsListParams extends GHLListParams {
 }
 
 export interface GHLAppointmentsListResponse {
-  /** GHL returns appointments under the "events" key, not "appointments". */
   events: GHLAppointment[];
 }
 
@@ -431,14 +430,7 @@ export interface GHLCreateAppointmentPayload {
 }
 
 export interface GHLUpdateAppointmentPayload
-  extends Partial<
-    Omit<GHLCreateAppointmentPayload, "calendarId" | "locationId">
-  > {}
-
-export interface GHLCalendarSlot {
-  startTime: string;
-  endTime: string;
-}
+  extends Partial<Omit<GHLCreateAppointmentPayload, "calendarId" | "locationId">> {}
 
 // ── Campaigns ──────────────────────────────────────────────────────────────
 
@@ -448,7 +440,7 @@ export interface GHLCampaign {
   id: string;
   name: string;
   locationId: string;
-  status: "draft" | "published" | "archived";
+  status: GHLCampaignStatus;
   type: string;
   dateAdded: string;
   dateUpdated: string;
@@ -458,7 +450,7 @@ export interface GHLCampaignsListResponse {
   campaigns: GHLCampaign[];
 }
 
-// ── Locations (Sub-account creation — agency-level) ─────────────────────────
+// ── Locations (Sub-account creation — agency-level) ────────────────────────
 
 export interface GHLLocation {
   id: string;
@@ -474,7 +466,6 @@ export interface GHLLocation {
   website: string | null;
   timezone: string | null;
   settings: Record<string, unknown>;
-  /** Returned only during location creation (agency-level). */
   apiKey: string;
   dateAdded: string;
 }
@@ -502,6 +493,15 @@ export interface GHLCreateLocationResponse {
   location: GHLLocation;
 }
 
+export interface GHLBusinessHours {
+  dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+  openHour: number;
+  openMinute: number;
+  closeHour: number;
+  closeMinute: number;
+  isOpen: boolean;
+}
+
 export interface GHLUpdateLocationPayload {
   name?: string;
   phone?: string;
@@ -517,15 +517,6 @@ export interface GHLUpdateLocationPayload {
     businessName?: string;
     businessHours?: GHLBusinessHours[];
   };
-}
-
-export interface GHLBusinessHours {
-  dayOfWeek: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
-  openHour: number;
-  openMinute: number;
-  closeHour: number;
-  closeMinute: number;
-  isOpen: boolean;
 }
 
 // ── Webhooks (agency-level) ─────────────────────────────────────────────────
@@ -555,12 +546,15 @@ export interface GHLCreateWebhookPayload {
   locationId: string;
   url: string;
   events: GHLWebhookEvent[];
-  headers?: Record<string, string>;
   secret?: string;
 }
 
 export interface GHLWebhookResponse {
   webhook: GHLWebhook;
+}
+
+export interface GHLWebhooksListResponse {
+  webhooks: GHLWebhook[];
 }
 
 // ── Token Exchange (agency → sub-account) ─────────────────────────────────
@@ -586,11 +580,3 @@ export interface GHLCampaign {
   events: string[];
   secret?: string;
 }
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  nextPage: boolean;
-  lastMessageId?: string;
-}
-
-// ── (duplicate declarations removed — end of file) ─────────────────────────
