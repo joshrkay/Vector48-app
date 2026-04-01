@@ -195,6 +195,8 @@ export interface GHLConversation {
   lastMessageDate: string | null;
   lastMessageType: GHLMessageType | null;
   lastMessageDirection: "inbound" | "outbound" | null;
+  /** When present (varies by GHL version), used to detect automation/AI as last sender. */
+  lastMessageSource?: string | null;
   type: GHLMessageType;
   unreadCount: number;
   starred: boolean;
@@ -226,6 +228,9 @@ export interface GHLMessage {
   contentType: string;
   dateAdded: string;
   attachments?: string[];
+  /** Some GHL payloads include source / user metadata for automation messages. */
+  source?: string | null;
+  meta?: Record<string, unknown> | null;
 }
 
 export interface GHLMessagesListParams {

@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "test:unit": "node --experimental-strip-types --test lib/cron/recipeTriggerDelivery.test.ts lib/recipes/webhookEvents.test.ts"
+    "test:unit": "node --experimental-strip-types --test lib/cron/recipeTriggerDelivery.test.ts lib/recipes/webhookEvents.test.ts lib/crm/inboxFilters.test.ts lib/crm/smsSegments.test.ts",
+    "create-test-account": "node scripts/create-test-account.mjs",
+    "supabase": "npx --yes supabase@latest",
+    "db:link": "npx --yes supabase@latest link",
+    "db:push": "npx --yes supabase@latest db push"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

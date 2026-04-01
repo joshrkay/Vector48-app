@@ -46,7 +46,16 @@ export default function LoginPage() {
       });
 
       if (authError) {
-        toast.error("Invalid email or password");
+        const msg = authError.message.toLowerCase();
+        if (msg.includes("email not confirmed")) {
+          toast.error(
+            "Confirm your email using the link we sent, then try again.",
+          );
+        } else if (msg.includes("invalid login credentials")) {
+          toast.error("Invalid email or password.");
+        } else {
+          toast.error(authError.message);
+        }
         return;
       }
 

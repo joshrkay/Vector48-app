@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Mail, Phone, Pencil, X, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -14,8 +15,10 @@ interface Props {
 }
 
 export function ContactHeader({ contact }: Props) {
+  const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [contactData, setContactData] = useState(contact);
   const [fields, setFields] = useState({
     firstName: contact.firstName ?? "",
     lastName: contact.lastName ?? "",
@@ -23,9 +26,19 @@ export function ContactHeader({ contact }: Props) {
     phone: contact.phone ?? "",
   });
 
+  useEffect(() => {
+    setContactData(contact);
+    setFields({
+      firstName: contact.firstName ?? "",
+      lastName: contact.lastName ?? "",
+      email: contact.email ?? "",
+      phone: contact.phone ?? "",
+    });
+  }, [contact]);
+
   const displayName =
-    contact.name ||
-    `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim() ||
+    contactData.name ||
+    `${contactData.firstName ?? ""} ${contactData.lastName ?? ""}`.trim() ||
     "Unnamed Contact";
 
   async function handleSave() {
@@ -42,8 +55,19 @@ export function ContactHeader({ contact }: Props) {
         }),
       });
       if (!res.ok) throw new Error("Update failed");
+      const payload = (await res.json()) as { contact?: GHLContact };
+      if (payload.contact) {
+        setContactData(payload.contact);
+        setFields({
+          firstName: payload.contact.firstName ?? "",
+          lastName: payload.contact.lastName ?? "",
+          email: payload.contact.email ?? "",
+          phone: payload.contact.phone ?? "",
+        });
+      }
       toast.success("Contact updated");
       setIsEditing(false);
+      router.refresh();
     } catch {
       toast.error("Failed to update contact");
     } finally {
@@ -53,10 +77,10 @@ export function ContactHeader({ contact }: Props) {
 
   function handleCancel() {
     setFields({
-      firstName: contact.firstName ?? "",
-      lastName: contact.lastName ?? "",
-      email: contact.email ?? "",
-      phone: contact.phone ?? "",
+      firstName: contactData.firstName ?? "",
+      lastName: contactData.lastName ?? "",
+      email: contactData.email ?? "",
+      phone: contactData.phone ?? "",
     });
     setIsEditing(false);
   }
@@ -110,31 +134,31 @@ export function ContactHeader({ contact }: Props) {
               </>
             ) : (
               <>
-                {contact.phone ? (
+                {contactData.phone ? (
                   <a
-                    href={`tel:${contact.phone}`}
+                    href={`tel:${contactData.phone}`}
                     className="flex items-center gap-1.5 text-sm text-[var(--text-primary)] hover:text-[var(--v48-accent)]"
                   >
                     <Phone className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
-                    {contact.phone}
+                    {contactData.phone}
                   </a>
                 ) : null}
-                {contact.email ? (
+                {contactData.email ? (
                   <a
-                    href={`mailto:${contact.email}`}
+                    href={`mailto:${contactData.email}`}
                     className="flex items-center gap-1.5 text-sm text-[var(--text-primary)] hover:text-[var(--v48-accent)]"
                   >
                     <Mail className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
-                    {contact.email}
+                    {contactData.email}
                   </a>
                 ) : null}
               </>
             )}
           </div>
 
-          {contact.tags.length > 0 ? (
+          {contactData.tags.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {contact.tags.map((tag) => (
+              {contactData.tags.map((tag) => (
                 <Badge key={tag} variant="secondary" className="text-xs">
                   {tag}
                 </Badge>
@@ -143,9 +167,9 @@ export function ContactHeader({ contact }: Props) {
           ) : null}
 
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)]">
-            {contact.source ? <span>Source: {contact.source}</span> : null}
-            {contact.dateAdded ? (
-              <span>Added {formatRelativeTime(contact.dateAdded)}</span>
+            {contactData.source ? <span>Source: {contactData.source}</span> : null}
+            {contactData.dateAdded ? (
+              <span>Added {formatRelativeTime(contactData.dateAdded)}</span>
             ) : null}
           </div>
         </div>

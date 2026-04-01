@@ -40,10 +40,15 @@ export default function SignupPage() {
     try {
       const supabase = createBrowserClient();
 
-      // 1. Create auth user
+      // 1. Create auth user (DB trigger on auth.users creates public.accounts + account_users)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
+        options: {
+          data: {
+            business_name: values.businessName,
+          },
+        },
       });
 
       if (authError) {
@@ -56,46 +61,15 @@ export default function SignupPage() {
         return;
       }
 
-      const userId = authData.user.id;
+      // 2. No client-side accounts insert: RLS requires auth.uid(); with email confirm there is often
+      //    no session yet, so uid is null and INSERT fails. Trigger handle_new_auth_user handles it.
 
-      // 2. Create account row
-      const trialEndsAt = new Date(
-        Date.now() + 7 * 24 * 60 * 60 * 1000
-      ).toISOString();
-
-      const { data: account, error: accountError } = await supabase
-        .from("accounts")
-        .insert({
-          owner_user_id: userId,
-          business_name: values.businessName,
-          trial_ends_at: trialEndsAt,
-          plan_slug: "trial",
-          provisioning_status: "pending",
-          vertical: "hvac", // placeholder — onboarding collects real value
-        })
-        .select("id")
-        .single();
-
-      if (accountError) {
-        toast.error("Account creation failed: " + accountError.message);
+      if (!authData.session) {
+        toast.success("Check your email to confirm your account, then sign in.");
+        router.push("/login");
         return;
       }
 
-      // 3. Create account_users row
-      const { error: memberError } = await supabase
-        .from("account_users")
-        .insert({
-          account_id: account.id,
-          user_id: userId,
-          role: "admin",
-        });
-
-      if (memberError) {
-        toast.error("Failed to set up account access: " + memberError.message);
-        return;
-      }
-
-      // 4. Redirect to onboarding
       router.push("/onboarding");
     } catch {
       toast.error("An unexpected error occurred. Please try again.");
