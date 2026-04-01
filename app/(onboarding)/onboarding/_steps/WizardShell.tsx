@@ -72,7 +72,7 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
           (data.activateRecipe1 as boolean) ?? true,
           {
             voiceGender: store.voiceGender,
-            greetingText: store.greetingText,
+            voiceGreeting: store.voiceGreeting,
           }
         );
       }

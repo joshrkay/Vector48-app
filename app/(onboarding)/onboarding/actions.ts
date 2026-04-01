@@ -9,8 +9,8 @@ const STEP_COLUMN_MAP: Record<number, string[]> = {
   1: ["vertical"],
   2: ["phone"],
   3: ["business_hours"],
-  4: ["voice_gender", "greeting_text"],
-  5: ["notification_contact_name", "notification_contact_phone"],
+  4: ["voice_gender", "voice_greeting"],
+  5: ["notification_contact", "notification_sms"],
   6: [], // activate recipe — handled separately
 };
 
@@ -22,9 +22,9 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   businessHours: "business_hours",
   preset: "business_hours",
   voiceGender: "voice_gender",
-  greetingText: "greeting_text",
-  notificationContactName: "notification_contact_name",
-  notificationContactPhone: "notification_contact_phone",
+  voiceGreeting: "voice_greeting",
+  notificationContact: "notification_contact",
+  notificationSms: "notification_sms",
 };
 
 export async function saveOnboardingStep(
@@ -89,7 +89,7 @@ export async function saveOnboardingStep(
 export async function completeOnboarding(
   accountId: string,
   activateRecipe: boolean,
-  voiceConfig?: { voiceGender: string; greetingText: string }
+  voiceConfig?: { voiceGender: string; voiceGreeting: string }
 ) {
   const supabase = await createServerClient();
 
@@ -122,7 +122,7 @@ export async function completeOnboarding(
     const config = voiceConfig
       ? {
           voice_gender: voiceConfig.voiceGender,
-          greeting_text: voiceConfig.greetingText,
+          voice_greeting: voiceConfig.voiceGreeting,
         }
       : null;
 

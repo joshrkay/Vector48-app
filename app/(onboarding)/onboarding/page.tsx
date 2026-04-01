@@ -47,7 +47,7 @@ export default async function OnboardingPage() {
   }
 
   // If onboarding already done, go to dashboard
-  if (account?.onboarding_completed_at) {
+  if (account?.onboarding_done_at) {
     redirect("/dashboard");
   }
 
@@ -74,9 +74,9 @@ export default async function OnboardingPage() {
             }
           : { preset: "weekday_8_5" as const },
         voiceGender: (account.voice_gender as "male" | "female") || "male",
-        greetingText: account.greeting_text || "",
-        notificationContactName: account.notification_contact_name || "",
-        notificationContactPhone: account.notification_contact_phone || "",
+        voiceGreeting: account.voice_greeting || "",
+        notificationContact: account.notification_contact || "",
+        notificationSms: account.notification_sms ?? false,
         notificationPreferences: prefs,
         activateRecipe1: true,
         currentStep: account.onboarding_step || 0,
