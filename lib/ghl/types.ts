@@ -260,10 +260,6 @@ export interface GHLSendMessagePayload {
   emailBcc?: string[];
 }
 
-export interface GHLConversationsListResponse {
-  conversations: GHLConversation[];
-}
-
 export interface GHLMessagesListResponse {
   messages: GHLMessage[];
 }
@@ -442,13 +438,6 @@ export interface GHLUpdateAppointmentPayload
 export interface GHLCalendarSlot {
   startTime: string;
   endTime: string;
-}
-
-export interface GHLCalendarSlotsParams {
-  calendarId: string;
-  startDate: string;
-  endDate: string;
-  timezone?: string;
 }
 
 // ── Campaigns ──────────────────────────────────────────────────────────────
