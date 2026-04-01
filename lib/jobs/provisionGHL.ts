@@ -7,7 +7,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createLocation, updateLocation } from "@/lib/ghl/locations";
 import { createWebhook, listWebhooks } from "@/lib/ghl/webhooks";
-import { encryptToken, decryptToken } from "@/lib/ghl/token";
+import { encryptToken, decryptToken } from "@/lib/ghl";
 import type {
   GHLCreateLocationPayload,
   GHLWebhookEvent,

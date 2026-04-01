@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { getContacts } from "@/lib/ghl/contacts";
-import { getAccountGhlCredentials } from "@/lib/ghl/token";
+import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 import type { CRMContactSearchItem } from "@/lib/crm/contactCache";
 import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
@@ -24,11 +24,14 @@ function normalizeContact(raw: {
 
   const derivedName = `${raw.firstName ?? ""} ${raw.lastName ?? ""}`.trim();
 
+  const email = raw.email?.trim() ?? "";
+  const phone = raw.phone?.trim() ?? "";
+
   return {
     id: raw.id,
     name: (raw.name ?? derivedName).trim(),
-    email: (raw.email ?? "").trim(),
-    phone: (raw.phone ?? "").trim(),
+    email: email || null,
+    phone: phone || null,
   };
 }
 
@@ -94,7 +97,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { locationId, token } = await getAccountGhlCredentials(session.accountId);
+    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
 
     const response = await getContacts(
       {
@@ -104,7 +107,7 @@ export async function GET(request: NextRequest) {
       },
       {
         locationId,
-        apiKey: token,
+        apiKey: accessToken,
       },
     );
 
