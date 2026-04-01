@@ -36,9 +36,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const deleted = invalidateGHLCache(accountId, eventType);
+    invalidateGHLCache(accountId, eventType);
 
-    return NextResponse.json({ ok: true, deleted });
+    return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(
       { error: "Invalid request body" },

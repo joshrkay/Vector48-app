@@ -1,17 +1,13 @@
-// ---------------------------------------------------------------------------
-// GHL Webhook Parser — Pure function that normalizes raw GHL webhook payloads
-// into AutomationEventInsert objects for the automation_events table.
-// ---------------------------------------------------------------------------
+import type {
+  AutomationEventInsert,
+  GHLWebhookPayload,
+} from "./webhookTypes";
 
-import type { AutomationEventInsert } from "./webhookTypes";
-
-// ── Event type mapping ────────────────────────────────────────────────────
-
-const EVENT_TYPE_MAP: Record<string, string> = {
-  ContactCreate: "contact_created",
-  ContactUpdate: "contact_updated",
+const EVENT_TYPE_MAP: Record<string, AutomationEventInsert["event_type"]> = {
   CallCompleted: "call_completed",
   InboundMessage: "message_received",
+  ContactCreate: "contact_created",
+  ContactUpdate: "contact_updated",
   OpportunityCreate: "opportunity_created",
   OpportunityStageUpdate: "opportunity_moved",
   AppointmentCreate: "appointment_created",
@@ -19,252 +15,189 @@ const EVENT_TYPE_MAP: Record<string, string> = {
   ConversationUnreadUpdate: "conversation_unread",
 };
 
-// ── Helpers (private) ─────────────────────────────────────────────────────
-
-function str(val: unknown): string | undefined {
-  return typeof val === "string" && val.length > 0 ? val : undefined;
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function num(val: unknown): number | undefined {
-  return typeof val === "number" ? val : undefined;
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function nestedStr(obj: unknown, ...keys: string[]): string | undefined {
-  let current: unknown = obj;
+function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
   for (const key of keys) {
-    if (typeof current !== "object" || current === null) return undefined;
-    current = (current as Record<string, unknown>)[key];
+    const value = asString(obj[key]);
+    if (value) return value;
   }
-  return str(current);
+  return null;
 }
 
-function formatContactName(payload: Record<string, unknown>): string {
+function formatContactName(payload: Record<string, unknown>): string | null {
   const contact =
     typeof payload.contact === "object" && payload.contact !== null
       ? (payload.contact as Record<string, unknown>)
       : null;
 
-  const firstName =
-    str(payload.firstName) ?? str(contact?.firstName) ?? undefined;
-  const lastName = str(payload.lastName) ?? str(contact?.lastName) ?? undefined;
-  const fullName =
-    str(payload.name) ?? str(contact?.name) ?? str(payload.contactName);
+  const full = pickString(payload, ["contactName", "name"]) ?? pickString(contact ?? {}, ["name"]);
+  if (full) return full;
 
-  if (firstName && lastName) {
-    return `${firstName} ${lastName.charAt(0)}.`;
+  const first = pickString(payload, ["firstName"]) ?? pickString(contact ?? {}, ["firstName"]);
+  const last = pickString(payload, ["lastName"]) ?? pickString(contact ?? {}, ["lastName"]);
+
+  if (first && last) return `${first} ${last}`;
+  return first;
+}
+
+function formatPhone(phone: string | null): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   }
-  if (firstName) return firstName;
-  if (fullName) return fullName;
-  return "Unknown contact";
+  return phone;
 }
 
-function formatDuration(seconds: unknown): string {
-  const s = num(seconds);
-  if (s == null) return "unknown duration";
-  if (s < 60) return `${s} sec`;
-  const minutes = Math.round(s / 60);
-  return `${minutes} min`;
+function previewText(text: string | null, max = 42): string | null {
+  if (!text) return null;
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= max) return oneLine;
+  return `${oneLine.slice(0, max - 1)}…`;
 }
 
-function truncate(text: string, maxLen: number = 60): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen - 1) + "…";
+function formatCallDuration(rawSeconds: unknown): string {
+  const seconds = asNumber(rawSeconds);
+  if (seconds === null || seconds < 0) return "unknown duration";
+  const mins = Math.max(1, Math.round(seconds / 60));
+  return `${mins} min`;
 }
 
-function formatDateTime(raw: unknown): string {
-  const s = str(raw);
-  if (!s) return "date TBD";
-  try {
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return "date TBD";
-    return d.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "date TBD";
-  }
+function formatDateTime(raw: unknown): string | null {
+  const value = asString(raw);
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-// ── Contact ID extraction ─────────────────────────────────────────────────
-
-function extractContactId(
-  payload: Record<string, unknown>,
-  ghlEventType: string
-): string | null {
-  // For contact events, the payload IS the contact — `id` is the contact ID
+function extractContactId(payload: Record<string, unknown>, ghlEventType: string): string | null {
   if (ghlEventType === "ContactCreate" || ghlEventType === "ContactUpdate") {
-    return str(payload.id) ?? str(payload.contactId) ?? null;
+    return pickString(payload, ["id", "contactId", "contact_id"]);
   }
 
   const contact =
     typeof payload.contact === "object" && payload.contact !== null
       ? (payload.contact as Record<string, unknown>)
-      : null;
+      : {};
 
-  return (
-    str(payload.contactId) ??
-    str(payload.contact_id) ??
-    str(contact?.id) ??
-    null
-  );
+  return pickString(payload, ["contactId", "contact_id"]) ?? pickString(contact, ["id"]);
 }
 
-// ── GHL event ID for idempotency ──────────────────────────────────────────
+function extractGhlEventId(payload: Record<string, unknown>, ghlEventType: string): string | null {
+  const explicitId = pickString(payload, ["webhookId", "eventId", "id"]);
+  if (explicitId) return `${ghlEventType}:${explicitId}`;
 
-function extractEventId(
-  payload: Record<string, unknown>,
-  ghlEventType: string
-): string | null {
-  const entityId =
-    str(payload.id) ??
-    str(payload.appointmentId) ??
-    str(payload.opportunityId) ??
-    str(payload.conversationId);
+  const fallbackEntity = pickString(payload, ["contactId", "contact_id", "conversationId", "appointmentId", "opportunityId"]);
+  const fallbackTime = pickString(payload, ["dateUpdated", "dateAdded", "timestamp", "updatedAt", "createdAt"]);
 
-  if (!entityId) return null;
-
-  // Include a timestamp when available so legitimate re-fires of the same
-  // event type for the same entity aren't silently dropped as duplicates.
-  // E.g., two ContactUpdate webhooks for the same contact with different
-  // dateUpdated values are distinct events that should both be recorded.
-  const timestamp =
-    str(payload.dateUpdated) ??
-    str(payload.dateAdded) ??
-    str(payload.timestamp);
-
-  if (timestamp) {
-    return `${ghlEventType}:${entityId}:${timestamp}`;
+  if (fallbackEntity && fallbackTime) {
+    return `${ghlEventType}:${fallbackEntity}:${fallbackTime}`;
   }
-  // Composite key ensures uniqueness across event types for the same entity
-  return `${ghlEventType}:${entityId}`;
+
+  return fallbackEntity ? `${ghlEventType}:${fallbackEntity}` : null;
 }
 
-// ── Summary builders per event type ───────────────────────────────────────
+function summaryForEvent(ghlEventType: string, payload: Record<string, unknown>): string {
+  const contactName = formatContactName(payload);
+  const contact =
+    typeof payload.contact === "object" && payload.contact !== null
+      ? (payload.contact as Record<string, unknown>)
+      : {};
+  const phone = formatPhone(pickString(payload, ["phone"]) ?? pickString(contact, ["phone"]));
 
-function buildSummary(
-  payload: Record<string, unknown>,
-  ghlEventType: string
-): string {
   switch (ghlEventType) {
-    case "ContactCreate": {
-      const name = formatContactName(payload);
-      const identifier = str(payload.phone) ?? str(payload.email) ?? "";
-      return identifier
-        ? `New contact: ${name}, ${identifier}`
-        : `New contact: ${name}`;
-    }
-
-    case "ContactUpdate": {
-      const name = formatContactName(payload);
-      return `Contact updated: ${name}`;
-    }
-
     case "CallCompleted": {
-      const name = formatContactName(payload);
-      const duration = formatDuration(
-        payload.callDuration ?? payload.duration
-      );
-      const direction = str(payload.callDirection) ?? str(payload.direction) ?? "unknown";
+      const name = contactName ?? phone ?? "unknown contact";
+      const duration = formatCallDuration(payload.callDuration ?? payload.duration);
+      const direction = (pickString(payload, ["callDirection", "direction"]) ?? "unknown").toLowerCase();
       return `Call completed with ${name} — ${duration}, ${direction}`;
     }
-
     case "InboundMessage": {
-      const name = formatContactName(payload);
-      const body = str(payload.body) ?? str(payload.message) ?? "";
-      return body
-        ? `New message from ${name}: ${truncate(body)}`
-        : `New message from ${name}`;
+      const from = contactName ?? phone ?? "unknown number";
+      const body = previewText(pickString(payload, ["body", "message"]));
+      return body ? `New message from ${from} — '${body}'` : `New message from ${from}`;
     }
-
+    case "ContactCreate": {
+      const who = contactName ?? "New contact";
+      return phone ? `New contact: ${who}, ${phone}` : `New contact: ${who}`;
+    }
+    case "ContactUpdate": {
+      const who = contactName ?? "contact";
+      return `Contact updated: ${who}`;
+    }
     case "OpportunityCreate": {
-      const oppName = str(payload.name) ?? "Untitled opportunity";
-      const value = num(payload.monetaryValue);
-      const valuePart = value != null ? ` — $${value.toLocaleString()}` : "";
-      return `New opportunity: ${oppName}${valuePart}`;
+      const opp = pickString(payload, ["name"]) ?? "opportunity";
+      return `New opportunity: ${opp}`;
     }
-
     case "OpportunityStageUpdate": {
-      const stageName =
-        str(payload.currentStage) ??
-        str(payload.pipelineStage) ??
-        str(payload.stageName) ??
-        nestedStr(payload, "pipeline", "stage", "name") ??
-        "unknown stage";
-      const oppName = str(payload.name) ?? "opportunity";
-      const contactName = formatContactName(payload);
-      return `Lead moved to '${stageName}' stage — ${oppName} for ${contactName}`;
+      const stage = pickString(payload, ["currentStage", "pipelineStage", "stageName"]) ?? "unknown stage";
+      const opp = pickString(payload, ["name"]) ?? "opportunity";
+      const lead = contactName ? ` for ${contactName}` : "";
+      return `Lead moved to '${stage}' stage — ${opp}${lead}`;
     }
-
     case "AppointmentCreate": {
-      const name = formatContactName(payload);
-      const dateStr = formatDateTime(
-        payload.startTime ?? payload.start_time ?? payload.appointmentTime
-      );
-      return `Appointment booked: ${name}, ${dateStr}`;
+      const who = contactName ?? "contact";
+      const at = formatDateTime(payload.startTime ?? payload.start_time ?? payload.appointmentTime);
+      return at ? `Appointment booked: ${who}, ${at}` : `Appointment booked: ${who}`;
     }
-
     case "AppointmentStatusUpdate": {
-      const name = formatContactName(payload);
-      const status =
-        str(payload.status) ?? str(payload.appointmentStatus) ?? "updated";
-      const dateStr = formatDateTime(
-        payload.startTime ?? payload.start_time ?? payload.appointmentTime
-      );
-      return `Appointment ${status}: ${name}, ${dateStr}`;
+      const who = contactName ?? "contact";
+      const status = (pickString(payload, ["status", "appointmentStatus"]) ?? "updated").toLowerCase();
+      const at = formatDateTime(payload.startTime ?? payload.start_time ?? payload.appointmentTime);
+      return at ? `Appointment ${status}: ${who}, ${at}` : `Appointment ${status}: ${who}`;
     }
-
     case "ConversationUnreadUpdate": {
-      const count = num(payload.unreadCount) ?? 0;
-      const name = formatContactName(payload);
-      const plural = count === 1 ? "message" : "messages";
-      return `${count} unread ${plural} from ${name}`;
+      const count = asNumber(payload.unreadCount) ?? 0;
+      const label = count === 1 ? "message" : "messages";
+      const who = contactName ?? phone ?? "contact";
+      return `${count} unread ${label} from ${who}`;
     }
-
     default:
-      return `Activity recorded: ${ghlEventType}`;
+      return "Customer activity received";
   }
 }
 
-// ── Main parser ───────────────────────────────────────────────────────────
-
-/**
- * Parses a raw GHL webhook payload into a normalized event for automation_events.
- * This is a pure function — it does not touch the database or network.
- *
- * @param rawPayload - The raw JSON body from the GHL webhook
- * @param ghlEventType - The GHL event type string (e.g. "ContactCreate")
- * @returns An AutomationEventInsert (minus account_id, which is added by the route)
- */
 export function parseGHLWebhook(
-  rawPayload: Record<string, unknown>,
-  ghlEventType: string
+  rawPayload: GHLWebhookPayload | Record<string, unknown>,
+  ghlEventType: string,
 ): Omit<AutomationEventInsert, "account_id"> {
-  const eventType = EVENT_TYPE_MAP[ghlEventType] ?? "ghl_event";
-  const contactId = extractContactId(rawPayload, ghlEventType);
-  const ghlEventId = extractEventId(rawPayload, ghlEventType);
-  const summary = buildSummary(rawPayload, ghlEventType);
+  const payload = rawPayload as Record<string, unknown>;
 
   const contact =
-    typeof rawPayload.contact === "object" && rawPayload.contact !== null
-      ? (rawPayload.contact as Record<string, unknown>)
-      : null;
-  const contactPhone =
-    str(rawPayload.phone) ?? str(contact?.phone) ?? null;
-  const contactName = formatContactName(rawPayload);
+    typeof payload.contact === "object" && payload.contact !== null
+      ? (payload.contact as Record<string, unknown>)
+      : {};
+
+  const contactPhone = formatPhone(
+    pickString(payload, ["phone"]) ?? pickString(contact, ["phone"]),
+  );
+
+  const contactName = formatContactName(payload);
 
   return {
     recipe_slug: null,
-    event_type: eventType,
+    event_type: EVENT_TYPE_MAP[ghlEventType] ?? "ghl_event",
     ghl_event_type: ghlEventType,
-    contact_id: contactId,
+    ghl_event_id: extractGhlEventId(payload, ghlEventType),
+    contact_id: extractContactId(payload, ghlEventType),
     contact_phone: contactPhone,
-    contact_name: contactName !== "Unknown contact" ? contactName : null,
-    ghl_event_id: ghlEventId,
-    summary,
-    detail: rawPayload,
+    contact_name: contactName,
+    summary: summaryForEvent(ghlEventType, payload),
+    detail: payload,
   };
 }
