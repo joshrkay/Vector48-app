@@ -1,10 +1,12 @@
 import crypto from "crypto";
+
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+
 import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
 import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
-import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
+import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 function verifyToken(provided: string | null, expected: string | null): boolean {
   if (!provided || !expected) return false;
@@ -26,6 +28,18 @@ function parseEventType(payload: Record<string, unknown>): string {
   if (typeof payload.type === "string") return payload.type;
   if (typeof payload.event === "string") return payload.event;
   return "unknown";
+}
+
+function isDuplicateAutomationEventError(error: {
+  code?: string | null;
+  message?: string | null;
+  details?: string | null;
+}): boolean {
+  if (error.code === "23505") return true;
+  return (
+    error.message?.includes("duplicate key value violates unique constraint") === true ||
+    error.details?.includes("idx_automation_events_ghl_dedup") === true
+  );
 }
 
 export async function POST(req: Request) {
@@ -70,14 +84,21 @@ export async function POST(req: Request) {
 
   const providedToken = tokenFromRequest(req.headers, payload);
   const expectedToken =
-    typeof (account as { ghl_webhook_secret?: unknown }).ghl_webhook_secret === "string"
-      ? ((account as { ghl_webhook_secret: string }).ghl_webhook_secret)
-      : null;
+    typeof account.ghl_webhook_secret === "string" ? account.ghl_webhook_secret : null;
+
+  if (!expectedToken) {
+    console.warn("[ghl-webhook] missing stored webhook secret for location", locationId);
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   if (!providedToken) {
     console.warn("[ghl-webhook] missing signature header");
-  } else if (expectedToken && !verifyToken(providedToken, expectedToken)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!verifyToken(providedToken, expectedToken)) {
     console.warn("[ghl-webhook] invalid signature for location", locationId);
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const ghlEventType = parseEventType(payload);
@@ -94,18 +115,17 @@ export async function POST(req: Request) {
 
   const { error: insertError } = await supabase
     .from("automation_events")
-    // @ts-ignore – insertRow type is structurally compatible with Insert
-    .upsert(insertRow, {
-      onConflict: "account_id,ghl_event_id",
-      ignoreDuplicates: true,
-    });
+    .insert(insertRow);
 
   if (insertError) {
+    if (isDuplicateAutomationEventError(insertError)) {
+      return NextResponse.json({ received: true });
+    }
+
     console.error("[ghl-webhook] failed to write automation event", insertError.message);
   } else {
     invalidateGHLCache(account.id, ghlEventType, { invalidateInMemoryFallback: true });
 
-    // Fire-and-forget side effects. Do not await so webhook returns quickly.
     queueMicrotask(() => {
       void processSideEffects(account.id, { ...normalized, account_id: account.id }, payload);
     });
