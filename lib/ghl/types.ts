@@ -41,6 +41,8 @@ export interface GHLClientOptions {
   locationId?: string;
   apiKey?: string;
   params?: Record<string, string | number | boolean | undefined>;
+  cacheTTLSeconds?: number;
+  cacheTags?: string[];
 }
 
 // ── Contacts ────────────────────────────────────────────────────────────────
