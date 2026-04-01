@@ -10,6 +10,7 @@ jobs:
   required-checks:
     name: Required CI Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -22,7 +23,7 @@ jobs:
           cache: npm
 
       - name: Validate lockfile install (npm ci)
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
