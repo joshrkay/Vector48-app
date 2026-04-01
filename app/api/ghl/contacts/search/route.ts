@@ -24,11 +24,14 @@ function normalizeContact(raw: {
 
   const derivedName = `${raw.firstName ?? ""} ${raw.lastName ?? ""}`.trim();
 
+  const email = raw.email?.trim() ?? "";
+  const phone = raw.phone?.trim() ?? "";
+
   return {
     id: raw.id,
     name: (raw.name ?? derivedName).trim(),
-    email: (raw.email ?? "").trim(),
-    phone: (raw.phone ?? "").trim(),
+    email: email || null,
+    phone: phone || null,
   };
 }
 

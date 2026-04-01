@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { upsertContactsInCache } from "@/lib/crm/contactCache";
 import {
   type CRMContactSearchItem,
   upsertContactsInCache,
@@ -13,6 +14,13 @@ import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const QUERY_CACHE_TTL_MS = 30_000;
 const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
+
+interface ContactSearchPayload {
+  contacts: CRMContactSearchItem[];
+  error: {
+    message: string;
+  } | null;
+}
 
 async function searchContacts(query: string) {
   const cached = queryCache.get(query);
@@ -27,11 +35,11 @@ async function searchContacts(query: string) {
     throw new Error(payload.error?.message ?? "Failed to search contacts");
   }
   queryCache.set(query, {
-    contacts: payload.contacts,
+    contacts: payload.items,
     expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
   });
 
-  return payload.contacts;
+  return payload.items;
 }
 
 export function CRMSearchBar() {
