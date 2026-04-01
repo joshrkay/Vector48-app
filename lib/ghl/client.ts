@@ -1,602 +1,990 @@
+import "server-only";
+
 // ---------------------------------------------------------------------------
 // GoHighLevel API v2 — Typed Client
-// Server-only: never import this file in client components.
 // ---------------------------------------------------------------------------
-import "server-only";
 
 import {
   GHLApiError,
+  GHLAuthError,
+  GHLNetworkError,
   GHLRateLimitError,
   classifyGHLError,
 } from "./errors";
 import type {
-  GHLClientOptions,
-  GHLContactsListParams,
-  GHLContactsListResponse,
-  GHLContactResponse,
-  GHLCreateContactPayload,
-  GHLUpdateContactPayload,
-  GHLNote,
-  GHLCustomField,
-  GHLCustomFieldValue,
-  GHLConversationsListParams,
-  GHLConversationsListResponse,
-  GHLMessagesListParams,
-  GHLMessagesListResponse,
-  GHLMessage,
-  GHLSendMessagePayload,
-  GHLOpportunitiesListParams,
-  GHLOpportunitiesListResponse,
-  GHLOpportunityResponse,
-  GHLCreateOpportunityPayload,
-  GHLUpdateOpportunityPayload,
-  GHLPipelinesListResponse,
   GHLAppointmentsListParams,
   GHLAppointmentsListResponse,
   GHLAppointment,
-  GHLCreateAppointmentPayload,
-  GHLUpdateAppointmentPayload,
+  GHLCalendar,
   GHLCalendarsListResponse,
-  GHLCampaignsListResponse,
-  GHLCreateLocationPayload,
-  GHLLocationResponse,
-  GHLCreateWebhookPayload,
   GHLCalendarSlot,
   GHLCalendarSlotsParams,
+  GHLCalendarSlotsResponse,
+  GHLCampaign,
+  GHLCampaignsListResponse,
+  GHLClientOptions,
+  GHLContact,
+  GHLContactResponse,
+  GHLContactsListParams,
+  GHLContactsListResponse,
+  GHLCreateAppointmentPayload,
+  GHLCreateContactPayload,
+  GHLCreateLocationPayload,
+  GHLCreateOpportunityPayload,
+  GHLCreateWebhookPayload,
+  GHLCustomField,
+  GHLCustomFieldsListResponse,
+  GHLCustomFieldsResponse,
+  GHLConversation,
+  GHLConversationsListParams,
+  GHLConversationsListResponse,
+  GHLLocation,
+  GHLLocationResponse,
+  GHLMessage,
+  GHLMessagesListParams,
+  GHLMessagesListResponse,
+  GHLNote,
+  GHLOpportunitiesListParams,
+  GHLOpportunitiesListResponse,
+  GHLOpportunity,
+  GHLOpportunityResponse,
   GHLOpportunityStatus,
   GHLPaginatedResponse,
-  GHLWebhookResponse,
+  GHLPaginationMeta,
+  GHLPipeline,
+  GHLPipelinesListResponse,
+  GHLSendMessagePayload,
   GHLTokenExchangeResponse,
+  GHLUpdateAppointmentPayload,
+  GHLUpdateContactPayload,
+  GHLUpdateLocationPayload,
+  GHLUpdateOpportunityPayload,
+  GHLWebhook,
+  GHLWebhookResponse,
 } from "./types";
 import type {
+  GHLAgentActionResponse,
+  GHLCreateAgentActionPayload,
   GHLCreateVoiceAgentPayload,
   GHLVoiceAgentResponse,
-  GHLCreateAgentActionPayload,
-  GHLAgentActionResponse,
 } from "./voiceTypes";
 
 export type { GHLClientOptions } from "./types";
 
-// ── Constants ───────────────────────────────────────────────────────────────
+type LocationClientConfig = {
+  locationId: string;
+  token: string;
+};
 
-const GHL_BASE_URL = "https://services.leadconnectorhq.com";
+type AgencyClientConfig = {
+  agencyApiKey: string;
+};
+
+type RequestOptions = {
+  body?: unknown;
+  params?: Record<string, string | number | boolean | undefined>;
+  cacheTTLSeconds?: number;
+  cacheTags?: string[];
+};
+
 const GHL_API_VERSION = "2021-07-28";
-const MAX_RETRIES = 3;
+const REQUEST_TIMEOUT_MS = 15_000;
+const LOCAL_RATE_LIMIT = 120;
+const LOCAL_RATE_WINDOW_MS = 60_000;
+const MAX_ATTEMPTS = 4;
 const RETRY_BACKOFF_MS = [1_000, 2_000, 4_000];
-const RATE_LIMIT_PER_MIN = 120;
-const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_STALE_MS = LOCAL_RATE_WINDOW_MS * 3;
 
-// ── Per-location rate limiter (120 req / 60 s) ─────────────────────────────
-
-const RATE_LIMIT = 120;
-const RATE_WINDOW_MS = 60_000;
+// Docs drift notes:
+// - Contacts list officially points to POST /contacts/search in some docs, but
+//   existing app flows and wrappers still use GET /contacts/.
+// - Conversations docs often show /conversations/search, but existing code uses
+//   /conversations/.
+// - Appointment docs differ from live behavior; this repo continues to use
+//   /calendars/events endpoints for compatibility.
+const ENDPOINTS = {
+  contacts: "/contacts/",
+  contactsSearch: "/contacts/search",
+  conversations: "/conversations/",
+  sendMessage: "/conversations/messages",
+  opportunitiesSearch: "/opportunities/search",
+  pipelines: "/opportunities/pipelines",
+  calendarEvents: "/calendars/events",
+  calendars: "/calendars/",
+  campaigns: "/campaigns/",
+  locations: "/locations",
+  webhooks: "/webhooks",
+  tokenExchange: "/oauth/locationToken",
+} as const;
 
 interface RateBucket {
-  tokens: number;
-  lastRefill: number;
+  count: number;
+  windowStart: number;
+  lock: Promise<void>;
+  lastAccess: number;
 }
 
-/** One bucket per locationId. Agency calls use "__agency__". */
 const rateBuckets = new Map<string, RateBucket>();
 
-/** Evict buckets idle for longer than 2 rate windows to prevent memory leaks. */
-const STALE_THRESHOLD_MS = RATE_WINDOW_MS * 2;
-
-function evictStaleBuckets() {
-  const now = Date.now();
-  rateBuckets.forEach((bucket, key) => {
-    if (now - bucket.lastRefill > STALE_THRESHOLD_MS) {
-      rateBuckets.delete(key);
-    }
-  });
+function getBaseUrl(): string {
+  return (
+    process.env.GHL_API_BASE_URL ?? "https://services.leadconnectorhq.com"
+  ).replace(/\/+$/, "");
 }
 
-function getBucket(key: string): RateBucket {
-  let bucket = rateBuckets.get(key);
-  if (!bucket) {
-    // Good time to clean up stale entries when creating new ones
-    if (rateBuckets.size > 100) evictStaleBuckets();
-    bucket = { tokens: RATE_LIMIT, lastRefill: Date.now() };
-    rateBuckets.set(key, bucket);
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+async function runExclusive<T>(
+  bucket: RateBucket,
+  fn: () => Promise<T> | T,
+): Promise<T> {
+  const previous = bucket.lock;
+  let release!: () => void;
+  bucket.lock = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    release();
   }
+}
+
+function getRateBucket(key: string): RateBucket {
+  const existing = rateBuckets.get(key);
+  if (existing) {
+    existing.lastAccess = Date.now();
+    return existing;
+  }
+
+  const bucket: RateBucket = {
+    count: 0,
+    windowStart: Date.now(),
+    lock: Promise.resolve(),
+    lastAccess: Date.now(),
+  };
+  rateBuckets.set(key, bucket);
+
+  if (rateBuckets.size > 250) {
+    const cutoff = Date.now() - RATE_LIMIT_STALE_MS;
+    for (const [bucketKey, candidate] of Array.from(rateBuckets.entries())) {
+      if (candidate.lastAccess < cutoff) {
+        rateBuckets.delete(bucketKey);
+      }
+    }
+  }
+
   return bucket;
 }
 
-function consumeToken(key: string): boolean {
-  const bucket = getBucket(key);
-  const now = Date.now();
-  if (now - bucket.lastRefill >= RATE_WINDOW_MS) {
-    bucket.tokens = RATE_LIMIT;
-    bucket.lastRefill = now;
-  }
-  if (bucket.tokens > 0) {
-    bucket.tokens--;
-    return true;
-  }
-  return false;
+async function enforceLocalRateLimit(key: string): Promise<void> {
+  const bucket = getRateBucket(key);
+
+  await runExclusive(bucket, () => {
+    const now = Date.now();
+    bucket.lastAccess = now;
+
+    if (now - bucket.windowStart >= LOCAL_RATE_WINDOW_MS) {
+      bucket.count = 0;
+      bucket.windowStart = now;
+    }
+
+    if (bucket.count >= LOCAL_RATE_LIMIT) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((bucket.windowStart + LOCAL_RATE_WINDOW_MS - now) / 1000),
+      );
+      throw new GHLRateLimitError(
+        "Local per-location GHL rate limit exceeded",
+        retryAfter,
+      );
+    }
+
+    bucket.count += 1;
+  });
 }
 
-async function waitForToken(key: string): Promise<void> {
-  while (!consumeToken(key)) {
-    const bucket = getBucket(key);
-    const waitMs = RATE_WINDOW_MS - (Date.now() - bucket.lastRefill);
-    await new Promise((r) => setTimeout(r, Math.max(waitMs, 100)));
-  }
-}
-
-// ── Structured logger (no PII) ─────────────────────────────────────────────
-
-function logRequest(method: string, path: string, locationKey: string) {
-  console.log(
+function logRequest(
+  authMode: GHLClient["authMode"],
+  scopeKey: string,
+  method: string,
+  path: string,
+  attempt: number,
+) {
+  console.info(
     JSON.stringify({
       level: "info",
       service: "ghl",
       event: "request",
+      authMode,
+      scopeKey,
       method,
       path,
-      locationKey,
-      ts: new Date().toISOString(),
+      attempt,
+      ts: nowIso(),
     }),
   );
 }
 
 function logResponse(
+  authMode: GHLClient["authMode"],
+  scopeKey: string,
   method: string,
   path: string,
   status: number,
   durationMs: number,
 ) {
-  console.log(
+  console.info(
     JSON.stringify({
       level: status >= 400 ? "warn" : "info",
       service: "ghl",
       event: "response",
+      authMode,
+      scopeKey,
       method,
       path,
       status,
       durationMs,
-      ts: new Date().toISOString(),
+      ts: nowIso(),
     }),
   );
 }
 
-// ── GHLClient ───────────────────────────────────────────────────────────────
+function logRetry(
+  authMode: GHLClient["authMode"],
+  scopeKey: string,
+  method: string,
+  path: string,
+  error: GHLApiError,
+  delayMs: number,
+  nextAttempt: number,
+) {
+  console.warn(
+    JSON.stringify({
+      level: "warn",
+      service: "ghl",
+      event: "retry",
+      authMode,
+      scopeKey,
+      method,
+      path,
+      code: error.code,
+      statusCode: error.statusCode,
+      delayMs,
+      nextAttempt,
+      ts: nowIso(),
+    }),
+  );
+}
 
-export class GHLClient {
-  private readonly token: string;
-  private readonly locationId: string | null;
-  private readonly rateLimitKey: string;
+function normalizeMeta(rawMeta: unknown, itemCount: number): GHLPaginationMeta {
+  const meta = asRecord(rawMeta);
+  const currentPage = toNullableNumber(meta?.currentPage);
+  const nextPage = toNullableNumber(meta?.nextPage);
+  const previousPage =
+    toNullableNumber(meta?.previousPage) ?? toNullableNumber(meta?.prevPage);
 
-  // ── Constructors ────────────────────────────────────────────────────────
+  return {
+    startAfterId: toNullableString(meta?.startAfterId),
+    startAfter: toNullableScalar(meta?.startAfter),
+    total: toNumber(meta?.total, itemCount),
+    currentPage,
+    nextPage,
+    previousPage,
+    count: toNullableNumber(meta?.count) ?? itemCount,
+    prevPage: previousPage,
+  };
+}
 
-  private constructor(token: string, locationId: string | null) {
-    this.token = token;
-    this.locationId = locationId;
-    this.rateLimitKey = locationId ?? "__agency__";
+function toPaginatedResponse<T>(
+  payload: unknown,
+  collectionKeys: string[],
+): GHLPaginatedResponse<T> {
+  const record = asRecord(payload);
+  const data = extractCollection<T>(payload, collectionKeys);
+
+  return {
+    data,
+    meta: normalizeMeta(record?.meta, data.length),
+  };
+}
+
+function extractCollection<T>(payload: unknown, keys: string[]): T[] {
+  if (Array.isArray(payload)) {
+    return payload as T[];
   }
 
-  /** Create a client for CRM operations scoped to a specific location. */
-  static forLocation(locationId: string, token: string): GHLClient {
-    return new GHLClient(token, locationId);
-  }
+  const record = asRecord(payload);
+  if (!record) return [];
 
-  /** Create a client for agency-level admin operations. */
-  static forAgency(apiKey?: string): GHLClient {
-    const key = apiKey ?? process.env.GHL_AGENCY_API_KEY;
-    if (!key) {
-      throw new Error(
-        "GHL agency API key is required. Set GHL_AGENCY_API_KEY or pass apiKey.",
-      );
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value as T[];
     }
-    return new GHLClient(key, null);
   }
 
-  // ── Core fetch wrapper ──────────────────────────────────────────────────
+  if (Array.isArray(record.data)) {
+    return record.data as T[];
+  }
 
-  private async request<T>(
-    method: string,
-    path: string,
-    opts?: {
-      body?: unknown;
-      params?: Record<string, string | number | boolean | undefined>;
-      cacheTTLSeconds?: number;
-      cacheTags?: string[];
-    },
-  ): Promise<T> {
-    await waitForToken(this.rateLimitKey);
+  return [];
+}
 
-    const url = new URL(path, GHL_BASE_URL);
-    if (opts?.params) {
-      for (const [k, v] of Object.entries(opts.params)) {
-        if (v !== undefined) url.searchParams.set(k, String(v));
+function extractEntity<T>(payload: unknown, keys: string[]): T {
+  const record = asRecord(payload);
+  if (record) {
+    for (const key of keys) {
+      const value = record[key];
+      if (value !== undefined) {
+        return value as T;
       }
     }
+  }
 
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.token}`,
-      "Content-Type": "application/json",
-      Version: GHL_API_VERSION,
-    };
+  return payload as T;
+}
 
-    logRequest(method, path, this.rateLimitKey);
+function toNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function toNullableScalar(value: unknown): string | number | null {
+  if (typeof value === "string" || typeof value === "number") {
+    return value;
+  }
+  return null;
+}
+
+function parseJsonIfPossible<T>(text: string): T {
+  return JSON.parse(text) as T;
+}
+
+function buildAbortController() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  return { controller, timeout };
+}
+
+function buildGetOptions(options?: RequestOptions) {
+  if (!options?.cacheTTLSeconds && !options?.cacheTags?.length) {
+    return { cache: "no-store" as const };
+  }
+
+  return {
+    next: {
+      revalidate: options.cacheTTLSeconds,
+      tags: options.cacheTags,
+    },
+  };
+}
+
+function isRetryableAttempt(error: GHLApiError, attempt: number): boolean {
+  return error.retryable && attempt < MAX_ATTEMPTS - 1;
+}
+
+function attachLocationIdToParams(
+  locationId: string | null,
+  params?: Record<string, string | number | boolean | undefined> | null,
+): Record<string, string | number | boolean | undefined> | undefined {
+  if (!locationId) return params;
+  return { locationId, ...(params ?? {}) };
+}
+
+function attachLocationIdToBody<T extends object>(
+  locationId: string | null,
+  body: T,
+): T {
+  const record = body as T & { locationId?: string };
+  if (!locationId || record.locationId) return body;
+  return { locationId, ...record } as T;
+}
+
+function messageBodyFromPayload(payload: GHLSendMessagePayload): string | undefined {
+  return payload.body ?? payload.message;
+}
+
+export class GHLClient {
+  public readonly authMode: "location" | "agency";
+
+  private readonly token: string;
+  private readonly locationId: string | null;
+  private readonly scopeKey: string;
+
+  constructor(config: LocationClientConfig | AgencyClientConfig) {
+    if ("agencyApiKey" in config) {
+      this.authMode = "agency";
+      this.token = config.agencyApiKey;
+      this.locationId = null;
+      this.scopeKey = "__agency__";
+      return;
+    }
+
+    this.authMode = "location";
+    this.token = config.token;
+    this.locationId = config.locationId;
+    this.scopeKey = config.locationId;
+  }
+
+  static forLocation(locationId: string, token: string): GHLClient {
+    return new GHLClient({ locationId, token });
+  }
+
+  static forAgency(apiKey?: string): GHLClient {
+    const agencyApiKey = apiKey ?? process.env.GHL_AGENCY_API_KEY;
+    if (!agencyApiKey) {
+      throw new Error("GHL_AGENCY_API_KEY is not configured");
+    }
+    return new GHLClient({ agencyApiKey });
+  }
+
+  private assertLocationScope(operation: string): string {
+    if (this.authMode !== "location" || !this.locationId) {
+      throw new GHLAuthError(
+        `${operation} requires a location-scoped GHL token`,
+        403,
+      );
+    }
+    return this.locationId;
+  }
+
+  private assertAgencyScope(operation: string): void {
+    if (this.authMode !== "agency") {
+      throw new GHLAuthError(
+        `${operation} requires the agency-level GHL API key`,
+        403,
+      );
+    }
+  }
+
+  async rawRequest<T>(
+    method: string,
+    path: string,
+    options?: RequestOptions,
+  ): Promise<T> {
+    await enforceLocalRateLimit(this.scopeKey);
+
+    const url = new URL(path, `${getBaseUrl()}/`);
+    for (const [key, value] of Object.entries(options?.params ?? {})) {
+      if (value !== undefined) {
+        url.searchParams.set(key, String(value));
+      }
+    }
 
     let lastError: GHLApiError | undefined;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
       if (attempt > 0) {
-        const backoff = RETRY_BACKOFF_MS[Math.min(attempt - 1, RETRY_BACKOFF_MS.length - 1)];
-        await new Promise((r) => setTimeout(r, backoff));
+        await delay(RETRY_BACKOFF_MS[attempt - 1] ?? RETRY_BACKOFF_MS.at(-1)!);
       }
 
-      const start = Date.now();
-      let res: Response;
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${this.token}`,
+        Version: GHL_API_VERSION,
+      };
+      if (options?.body !== undefined) {
+        headers["Content-Type"] = "application/json";
+      }
+
+      logRequest(this.authMode, this.scopeKey, method, path, attempt + 1);
+
+      const { controller, timeout } = buildAbortController();
+      const startedAt = Date.now();
+
       try {
-        const isGet = method === "GET";
-        res = await fetch(url.toString(), {
+        const response = await fetch(url.toString(), {
           method,
           headers,
-          body: opts?.body ? JSON.stringify(opts.body) : undefined,
-          ...(isGet
-            ? {
-                next: {
-                  revalidate: opts?.cacheTTLSeconds,
-                  tags: opts?.cacheTags,
-                },
-              }
-            : { cache: "no-store" }),
+          body:
+            options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+          signal: controller.signal,
+          ...(method === "GET" ? buildGetOptions(options) : { cache: "no-store" }),
         });
-      } catch (err) {
-        // Network errors are retryable
-        lastError = new GHLApiError(
-          0,
-          err instanceof Error ? err.message : "Network error",
-          "NETWORK_ERROR",
-          true,
+
+        clearTimeout(timeout);
+        logResponse(
+          this.authMode,
+          this.scopeKey,
+          method,
+          path,
+          response.status,
+          Date.now() - startedAt,
         );
-        continue;
-      }
 
-      logResponse(method, path, res.status, Date.now() - start);
+        if (response.ok) {
+          if (response.status === 204) {
+            return undefined as T;
+          }
 
-      if (res.ok) {
-        if (res.status === 204) return undefined as T;
-        return (await res.json()) as T;
-      }
+          const text = await response.text();
+          if (!text.trim()) {
+            return undefined as T;
+          }
 
-      // Parse error body (never leak raw to callers)
-      let errorBody: unknown;
-      try {
-        errorBody = await res.json();
-      } catch {
+          return parseJsonIfPossible<T>(text);
+        }
+
+        let errorBody: unknown;
         try {
-          errorBody = await res.text();
+          errorBody = await response.json();
         } catch {
           errorBody = undefined;
         }
-      }
 
-      const classified = classifyGHLError(res.status, errorBody, path);
+        const classified = classifyGHLError(
+          response.status,
+          errorBody,
+          path,
+          response.headers.get("retry-after"),
+        );
 
-      if (classified.retryable) {
+        if (!isRetryableAttempt(classified, attempt)) {
+          throw classified;
+        }
+
         lastError = classified;
-        continue;
-      }
+        logRetry(
+          this.authMode,
+          this.scopeKey,
+          method,
+          path,
+          classified,
+          RETRY_BACKOFF_MS[attempt] ?? RETRY_BACKOFF_MS.at(-1)!,
+          attempt + 2,
+        );
+      } catch (error) {
+        clearTimeout(timeout);
 
-      // Non-retryable — throw immediately
-      throw classified;
+        const classified =
+          error instanceof GHLApiError
+            ? error
+            : new GHLNetworkError(
+                error instanceof Error && error.name === "AbortError"
+                  ? "GHL request timed out"
+                  : "GHL network error",
+              );
+
+        if (!isRetryableAttempt(classified, attempt)) {
+          throw classified;
+        }
+
+        lastError = classified;
+        logRetry(
+          this.authMode,
+          this.scopeKey,
+          method,
+          path,
+          classified,
+          RETRY_BACKOFF_MS[attempt] ?? RETRY_BACKOFF_MS.at(-1)!,
+          attempt + 2,
+        );
+      }
     }
 
-    // All retries exhausted
-    throw lastError ?? new GHLRateLimitError("All retries exhausted");
+    throw lastError ?? new GHLNetworkError();
   }
-
-  private get<T>(
-    path: string,
-    params?: Record<string, string | number | boolean | undefined>,
-  ): Promise<T> {
-    return this.request<T>("GET", path, { params });
-  }
-
-  private post<T>(path: string, body: unknown): Promise<T> {
-    return this.request<T>("POST", path, { body });
-  }
-
-  private put<T>(path: string, body: unknown): Promise<T> {
-    return this.request<T>("PUT", path, { body });
-  }
-
-  private delete<T = void>(path: string): Promise<T> {
-    return this.request<T>("DELETE", path);
-  }
-
-  // ── Contacts ────────────────────────────────────────────────────────────
 
   readonly contacts = {
-    list: (params?: GHLContactsListParams) => {
-      const { locationId, ...rest } = params ?? {};
-      return this.get<GHLContactsListResponse>("/contacts/", {
-        locationId: locationId ?? this.locationId ?? undefined,
-        ...rest,
-      } as Record<string, string | number | boolean | undefined>);
-    },
-    get: (contactId: string) => {
-      return this.get<GHLContactResponse>(`/contacts/${contactId}`);
-    },
-    create: (data: GHLCreateContactPayload) => {
-      return this.post<GHLContactResponse>("/contacts/", data);
-    },
-    update: (contactId: string, data: GHLUpdateContactPayload) => {
-      return this.put<GHLContactResponse>(`/contacts/${contactId}`, data);
-    },
-    search: (query: string, params?: Omit<GHLContactsListParams, "query">) => {
-      return this.contacts.list({ ...params, query });
-    },
-    addTag: (contactId: string, tags: string[]) => {
-      return this.post<GHLContactResponse>(`/contacts/${contactId}/tags`, { tags });
+    list: async (params?: GHLContactsListParams): Promise<GHLPaginatedResponse<GHLContact>> => {
+      const payload = await this.rawRequest<GHLContactsListResponse>("GET", ENDPOINTS.contacts, {
+        params: attachLocationIdToParams(
+          this.locationId,
+          params as Record<string, string | number | boolean | undefined> | undefined,
+        ),
+      });
+      return toPaginatedResponse<GHLContact>(payload, ["contacts"]);
     },
 
-    removeTag: (contactId: string, tags: string[]) => {
-      return this.request<{ contact: GHLContactResponse }>(
-        "DELETE",
-        `/contacts/${contactId}/tags`,
-        { body: { tags } },
+    get: async (contactId: string): Promise<GHLContact> => {
+      const payload = await this.rawRequest<GHLContactResponse>(
+        "GET",
+        `${ENDPOINTS.contacts}${contactId}`,
       );
-    },
-    getNotes: (contactId: string) => {
-      return this.get<{ notes: GHLNote[] }>(`/contacts/${contactId}/notes`);
+      return extractEntity<GHLContact>(payload, ["contact"]);
     },
 
-    getCustomFields: (contactId: string) => {
-      return this.get<{ customFields: GHLCustomFieldValue[] }>(
-        `/contacts/${contactId}/customFields`,
+    create: async (data: GHLCreateContactPayload): Promise<GHLContact> => {
+      const locationId = this.assertLocationScope("contacts.create");
+      const payload = await this.rawRequest<GHLContactResponse>("POST", ENDPOINTS.contacts, {
+        body: attachLocationIdToBody(locationId, data),
+      });
+      return extractEntity<GHLContact>(payload, ["contact"]);
+    },
+
+    update: async (
+      contactId: string,
+      data: GHLUpdateContactPayload,
+    ): Promise<GHLContact> => {
+      this.assertLocationScope("contacts.update");
+      const payload = await this.rawRequest<GHLContactResponse>(
+        "PUT",
+        `${ENDPOINTS.contacts}${contactId}`,
+        { body: data },
       );
+      return extractEntity<GHLContact>(payload, ["contact"]);
     },
 
-    delete: (contactId: string) => {
-      return this.delete(`/contacts/${contactId}`);
+    search: async (query: string): Promise<GHLContact[]> => {
+      const list = await this.contacts.list({ query });
+      return list.data;
     },
 
-    /** GHL contacts search uses POST, not GET. */
-    searchAdvanced: (params: { locationId: string; query: string; limit?: number; filters?: Record<string, unknown> }) => {
-      return this.post<GHLPaginatedResponse<GHLContactResponse>>(
-        "/contacts/search",
-        params,
+    addTag: async (contactId: string, tag: string): Promise<void> => {
+      this.assertLocationScope("contacts.addTag");
+      await this.rawRequest("POST", `${ENDPOINTS.contacts}${contactId}/tags`, {
+        body: { tags: [tag] },
+      });
+    },
+
+    getNotes: async (contactId: string): Promise<GHLNote[]> => {
+      this.assertLocationScope("contacts.getNotes");
+      const payload = await this.rawRequest<{ notes: GHLNote[] }>(
+        "GET",
+        `${ENDPOINTS.contacts}${contactId}/notes`,
       );
+      return extractCollection<GHLNote>(payload, ["notes"]);
+    },
+
+    getCustomFields: async (contactId: string): Promise<GHLCustomFieldsResponse["customFields"]> => {
+      this.assertLocationScope("contacts.getCustomFields");
+      const payload = await this.rawRequest<GHLCustomFieldsResponse>(
+        "GET",
+        `${ENDPOINTS.contacts}${contactId}/customFields`,
+      );
+      return extractCollection(payload, ["customFields"]);
     },
   };
-
-  // ── Conversations ───────────────────────────────────────────────────────
 
   readonly conversations = {
-    list: (params?: GHLConversationsListParams) => {
-      const { locationId, ...rest } = params ?? {};
-      return this.get<GHLConversationsListResponse>("/conversations/", {
-        locationId: locationId ?? this.locationId ?? undefined,
-        ...rest,
-      } as Record<string, string | number | boolean | undefined>);
+    list: async (
+      params?: GHLConversationsListParams,
+    ): Promise<GHLPaginatedResponse<GHLConversation>> => {
+      const payload = await this.rawRequest<GHLConversationsListResponse>(
+        "GET",
+        ENDPOINTS.conversations,
+        {
+          params: attachLocationIdToParams(
+            this.locationId,
+            params as Record<string, string | number | boolean | undefined> | undefined,
+          ),
+        },
+      );
+      return toPaginatedResponse<GHLConversation>(payload, ["conversations"]);
     },
 
-    getMessages: (
+    getMessages: async (
       conversationId: string,
       params?: Omit<GHLMessagesListParams, "conversationId">,
-    ) => {
-      return this.get<GHLMessagesListResponse>(
-        `/conversations/${conversationId}/messages`,
-        params as Record<string, string | number | boolean | undefined>,
+    ): Promise<GHLMessage[]> => {
+      this.assertLocationScope("conversations.getMessages");
+      const payload = await this.rawRequest<GHLMessagesListResponse>(
+        "GET",
+        `${ENDPOINTS.conversations}${conversationId}/messages`,
+        { params },
       );
+      return extractCollection<GHLMessage>(payload, ["messages"]);
     },
 
-    sendMessage: (conversationId: string, data: GHLSendMessagePayload) => {
-      return this.post<GHLMessage>("/conversations/messages", {
-        ...data,
-        conversationId,
-      });
+    sendMessage: async (
+      conversationId: string,
+      data: GHLSendMessagePayload,
+    ): Promise<GHLMessage> => {
+      this.assertLocationScope("conversations.sendMessage");
+      const payload = await this.rawRequest<GHLMessage>(
+        "POST",
+        ENDPOINTS.sendMessage,
+        {
+          body: {
+            ...data,
+            conversationId,
+            message: messageBodyFromPayload(data),
+          },
+        },
+      );
+      return extractEntity<GHLMessage>(payload, ["message"]);
     },
   };
-
-  // ── Opportunities ───────────────────────────────────────────────────────
 
   readonly opportunities = {
-    list: (params?: GHLOpportunitiesListParams) => {
-      const { locationId, ...rest } = params ?? {};
-      return this.get<GHLOpportunitiesListResponse>("/opportunities/search", {
-        locationId: locationId ?? this.locationId ?? undefined,
-        ...rest,
-      } as Record<string, string | number | boolean | undefined>);
+    list: async (
+      params?: GHLOpportunitiesListParams,
+    ): Promise<GHLPaginatedResponse<GHLOpportunity>> => {
+      const payload = await this.rawRequest<GHLOpportunitiesListResponse>(
+        "GET",
+        ENDPOINTS.opportunitiesSearch,
+        {
+          params: attachLocationIdToParams(
+            this.locationId,
+            params as Record<string, string | number | boolean | undefined> | undefined,
+          ),
+        },
+      );
+      return toPaginatedResponse<GHLOpportunity>(payload, ["opportunities"]);
     },
 
-    get: (opportunityId: string) => {
-      return this.get<GHLOpportunityResponse>(`/opportunities/${opportunityId}`);
+    get: async (opportunityId: string): Promise<GHLOpportunity> => {
+      const payload = await this.rawRequest<GHLOpportunityResponse>(
+        "GET",
+        `/opportunities/${opportunityId}`,
+      );
+      return extractEntity<GHLOpportunity>(payload, ["opportunity"]);
     },
 
-    create: (data: GHLCreateOpportunityPayload) => {
-      return this.post<GHLOpportunityResponse>("/opportunities/", data);
+    create: async (data: GHLCreateOpportunityPayload): Promise<GHLOpportunity> => {
+      const locationId = this.assertLocationScope("opportunities.create");
+      const payload = await this.rawRequest<GHLOpportunityResponse>(
+        "POST",
+        "/opportunities/",
+        { body: attachLocationIdToBody(locationId, data) },
+      );
+      return extractEntity<GHLOpportunity>(payload, ["opportunity"]);
     },
 
-    update: (opportunityId: string, data: GHLUpdateOpportunityPayload) => {
-      return this.put<GHLOpportunityResponse>(`/opportunities/${opportunityId}`, data);
+    update: async (
+      opportunityId: string,
+      data: GHLUpdateOpportunityPayload,
+    ): Promise<GHLOpportunity> => {
+      this.assertLocationScope("opportunities.update");
+      const payload = await this.rawRequest<GHLOpportunityResponse>(
+        "PUT",
+        `/opportunities/${opportunityId}`,
+        { body: data },
+      );
+      return extractEntity<GHLOpportunity>(payload, ["opportunity"]);
     },
 
-    updateStage: (opportunityId: string, pipelineStageId: string) => {
-      return this.put<GHLOpportunityResponse>(`/opportunities/${opportunityId}`, {
-        pipelineStageId,
+    updateStage: async (
+      opportunityId: string,
+      stageId: string,
+    ): Promise<GHLOpportunity> => {
+      return this.opportunities.update(opportunityId, {
+        pipelineStageId: stageId,
       });
     },
 
-    updateStatus: (opportunityId: string, status: GHLOpportunityStatus) => {
-      return this.put<GHLOpportunityResponse>(`/opportunities/${opportunityId}/status`, { status });
-    },
-
-    delete: (opportunityId: string) => {
-      return this.delete(`/opportunities/${opportunityId}`);
+    updateStatus: async (
+      opportunityId: string,
+      status: GHLOpportunityStatus,
+    ): Promise<GHLOpportunity> => {
+      this.assertLocationScope("opportunities.updateStatus");
+      const payload = await this.rawRequest<GHLOpportunityResponse>(
+        "PUT",
+        `/opportunities/${opportunityId}/status`,
+        { body: { status } },
+      );
+      return extractEntity<GHLOpportunity>(payload, ["opportunity"]);
     },
   };
-
-  // ── Pipelines ───────────────────────────────────────────────────────────
 
   readonly pipelines = {
-    list: () => {
-      return this.get<GHLPipelinesListResponse>("/opportunities/pipelines");
+    list: async (): Promise<GHLPipeline[]> => {
+      this.assertLocationScope("pipelines.list");
+      const payload = await this.rawRequest<GHLPipelinesListResponse>(
+        "GET",
+        ENDPOINTS.pipelines,
+      );
+      return extractCollection<GHLPipeline>(payload, ["pipelines"]);
     },
   };
-
-  // ── Appointments ────────────────────────────────────────────────────────
 
   readonly appointments = {
-    list: (params?: GHLAppointmentsListParams) => {
-      const { locationId, ...rest } = params ?? {};
-      return this.get<GHLAppointmentsListResponse>("/calendars/events", {
-        locationId: locationId ?? this.locationId ?? undefined,
-        ...rest,
-      } as Record<string, string | number | boolean | undefined>);
+    list: async (params?: GHLAppointmentsListParams): Promise<GHLAppointment[]> => {
+      const payload = await this.rawRequest<GHLAppointmentsListResponse>(
+        "GET",
+        ENDPOINTS.calendarEvents,
+        {
+          params: attachLocationIdToParams(
+            this.locationId,
+            params as Record<string, string | number | boolean | undefined> | undefined,
+          ),
+        },
+      );
+      return extractCollection<GHLAppointment>(payload, ["events", "appointments"]);
     },
 
-    get: (eventId: string) => {
-      return this.get<{ event: GHLAppointment }>(`/calendars/events/${eventId}`);
+    get: async (eventId: string): Promise<GHLAppointment> => {
+      const payload = await this.rawRequest<{ event: GHLAppointment }>(
+        "GET",
+        `${ENDPOINTS.calendarEvents}/${eventId}`,
+      );
+      return extractEntity<GHLAppointment>(payload, ["event", "appointment"]);
     },
 
-    update: (eventId: string, data: GHLUpdateAppointmentPayload) => {
-      return this.put<{ event: GHLAppointment }>(`/calendars/events/${eventId}`, data);
+    create: async (data: GHLCreateAppointmentPayload): Promise<GHLAppointment> => {
+      const locationId = this.assertLocationScope("appointments.create");
+      const payload = await this.rawRequest<{ event: GHLAppointment }>(
+        "POST",
+        ENDPOINTS.calendarEvents,
+        { body: attachLocationIdToBody(locationId, data) },
+      );
+      return extractEntity<GHLAppointment>(payload, ["event", "appointment"]);
     },
 
-    confirm: (eventId: string) => {
-      return this.put<{ event: GHLAppointment }>(`/calendars/events/${eventId}`, {
-        status: "confirmed",
-      });
-    },
-
-    cancel: (eventId: string) => {
-      return this.put<{ event: GHLAppointment }>(`/calendars/events/${eventId}`, {
-        status: "cancelled",
-      });
-    },
-
-    delete: (eventId: string) => {
-      return this.delete(`/calendars/events/${eventId}`);
+    update: async (
+      eventId: string,
+      data: GHLUpdateAppointmentPayload,
+    ): Promise<GHLAppointment> => {
+      this.assertLocationScope("appointments.update");
+      const payload = await this.rawRequest<{ event: GHLAppointment }>(
+        "PUT",
+        `${ENDPOINTS.calendarEvents}/${eventId}`,
+        { body: data },
+      );
+      return extractEntity<GHLAppointment>(payload, ["event", "appointment"]);
     },
   };
-
-  // ── Calendars ───────────────────────────────────────────────────────────
 
   readonly calendars = {
-    list: () => {
-      return this.get<GHLCalendarsListResponse>("/calendars/");
+    list: async (): Promise<GHLCalendar[]> => {
+      this.assertLocationScope("calendars.list");
+      const payload = await this.rawRequest<GHLCalendarsListResponse>(
+        "GET",
+        ENDPOINTS.calendars,
+      );
+      return extractCollection<GHLCalendar>(payload, ["calendars"]);
     },
 
-    getSlots: (params: GHLCalendarSlotsParams) => {
+    getSlots: async (
+      params: GHLCalendarSlotsParams,
+    ): Promise<Record<string, GHLCalendarSlot[]> | GHLCalendarSlot[]> => {
+      this.assertLocationScope("calendars.getSlots");
       const { calendarId, ...rest } = params;
-      return this.get<{ slots: Record<string, GHLCalendarSlot[]> }>(
+      const payload = await this.rawRequest<GHLCalendarSlotsResponse>(
+        "GET",
         `/calendars/${calendarId}/free-slots`,
-        rest as Record<string, string | number | boolean | undefined>,
+        { params: rest },
       );
+      const record = asRecord(payload);
+      return (record?.slots as Record<string, GHLCalendarSlot[]> | GHLCalendarSlot[]) ?? [];
     },
   };
 
-
-  readonly customFields = {
-    list: (locationId?: string) => {
-      const locId = locationId ?? this.locationId;
-      return this.get<{ customFields: GHLCustomField[] }>(
-        `/locations/${locId}/customFields`,
+  readonly campaigns = {
+    list: async (): Promise<GHLCampaign[]> => {
+      this.assertLocationScope("campaigns.list");
+      const payload = await this.rawRequest<GHLCampaignsListResponse>(
+        "GET",
+        ENDPOINTS.campaigns,
       );
+      return extractCollection<GHLCampaign>(payload, ["campaigns"]);
     },
   };
-
-  // ── Campaigns (read-only) ───────────────────────────────────────────────
 
   readonly locations = {
-    create: (data: GHLCreateLocationPayload) => {
-      return this.post<GHLLocationResponse>("/locations/", data);
+    create: async (data: GHLCreateLocationPayload): Promise<GHLLocation> => {
+      this.assertAgencyScope("locations.create");
+      const payload = await this.rawRequest<GHLLocationResponse>(
+        "POST",
+        ENDPOINTS.locations,
+        { body: data },
+      );
+      return extractEntity<GHLLocation>(payload, ["location"]);
+    },
+
+    update: async (data: GHLUpdateLocationPayload): Promise<GHLLocation> => {
+      const locationId = this.assertLocationScope("locations.update");
+      const payload = await this.rawRequest<GHLLocationResponse>(
+        "PUT",
+        `${ENDPOINTS.locations}/${locationId}`,
+        { body: data },
+      );
+      return extractEntity<GHLLocation>(payload, ["location"]);
     },
   };
-
-  // ── Webhooks (agency-level only) ────────────────────────────────────────
 
   readonly webhooks = {
-    create: (data: GHLCreateWebhookPayload) => {
-      return this.post<GHLWebhookResponse>("/webhooks/", data);
+    create: async (data: GHLCreateWebhookPayload): Promise<GHLWebhook> => {
+      this.assertAgencyScope("webhooks.create");
+      const payload = await this.rawRequest<GHLWebhookResponse>(
+        "POST",
+        ENDPOINTS.webhooks,
+        { body: data },
+      );
+      return extractEntity<GHLWebhook>(payload, ["webhook"]);
     },
 
-    delete: (webhookId: string) => {
-      return this.delete(`/webhooks/${webhookId}`);
+    delete: async (webhookId: string): Promise<void> => {
+      this.assertAgencyScope("webhooks.delete");
+      await this.rawRequest("DELETE", `${ENDPOINTS.webhooks}/${webhookId}`);
     },
   };
 
-  // ── Voice AI ────────────────────────────────────────────────────────────
-  // TODO: Verify endpoint paths against GHL Voice AI API docs. These are
-  // based on the best available documentation and may need adjustment.
+  readonly customFields = {
+    list: async (locationId?: string): Promise<GHLCustomField[]> => {
+      const resolvedLocationId =
+        locationId ?? this.assertLocationScope("customFields.list");
+      const payload = await this.rawRequest<GHLCustomFieldsListResponse>(
+        "GET",
+        `/locations/${resolvedLocationId}/customFields`,
+      );
+      return extractCollection<GHLCustomField>(payload, ["customFields"]);
+    },
+  };
 
   readonly voiceAgent = {
-    /** Create a Voice AI agent on a sub-account. Requires location-scoped token. */
     create: (data: GHLCreateVoiceAgentPayload) => {
-      return this.post<GHLVoiceAgentResponse>(
+      this.assertLocationScope("voiceAgent.create");
+      return this.rawRequest<GHLVoiceAgentResponse>(
+        "POST",
         "/conversations/providers/voice-ai/agents",
-        data,
+        { body: data },
       );
     },
 
-    /** Create a custom action (webhook) on a Voice AI agent. */
     createAction: (agentId: string, data: GHLCreateAgentActionPayload) => {
-      return this.post<GHLAgentActionResponse>(
+      this.assertLocationScope("voiceAgent.createAction");
+      return this.rawRequest<GHLAgentActionResponse>(
+        "POST",
         `/conversations/providers/voice-ai/agents/${agentId}/actions`,
-        data,
+        { body: data },
       );
     },
   };
 
-  // ── Token Exchange (agency → sub-account) ──────────────────────────────
-
-  /**
-   * Exchange the agency token for a sub-account-scoped access token.
-   * This is required because Voice AI and other sub-account-specific APIs
-   * need a location-scoped token, not the agency-level token.
-   *
-   * TODO: Verify the exact endpoint path and payload shape. GHL's token
-   * exchange flow may use /oauth/locationToken or a similar path.
-   */
   static async exchangeSubAccountToken(
     companyId: string,
     locationId: string,
   ): Promise<GHLTokenExchangeResponse> {
-    const agencyKey = process.env.GHL_AGENCY_API_KEY;
-    if (!agencyKey) {
-      throw new Error(
-        "GHL_AGENCY_API_KEY is required for token exchange",
-      );
+    const agencyApiKey = process.env.GHL_AGENCY_API_KEY;
+    if (!agencyApiKey) {
+      throw new Error("GHL_AGENCY_API_KEY is not configured");
     }
 
-    const url = new URL("/oauth/locationToken", GHL_BASE_URL);
-    const res = await fetch(url.toString(), {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${agencyKey}`,
-        "Content-Type": "application/json",
-        Version: GHL_API_VERSION,
-      },
-      body: JSON.stringify({ companyId, locationId }),
+    const client = new GHLClient({ agencyApiKey });
+    return client.rawRequest<GHLTokenExchangeResponse>("POST", ENDPOINTS.tokenExchange, {
+      body: { companyId, locationId },
     });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(
-        `Token exchange failed (${res.status}): ${body.slice(0, 200)}`,
-      );
-    }
-
-    return (await res.json()) as GHLTokenExchangeResponse;
   }
 }
 
-// ── Function-style wrappers ──────────────────────────────────────────────────
-// Legacy service files (contacts.ts, calendars.ts, etc.) import these helpers.
-// They create a one-shot GHLClient from the options and delegate.
-
 function clientFromOpts(opts?: GHLClientOptions): GHLClient {
   if (opts?.locationId) {
-    const token =
-      opts.apiKey ?? process.env.GHL_AGENCY_API_KEY ?? "";
+    const token = opts.apiKey ?? process.env.GHL_AGENCY_API_KEY ?? "";
     return GHLClient.forLocation(opts.locationId, token);
   }
+
   return GHLClient.forAgency(opts?.apiKey);
 }
 
@@ -604,21 +992,13 @@ export async function ghlGet<T>(
   path: string,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  const client = clientFromOpts(opts);
-  // Use the class's private request via a thin cast so we can call the
-  // internal method without duplicating fetch logic.
-  return (client as unknown as {
-    request: (
-      m: string,
-      p: string,
-      o?: {
-        params?: Record<string, string | number | boolean | undefined>;
-        cacheTTLSeconds?: number;
-        cacheTags?: string[];
-      },
-    ) => Promise<T>;
-  }).request("GET", path, {
-    params: opts?.params,
+  const params =
+    opts?.locationId && !opts.params?.locationId
+      ? { locationId: opts.locationId, ...(opts.params ?? {}) }
+      : opts?.params;
+
+  return clientFromOpts(opts).rawRequest<T>("GET", path, {
+    params,
     cacheTTLSeconds: opts?.cacheTTLSeconds,
     cacheTags: opts?.cacheTags,
   });
@@ -629,8 +1009,7 @@ export async function ghlPost<T>(
   body: unknown,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
-    .request("POST", path, { body });
+  return clientFromOpts(opts).rawRequest<T>("POST", path, { body });
 }
 
 export async function ghlPut<T>(
@@ -638,14 +1017,12 @@ export async function ghlPut<T>(
   body: unknown,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string, o?: { body?: unknown }) => Promise<T> })
-    .request("PUT", path, { body });
+  return clientFromOpts(opts).rawRequest<T>("PUT", path, { body });
 }
 
 export async function ghlDelete<T = void>(
   path: string,
   opts?: GHLClientOptions,
 ): Promise<T> {
-  return (clientFromOpts(opts) as unknown as { request: (m: string, p: string) => Promise<T> })
-    .request("DELETE", path);
+  return clientFromOpts(opts).rawRequest<T>("DELETE", path);
 }

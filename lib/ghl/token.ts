@@ -1,130 +1,199 @@
-import { createClient } from "@supabase/supabase-js";
+import "server-only";
+
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import type { Database } from "@/lib/supabase/types";
+
+import { GHLClient } from "./client";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
+const CACHE_TTL_MS = 5 * 60_000;
+const CACHE_STALE_MS = 15 * 60_000;
 
-type EncryptedTokenParts = {
-  iv: Buffer;
-  ciphertext: Buffer;
-  authTag: Buffer;
+type CachedCredential = {
+  locationId: string;
+  token: string;
+  expiresAt: number;
+  lastAccess: number;
 };
 
-function getKey(): Buffer {
-  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
+const credentialCache = new Map<string, CachedCredential>();
+
+function getEncryptionKey(): Buffer {
+  const raw =
+    process.env.ENCRYPTION_KEY ?? process.env.GHL_TOKEN_ENCRYPTION_KEY ?? "";
+
+  if (!raw) {
+    throw new Error("ENCRYPTION_KEY or GHL_TOKEN_ENCRYPTION_KEY is not configured");
   }
 
-  const keyBuffer = Buffer.from(key, "hex");
-  if (keyBuffer.length !== 32) {
-    throw new Error("GHL_TOKEN_ENCRYPTION_KEY must be a 64-char hex string");
+  const trimmed = raw.trim();
+  const key = /^[0-9a-fA-F]{64}$/.test(trimmed)
+    ? Buffer.from(trimmed, "hex")
+    : Buffer.from(trimmed, "base64");
+
+  if (key.length !== 32) {
+    throw new Error("GHL encryption key must decode to 32 bytes");
   }
 
-  return keyBuffer;
+  return key;
 }
 
-function parseEncryptedToken(encrypted: string): EncryptedTokenParts {
-  const data = Buffer.from(encrypted, "base64");
-  if (data.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
-    throw new Error("Invalid encrypted token payload.");
+function readCache(accountId: string): CachedCredential | null {
+  const cached = credentialCache.get(accountId);
+  if (!cached) return null;
+
+  if (cached.expiresAt <= Date.now()) {
+    credentialCache.delete(accountId);
+    return null;
   }
-  return {
-    iv: data.subarray(0, IV_LENGTH),
-    ciphertext: data.subarray(IV_LENGTH, data.length - AUTH_TAG_LENGTH),
-    authTag: data.subarray(data.length - AUTH_TAG_LENGTH),
-  };
+
+  cached.lastAccess = Date.now();
+  return cached;
 }
 
-/**
- * Encrypt a plaintext token with AES-256-GCM.
- * Output format: base64(iv + ciphertext + authTag)
- */
-export function encryptToken(plaintext: string): string {
-  const key = getKey();
+function writeCache(accountId: string, value: Omit<CachedCredential, "expiresAt" | "lastAccess">) {
+  credentialCache.set(accountId, {
+    ...value,
+    expiresAt: Date.now() + CACHE_TTL_MS,
+    lastAccess: Date.now(),
+  });
+
+  if (credentialCache.size > 250) {
+    const cutoff = Date.now() - CACHE_STALE_MS;
+    for (const [key, entry] of Array.from(credentialCache.entries())) {
+      if (entry.lastAccess < cutoff) {
+        credentialCache.delete(key);
+      }
+    }
+  }
+}
+
+function decryptWithLayout(
+  encrypted: Buffer,
+  layout: "iv-ciphertext-tag" | "iv-tag-ciphertext",
+): string {
+  if (encrypted.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
+    throw new Error("Invalid encrypted token payload");
+  }
+
+  const iv = encrypted.subarray(0, IV_LENGTH);
+  const authTag =
+    layout === "iv-ciphertext-tag"
+      ? encrypted.subarray(encrypted.length - AUTH_TAG_LENGTH)
+      : encrypted.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+  const ciphertext =
+    layout === "iv-ciphertext-tag"
+      ? encrypted.subarray(IV_LENGTH, encrypted.length - AUTH_TAG_LENGTH)
+      : encrypted.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
+
+  const decipher = createDecipheriv(ALGORITHM, getEncryptionKey(), iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  decipher.setAuthTag(authTag);
+
+  return Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
+export function encryptToken(token: string): string {
   const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv(ALGORITHM, key, iv, {
+  const cipher = createCipheriv(ALGORITHM, getEncryptionKey(), iv, {
     authTagLength: AUTH_TAG_LENGTH,
   });
 
   const ciphertext = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
+    cipher.update(token, "utf8"),
     cipher.final(),
   ]);
   const authTag = cipher.getAuthTag();
 
+  // Preserve the legacy token layout already used in this repo:
+  // base64(iv + ciphertext + authTag)
   return Buffer.concat([iv, ciphertext, authTag]).toString("base64");
 }
 
-/**
- * Decrypt a token that was encrypted with AES-256-GCM.
- * Expected format: base64(iv + ciphertext + authTag)
- */
-export function decryptToken(encrypted: string): string {
-  const key = getKey();
-  const parts = parseEncryptedToken(encrypted);
+export function decryptToken(encryptedToken: string): string {
+  const payload = Buffer.from(encryptedToken, "base64");
+  const attempts: Array<"iv-ciphertext-tag" | "iv-tag-ciphertext"> = [
+    "iv-ciphertext-tag",
+    "iv-tag-ciphertext",
+  ];
 
-  const decipher = createDecipheriv(ALGORITHM, key, parts.iv, {
-    authTagLength: AUTH_TAG_LENGTH,
-  });
-  decipher.setAuthTag(parts.authTag);
-
-  const decrypted = Buffer.concat([
-    decipher.update(parts.ciphertext),
-    decipher.final(),
-  ]);
-
-  return decrypted.toString("utf8");
-}
-
-function getAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    throw new Error("Supabase URL or service role key is not configured");
+  let lastError: unknown;
+  for (const layout of attempts) {
+    try {
+      return decryptWithLayout(payload, layout);
+    } catch (error) {
+      lastError = error;
+    }
   }
-  return createClient<Database>(url, serviceKey);
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Unable to decrypt GHL token");
 }
 
-/**
- * Fetch and decrypt GHL credentials for an account.
- * Returns both `token` and `accessToken` (same value) for backward compatibility.
- * Does not log token material.
- */
+async function loadCredentials(accountId: string): Promise<{
+  locationId: string;
+  token: string;
+}> {
+  const cached = readCache(accountId);
+  if (cached) {
+    return { locationId: cached.locationId, token: cached.token };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("accounts")
+    .select("ghl_location_id, ghl_token_encrypted")
+    .eq("id", accountId)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error(`GHL account credentials not found for account ${accountId}`);
+  }
+
+  if (!data.ghl_location_id || !data.ghl_token_encrypted) {
+    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
+  }
+
+  const token = decryptToken(data.ghl_token_encrypted);
+  writeCache(accountId, {
+    locationId: data.ghl_location_id,
+    token,
+  });
+
+  return { locationId: data.ghl_location_id, token };
+}
+
+export async function getDecryptedToken(accountId: string): Promise<string> {
+  const credentials = await loadCredentials(accountId);
+  return credentials.token;
+}
+
 export async function getAccountGhlCredentials(accountId: string): Promise<{
   locationId: string;
   token: string;
   accessToken: string;
 }> {
-  const supabase = getAdminClient();
+  const credentials = await loadCredentials(accountId);
 
-  const { data: account, error } = await supabase
-    .from("accounts")
-    .select("ghl_location_id, ghl_token_encrypted")
-    .eq("id", accountId)
-    .single();
-
-  if (error || !account) {
-    throw new Error(`Account not found: ${accountId}`);
-  }
-
-  if (!account.ghl_token_encrypted || !account.ghl_location_id) {
-    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
-  }
-
-  const accessToken = decryptToken(account.ghl_token_encrypted);
   return {
-    locationId: account.ghl_location_id,
-    token: accessToken,
-    accessToken,
+    locationId: credentials.locationId,
+    token: credentials.token,
+    accessToken: credentials.token,
   };
 }
 
-export async function getGHLClient(accountId: string): Promise<{
-  locationId: string;
-  token: string;
-}> {
-  return getAccountGhlCredentials(accountId);
+export async function getGHLClient(accountId: string): Promise<GHLClient> {
+  const credentials = await loadCredentials(accountId);
+  return GHLClient.forLocation(credentials.locationId, credentials.token);
+}
+
+export function getAgencyClient(): GHLClient {
+  return GHLClient.forAgency();
 }
