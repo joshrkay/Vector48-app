@@ -5,6 +5,20 @@ import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
 import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
 import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
+import {
+  normalizeGHLEventType,
+  type GHLWebhookBase,
+  type GHLWebhookCallCompleted,
+  type GHLWebhookContactCreate,
+  type GHLWebhookContactUpdate,
+  type GHLWebhookConversationUnreadUpdate,
+  type GHLWebhookDiscriminatedPayload,
+  type GHLWebhookInboundMessage,
+  type GHLWebhookOpportunityCreate,
+  type GHLWebhookOpportunityStageUpdate,
+  type GHLWebhookAppointmentCreate,
+  type GHLWebhookAppointmentStatusUpdate,
+} from "@/lib/ghl/webhookTypes";
 
 function verifyToken(provided: string | null, expected: string | null): boolean {
   if (!provided || !expected) return false;
@@ -37,6 +51,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ received: true });
   }
+  bodyParseMs = Date.now() - bodyParseStartedAt;
 
   const payload = body as Record<string, unknown>;
   const locationId =
@@ -109,5 +124,5 @@ export async function POST(req: Request) {
     console.warn(`[ghl-webhook] slow request (${elapsedMs}ms) for ${ghlEventType}`);
   }
 
-  return NextResponse.json({ received: true });
+  return response;
 }

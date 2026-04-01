@@ -13,7 +13,6 @@ export default function EstimateAuditPage() {
   const [accountReady, setAccountReady] = React.useState(false);
   const [auditLogId, setAuditLogId] = React.useState<string | null>(null);
   const [suggestions, setSuggestions] = React.useState<AuditSuggestion[]>([]);
-  const [summary, setSummary] = React.useState<string | null>(null);
   const [totalPotentialValue, setTotalPotentialValue] = React.useState<
     number | null
   >(null);
@@ -67,12 +66,10 @@ export default function EstimateAuditPage() {
               onAnalyzeSuccess={({
                 auditLogId: id,
                 suggestions: list,
-                summary: nextSummary,
                 totalPotentialValue: total,
               }) => {
                 setAuditLogId(id);
                 setSuggestions(list);
-                setSummary(nextSummary);
                 setTotalPotentialValue(total);
                 setHistoryKey((k) => k + 1);
               }}
@@ -88,7 +85,6 @@ export default function EstimateAuditPage() {
             <AuditResults
               auditLogId={auditLogId}
               suggestions={suggestions}
-              summary={summary}
               totalPotentialValue={totalPotentialValue}
               onHistoryRefresh={refreshHistory}
             />

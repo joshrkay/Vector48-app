@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // POST /api/ghl/cache-invalidate
-// Called by the Supabase Edge Function (ghl-webhook) to bust the in-memory
-// GHL cache when a webhook event arrives.
+// DEPRECATED: Webhook-driven invalidation now runs directly from
+// /api/webhooks/ghl after insert success.
+// This endpoint is retained for backward compatibility only.
 // ---------------------------------------------------------------------------
 
 import { NextResponse } from "next/server";

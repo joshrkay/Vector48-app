@@ -5,7 +5,7 @@
 import { ghlPost, ghlPut, type GHLClientOptions } from "./client";
 import type {
   GHLCreateLocationPayload,
-  GHLLocationResponse as GHLCreateLocationResponse,
+  GHLCreateLocationResponse,
   GHLUpdateLocationPayload,
 } from "./types";
 

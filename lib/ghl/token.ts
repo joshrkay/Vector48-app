@@ -1,10 +1,89 @@
-import "server-only";
 import { createClient } from "@supabase/supabase-js";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { Database } from "@/lib/supabase/types";
-import { GHLClient } from "./client";
-import { decryptToken } from "./ghlTokenCrypto";
 
-export { decryptToken, encryptGhlToken, encryptToken } from "./ghlTokenCrypto";
+const ALGORITHM = "aes-256-gcm";
+const IV_LENGTH = 12;
+const AUTH_TAG_LENGTH = 16;
+
+/**
+ * Encrypt a plaintext token with AES-256-GCM.
+ * Output format: base64(iv + ciphertext + authTag)
+ */
+export function encryptToken(plaintext: string): string {
+  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
+  }
+
+  const keyBuffer = Buffer.from(key, "hex");
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv);
+
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return Buffer.concat([iv, encrypted, tag]).toString("base64");
+}
+
+/**
+ * Decrypt a token that was encrypted with AES-256-GCM.
+ * Expected format: base64(iv + ciphertext + authTag)
+ */
+function decryptToken(encrypted: string): string {
+  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
+  }
+
+  const data = Buffer.from(encrypted, "base64");
+  if (data.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
+    throw new Error("Invalid encrypted token payload.");
+  }
+
+  return {
+    iv: data.subarray(0, IV_LENGTH),
+    ciphertext: data.subarray(IV_LENGTH, data.length - AUTH_TAG_LENGTH),
+    authTag: data.subarray(data.length - AUTH_TAG_LENGTH),
+  };
+}
+
+export function encryptToken(plaintext: string): string {
+  const key = getKey();
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+
+  const ciphertext = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+
+  // Canonical format: base64(iv + ciphertext + authTag).
+  return Buffer.concat([iv, ciphertext, authTag]).toString("base64");
+}
+
+export function decryptToken(encrypted: string): string {
+  const key = getKey();
+  const parts = parseEncryptedToken(encrypted);
+
+  const decipher = createDecipheriv(ALGORITHM, key, parts.iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  decipher.setAuthTag(parts.authTag);
+
+  const decrypted = Buffer.concat([
+    decipher.update(parts.ciphertext),
+    decipher.final(),
+  ]);
+
+  return decrypted.toString("utf8");
+}
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,7 +96,7 @@ function getAdminClient() {
 
 /**
  * Fetch and decrypt GHL credentials for an account.
- * Returns both `token` and `accessToken` (same value) for backward compat.
+ * Returns both `token` and `accessToken` (same value) for backward compatibility.
  * Does not log token material.
  */
 export async function getAccountGhlCredentials(accountId: string): Promise<{
@@ -49,7 +128,9 @@ export async function getAccountGhlCredentials(accountId: string): Promise<{
   };
 }
 
-export async function getGHLClient(accountId: string): Promise<GHLClient> {
-  const { locationId, accessToken } = await getAccountGhlCredentials(accountId);
-  return GHLClient.forLocation(locationId, accessToken);
+export async function getGHLClient(accountId: string): Promise<{
+  locationId: string;
+  token: string;
+}> {
+  return getAccountGhlCredentials(accountId);
 }

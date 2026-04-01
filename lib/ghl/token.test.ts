@@ -1,6 +1,6 @@
 import { createCipheriv, randomBytes } from "node:crypto";
 import { describe, it, expect, beforeEach } from "vitest";
-import { decryptToken, encryptToken } from "./ghlTokenCrypto";
+import { decryptToken, encryptToken } from "./token";
 
 const KEY_HEX = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
