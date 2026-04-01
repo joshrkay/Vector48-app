@@ -2,24 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "@/hooks/useSWR";
+import useSWR from "@/lib/swr";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { upsertContactsInCache } from "@/lib/crm/contactCache";
 import {
   type CRMContactSearchItem,
-  upsertContactsInCache as cacheContacts,
+  upsertContactsInCache,
 } from "@/lib/crm/contactCache";
 import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const QUERY_CACHE_TTL_MS = 30_000;
+type ContactSearchKey = readonly [string, string];
 const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
 
-async function searchContacts([
-  ,
-  query,
-]: readonly [string, string]): Promise<CRMContactSearchItem[]> {
+async function searchContacts([, query]: readonly unknown[]): Promise<CRMContactSearchItem[]> {
+  if (typeof query !== "string") return [];
+
   const cached = queryCache.get(query);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.contacts;
@@ -47,7 +46,7 @@ export function CRMSearchBar() {
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const { data: contacts = [], isLoading, isValidating } = useSWR<CRMContactSearchItem[], readonly [string, string]>(
+  const { data: contacts = [], isLoading } = useSWR<CRMContactSearchItem[]>(
     debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
     searchContacts,
     {
@@ -78,7 +77,7 @@ export function CRMSearchBar() {
   }, [debouncedQuery]);
 
   const handleSelect = (contact: CRMContactSearchItem) => {
-    cacheContacts([contact]);
+    upsertContactsInCache([contact]);
     setQuery("");
     setDebouncedQuery("");
     setOpen(false);
@@ -128,7 +127,7 @@ export function CRMSearchBar() {
 
       {open && debouncedQuery ? (
         <div className="absolute z-30 mt-2 w-full rounded-lg border bg-white shadow-lg">
-          {isLoading || isValidating ? (
+          {isLoading ? (
             <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">Searching...</p>
           ) : visibleContacts.length ? (
             <ul className="max-h-80 overflow-auto py-1">

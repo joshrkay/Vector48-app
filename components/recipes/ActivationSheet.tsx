@@ -151,7 +151,7 @@ export function ActivationSheet({
       });
       const data = (await res.json()) as Record<string, unknown>;
 
-      if (res.ok && data.ok === false && data.code === "PLAN_LIMIT") {
+      if (res.status === 403 && data.code === "PLAN_LIMIT") {
         setPhase("plan_limit");
         setPlanMessage({
           message: String(data.message ?? ""),

@@ -1,23 +1,35 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { provisionRecipe } from "@/lib/n8n/provision";
+import { enqueueRecipeProvisioning } from "@/lib/n8n/recipeProvisioning";
+import {
+  getRecipeDefinitionOrThrow,
+  validateActivationRequest,
+} from "@/lib/recipes/activationValidator";
 import { createServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
-  accountId: z.string().uuid(),
   recipeSlug: z.string().min(1),
-  config: z.record(z.unknown()).optional().nullable(),
+  config: z.record(z.unknown()).optional().default({}),
 });
 
 export async function POST(request: Request) {
   const supabase = await createServerClient();
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .single();
+
+  if (!account) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -33,51 +45,69 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const { accountId, recipeSlug, config } = parsed.data;
-
-  const { data: membership } = await supabase
-    .from("account_users")
-    .select("account_id")
-    .eq("account_id", accountId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!membership) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const recipe = getRecipeDefinitionOrThrow(parsed.data.recipeSlug);
+  if (!recipe) {
+    return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
   }
 
+  const validation = await validateActivationRequest(
+    supabase,
+    account.id,
+    recipe,
+    parsed.data.config,
+  );
+
+  if (!validation.ok) {
+    if (validation.code === "PLAN_LIMIT") {
+      return NextResponse.json(validation, { status: 403 });
+    }
+
+    return NextResponse.json(
+      {
+        error: validation.error,
+        code: validation.code,
+        missingIntegrations: validation.missingIntegrations,
+      },
+      { status: validation.status },
+    );
+  }
+
+  if (validation.idempotent) {
+    return NextResponse.json({
+      success: true,
+      idempotent: true,
+      activationId: validation.existingActivationId,
+    });
+  }
+
+  const nowIso = new Date().toISOString();
   const { data: inserted, error: insertError } = await supabase
     .from("recipe_activations")
     .insert({
-      account_id: accountId,
-      recipe_slug: recipeSlug,
+      account_id: account.id,
+      recipe_slug: recipe.slug,
       status: "active",
-      config: config ?? null,
+      config: validation.config,
+      activated_at: nowIso,
+      deactivated_at: null,
+      error_message: null,
     })
     .select("id")
     .single();
 
   if (insertError || !inserted) {
     return NextResponse.json(
-      { error: insertError?.message ?? "Insert failed" },
+      { error: insertError?.message ?? "Could not activate recipe" },
       { status: 400 },
     );
   }
 
-  try {
-    const result = await provisionRecipe(
-      accountId,
-      recipeSlug,
-      (config as Record<string, unknown> | null) ?? null,
-      inserted.id,
-    );
-    return NextResponse.json({
-      workflowId: result.workflowId,
-      webhookUrl: result.webhookUrl,
-    });
-  } catch (e) {
-    const message =
-      e instanceof Error ? e.message : "Provisioning failed";
-    return NextResponse.json({ error: message }, { status: 502 });
-  }
+  enqueueRecipeProvisioning({
+    activationId: inserted.id,
+    accountId: account.id,
+    recipeSlug: recipe.slug,
+    config: validation.config,
+  });
+
+  return NextResponse.json({ success: true, activationId: inserted.id });
 }
