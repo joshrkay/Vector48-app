@@ -58,8 +58,8 @@ function narrowPayload(
 }
 
 export async function POST(req: Request) {
-  const parseStartedAt = Date.now();
-  let parseMs = 0;
+  const bodyParseStartedAt = Date.now();
+  let bodyParseMs = 0;
 
   // 1. Verify webhook token — secret must be configured
   const webhookSecret = process.env.GHL_WEBHOOK_SECRET;
@@ -80,13 +80,17 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  parseMs = Date.now() - parseStartedAt;
+  bodyParseMs = Date.now() - bodyParseStartedAt;
 
   const rawLocationId = body.locationId ?? body.location_id;
   const locationId = typeof rawLocationId === "string" && rawLocationId.length > 0 ? rawLocationId : null;
 
   if (parseMs > 1000) {
     console.warn(`[ghl-webhook] Slow payload parse: ${parseMs}ms`);
+  }
+
+  if (bodyParseMs > 1000) {
+    console.warn(`[ghl-webhook] Slow payload parse: ${bodyParseMs}ms`);
   }
 
   if (!locationId) {
