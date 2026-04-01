@@ -150,6 +150,8 @@ export class GHLClient {
     opts?: {
       body?: unknown;
       params?: Record<string, string | number | boolean | undefined>;
+      cacheTTLSeconds?: number;
+      cacheTags?: string[];
     },
   ): Promise<T> {
     await acquireRateLimit({
@@ -183,10 +185,19 @@ export class GHLClient {
       const start = Date.now();
       let res: Response;
       try {
+        const isGet = method === "GET";
         res = await fetch(url.toString(), {
           method,
           headers,
           body: opts?.body ? JSON.stringify(opts.body) : undefined,
+          ...(isGet
+            ? {
+                next: {
+                  revalidate: opts?.cacheTTLSeconds,
+                  tags: opts?.cacheTags,
+                },
+              }
+            : { cache: "no-store" }),
         });
       } catch (err) {
         // Network errors are retryable
@@ -398,10 +409,6 @@ export class GHLClient {
       return this.get<{ event: GHLAppointment }>(`/calendars/events/${eventId}`);
     },
 
-    create: (data: GHLCreateAppointmentPayload) => {
-      return this.post<{ event: GHLAppointment }>("/calendars/events", data);
-    },
-
     update: (eventId: string, data: GHLUpdateAppointmentPayload) => {
       return this.put<{ event: GHLAppointment }>(`/calendars/events/${eventId}`, data);
     },
@@ -439,6 +446,7 @@ export class GHLClient {
     },
   };
 
+
   readonly customFields = {
     list: (locationId?: string) => {
       const locId = locationId ?? this.locationId;
@@ -449,14 +457,6 @@ export class GHLClient {
   };
 
   // ── Campaigns (read-only) ───────────────────────────────────────────────
-
-  readonly campaigns = {
-    list: () => {
-      return this.get<GHLCampaignsListResponse>("/campaigns/");
-    },
-  };
-
-  // ── Locations (agency-level only) ───────────────────────────────────────
 
   readonly locations = {
     create: (data: GHLCreateLocationPayload) => {
@@ -561,8 +561,21 @@ export async function ghlGet<T>(
   const client = clientFromOpts(opts);
   // Use the class's private request via a thin cast so we can call the
   // internal method without duplicating fetch logic.
-  return (client as unknown as { request: (m: string, p: string, o?: { params?: Record<string, string | number | boolean | undefined> }) => Promise<T> })
-    .request("GET", path, { params: opts?.params });
+  return (client as unknown as {
+    request: (
+      m: string,
+      p: string,
+      o?: {
+        params?: Record<string, string | number | boolean | undefined>;
+        cacheTTLSeconds?: number;
+        cacheTags?: string[];
+      },
+    ) => Promise<T>;
+  }).request("GET", path, {
+    params: opts?.params,
+    cacheTTLSeconds: opts?.cacheTTLSeconds,
+    cacheTags: opts?.cacheTags,
+  });
 }
 
 export async function ghlPost<T>(

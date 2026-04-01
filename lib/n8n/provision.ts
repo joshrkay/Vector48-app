@@ -9,7 +9,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { getAccountGhlCredentials } from "@/lib/ghl/token";
+import { getAccountGhlCredentials } from "@/lib/ghl";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 

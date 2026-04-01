@@ -23,10 +23,11 @@ interface Bucket {
   accountId: string | null;
   tokens: number;
   budget: number;
-  windowStart: number;
+  requestTimestamps: number[];
   queue: Array<() => void>;
-  refillTimer: ReturnType<typeof setTimeout> | null;
+  wakeTimer: ReturnType<typeof setTimeout> | null;
   lastAccess: number;
+  lock: Promise<void>;
 }
 
 const buckets = new Map<string, Bucket>();
@@ -56,7 +57,7 @@ function ensureCleanup() {
     const now = Date.now();
     for (const [id, bucket] of Array.from(buckets.entries())) {
       if (now - bucket.lastAccess > STALE_CLEANUP_MS) {
-        if (bucket.refillTimer) clearTimeout(bucket.refillTimer);
+        if (bucket.wakeTimer) clearTimeout(bucket.wakeTimer);
         buckets.delete(id);
       }
     }
@@ -89,12 +90,12 @@ async function getBucket(params: AcquireRateLimitInput): Promise<Bucket> {
   bucket = {
     key,
     accountId,
-    tokens: budget,
     budget,
-    windowStart: Date.now(),
+    requestTimestamps: [],
     queue: [],
-    refillTimer: null,
+    wakeTimer: null,
     lastAccess: Date.now(),
+    lock: Promise.resolve(),
   };
 
   buckets.set(key, bucket);

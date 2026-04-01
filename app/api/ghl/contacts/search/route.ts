@@ -1,68 +1,137 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAccountForUser } from "@/lib/auth/account";
+import { getContacts } from "@/lib/ghl/contacts";
+import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
-import { ghlGet } from "@/lib/ghl/client";
-import type { CRMContactSearchItem } from "@/lib/crm/contactCache";
+import {
+  type CRMContactSearchItem,
+  type CRMContactSearchResponse,
+} from "@/lib/crm/types";
 
-function toDisplayName(contact: {
+const MIN_QUERY_LENGTH = 2;
+const SEARCH_FETCH_LIMIT = 25;
+const MAX_RESULTS = 10;
+
+
+function normalizeContact(raw: {
+  id?: string | null;
   name?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   email?: string | null;
   phone?: string | null;
-}) {
-  return (
-    contact.name?.trim() ||
-    [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim() ||
-    contact.email ||
-    contact.phone ||
-    "Unnamed contact"
-  );
+}): CRMContactSearchItem | null {
+  if (!raw.id) {
+    return null;
+  }
+
+  const derivedName = `${raw.firstName ?? ""} ${raw.lastName ?? ""}`.trim();
+
+  const email = raw.email?.trim() ?? "";
+  const phone = raw.phone?.trim() ?? "";
+
+  return {
+    id: raw.id,
+    name: (raw.name ?? derivedName).trim(),
+    email: email || null,
+    phone: phone || null,
+  };
+}
+
+function scoreContact(contact: CRMContactSearchItem, query: string): number {
+  const q = query.toLowerCase();
+  const normalizedPhoneQuery = q.replace(/\D/g, "");
+
+  const name = contact.name.toLowerCase();
+  const email = contact.email?.toLowerCase() ?? "";
+  const phoneDigits = (contact.phone ?? "").replace(/\D/g, "");
+
+  if (name === q || email === q || (normalizedPhoneQuery && phoneDigits === normalizedPhoneQuery)) {
+    return 0;
+  }
+
+  if (name.startsWith(q)) return 1;
+  if (email.startsWith(q)) return 2;
+  if (normalizedPhoneQuery && phoneDigits.startsWith(normalizedPhoneQuery)) return 3;
+
+  if (name.includes(q)) return 4;
+  if (email.includes(q)) return 5;
+  if (normalizedPhoneQuery && phoneDigits.includes(normalizedPhoneQuery)) return 6;
+
+  return 7;
+}
+
+function sortByRelevance(items: CRMContactSearchItem[], query: string): CRMContactSearchItem[] {
+  return items
+    .map((item, index) => ({ item, index, score: scoreContact(item, query) }))
+    .sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      const nameCompare = a.item.name.localeCompare(b.item.name);
+      if (nameCompare !== 0) return nameCompare;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.item);
 }
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   if (!q) {
-    return NextResponse.json({ contacts: [] satisfies CRMContactSearchItem[] });
+    return NextResponse.json<CRMContactSearchResponse>({ items: [], error: null });
+  }
+
+  if (q.length < MIN_QUERY_LENGTH) {
+    return NextResponse.json<CRMContactSearchResponse>(
+      {
+        items: [],
+        error: null,
+      },
+    );
+  }
+
+  const supabase = await createServerClient();
+  const session = await requireAccountForUser(supabase);
+
+  if (!session) {
+    return NextResponse.json<CRMContactSearchResponse>(
+      { items: [], error: { message: "Unauthorized" } },
+      { status: 401 },
+    );
   }
 
   try {
-    const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data: account, error } = await supabase
-      .from("accounts")
-      .select("ghl_location_id")
-      .eq("owner_user_id", user.id)
-      .single();
-
-    if (error || !account?.ghl_location_id) {
-      return NextResponse.json({ contacts: [] satisfies CRMContactSearchItem[] });
-    }
-
-    const response = await ghlGet<{ contacts?: Array<Record<string, string | null>> }>("/contacts/", {
-      locationId: account.ghl_location_id,
-      params: {
+    const response = await getContacts(
+      {
+        locationId,
         query: q,
-        limit: 10,
+        limit: SEARCH_FETCH_LIMIT,
       },
-    });
+      {
+        locationId,
+        apiKey: accessToken,
+      },
+    );
 
-    const contacts: CRMContactSearchItem[] = (response.contacts ?? []).slice(0, 10).map((contact) => ({
-      id: (contact.id as string) ?? "",
-      name: toDisplayName(contact),
-      email: (contact.email as string | null) ?? null,
-      phone: (contact.phone as string | null) ?? null,
-    })).filter((contact) => Boolean(contact.id));
+    const normalized = (response.contacts ?? [])
+      .map(normalizeContact)
+      .filter((item): item is CRMContactSearchItem => item !== null);
 
-    return NextResponse.json({ contacts });
-  } catch {
-    return NextResponse.json({ contacts: [] satisfies CRMContactSearchItem[] });
+    const sorted = sortByRelevance(normalized, q).slice(0, MAX_RESULTS);
+
+    return NextResponse.json<CRMContactSearchResponse>({ items: sorted, error: null });
+  } catch (error) {
+    console.error("[ghl-contact-search] failed", error);
+
+    return NextResponse.json<CRMContactSearchResponse>(
+      {
+        items: [],
+        error: {
+          message: "Unable to search contacts right now.",
+        },
+      },
+      { status: 502 },
+    );
   }
 }

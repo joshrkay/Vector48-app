@@ -1,11 +1,10 @@
 // ---------------------------------------------------------------------------
 // GoHighLevel — Tier-Aware Caching Wrapper
-// Wraps all GHL read methods with an in-memory cache whose TTL is determined
-// by the account's pricing tier. Exports cachedGHLClient(accountId).
+// Wraps all GHL read methods and forwards dynamic revalidate/tag hints to the
+// fetch layer. Exports cachedGHLClient(accountId).
 // Server-only.
 // ---------------------------------------------------------------------------
 
-import { cacheStore, ensureSweep } from "./cacheStore";
 import { getTierConfig } from "./tierConfig";
 import type { GHLClientOptions } from "./client";
 
@@ -61,21 +60,23 @@ import type {
 // ── Cache key builder ─────────────────────────────────────────────────────
 
 function stableStringify(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value !== "object") return String(value);
-  const obj = value as Record<string, unknown>;
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(obj).sort()) {
-    const v = obj[key];
-    if (v !== undefined) {
-      // Recursively sort nested objects
-      sorted[key] =
-        v !== null && typeof v === "object" && !Array.isArray(v)
-          ? JSON.parse(stableStringify(v))
-          : v;
+  const normalize = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map((item) => normalize(item));
+    if (input && typeof input === "object") {
+      const obj = input as Record<string, unknown>;
+      const sorted: Record<string, unknown> = {};
+      for (const key of Object.keys(obj).sort()) {
+        const v = obj[key];
+        if (v !== undefined) {
+          sorted[key] = normalize(v);
+        }
+      }
+      return sorted;
     }
-  }
-  return JSON.stringify(sorted);
+    return input;
+  };
+
+  return JSON.stringify(normalize(value) ?? null);
 }
 
 // ── In-flight request dedup (prevents cache stampede) ─────────────────────
@@ -87,8 +88,27 @@ function buildCacheKey(
   resource: string,
   params?: unknown,
 ): string {
-  const hash = params ? stableStringify(params) : "";
+  const hash = stableStringify(params ?? {});
   return `ghl:${accountId}:${resource}:${hash}`;
+}
+
+function buildResourceTag(accountId: string, resource: string): string {
+  return `ghl:${accountId}:${resource}`;
+}
+
+function mergeOptions(
+  opts: GHLClientOptions | undefined,
+  cacheTTLSeconds: number,
+  cacheTags: string[],
+): GHLClientOptions {
+  const mergedTags = Array.from(
+    new Set([...(opts?.cacheTags ?? []), ...cacheTags]),
+  );
+  return {
+    ...(opts ?? {}),
+    cacheTTLSeconds,
+    cacheTags: mergedTags,
+  };
 }
 
 // ── Generic cache wrapper ─────────────────────────────────────────────────
@@ -97,17 +117,14 @@ async function withCache<T>(
   accountId: string,
   resource: string,
   params: unknown,
-  fetcher: () => Promise<T>,
+  opts: GHLClientOptions | undefined,
+  fetcher: (nextOpts: GHLClientOptions) => Promise<T>,
 ): Promise<T> {
-  const key = buildCacheKey(accountId, resource, params);
-
-  const cached = cacheStore.get(key);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data as T;
-  }
+  const cacheKey = buildCacheKey(accountId, resource, params);
+  const cacheTag = buildResourceTag(accountId, resource);
 
   // Deduplicate concurrent requests for the same key (cache stampede protection)
-  const pending = inflight.get(key);
+  const pending = inflight.get(cacheKey);
   if (pending) {
     return pending as Promise<T>;
   }
@@ -115,21 +132,14 @@ async function withCache<T>(
   const promise = (async () => {
     try {
       const config = await getTierConfig(accountId);
-      const data = await fetcher();
-
-      cacheStore.set(key, {
-        data,
-        expiresAt: Date.now() + config.cacheTTL * 1_000,
-      });
-      ensureSweep();
-
-      return data;
+      const nextOpts = mergeOptions(opts, config.cacheTTL, [cacheTag]);
+      return fetcher(nextOpts);
     } finally {
-      inflight.delete(key);
+      inflight.delete(cacheKey);
     }
   })();
 
-  inflight.set(key, promise);
+  inflight.set(cacheKey, promise);
   return promise;
 }
 
@@ -206,8 +216,8 @@ export interface CachedGHLClient {
 // ── Factory ───────────────────────────────────────────────────────────────
 
 /**
- * Returns a GHL client where every read method is wrapped with a tier-aware
- * in-memory cache. The cache TTL comes from the account's pricing_config.
+ * Returns a GHL client where every read method is wrapped with tier-aware
+ * fetch cache hints. The cache TTL comes from the account's pricing_config.
  *
  * Usage:
  * ```ts
@@ -219,70 +229,82 @@ export function cachedGHLClient(accountId: string): CachedGHLClient {
   return {
     // ── Contacts ────────────────────────────────────────────────────────
     getContacts: (params?, opts?) =>
-      withCache(accountId, "contacts:list", params, () =>
-        getContacts(params, opts),
+      withCache(accountId, "contacts:list", params, opts, (cacheOpts) =>
+        getContacts(params, cacheOpts),
       ),
     getContact: (contactId, opts?) =>
-      withCache(accountId, "contacts:get", contactId, () =>
-        getContact(contactId, opts),
+      withCache(accountId, "contacts:get", { contactId }, opts, (cacheOpts) =>
+        getContact(contactId, cacheOpts),
       ),
     getContactNotes: (contactId, opts?) =>
-      withCache(accountId, "contacts:notes", contactId, () =>
-        getContactNotes(contactId, opts),
+      withCache(accountId, "contacts:notes", { contactId }, opts, (cacheOpts) =>
+        getContactNotes(contactId, cacheOpts),
       ),
     getContactTasks: (contactId, opts?) =>
-      withCache(accountId, "contacts:tasks", contactId, () =>
-        getContactTasks(contactId, opts),
+      withCache(accountId, "contacts:tasks", { contactId }, opts, (cacheOpts) =>
+        getContactTasks(contactId, cacheOpts),
       ),
 
     // ── Opportunities ───────────────────────────────────────────────────
     getPipelines: (opts?) =>
-      withCache(accountId, "opportunities:pipelines", null, () =>
-        getPipelines(opts),
+      withCache(accountId, "opportunities:pipelines", {}, opts, (cacheOpts) =>
+        getPipelines(cacheOpts),
       ),
     getOpportunities: (params?, opts?) =>
-      withCache(accountId, "opportunities:list", params, () =>
-        getOpportunities(params, opts),
+      withCache(accountId, "opportunities:list", params, opts, (cacheOpts) =>
+        getOpportunities(params, cacheOpts),
       ),
     getOpportunity: (opportunityId, opts?) =>
-      withCache(accountId, "opportunities:get", opportunityId, () =>
-        getOpportunity(opportunityId, opts),
+      withCache(
+        accountId,
+        "opportunities:get",
+        { opportunityId },
+        opts,
+        (cacheOpts) => getOpportunity(opportunityId, cacheOpts),
       ),
 
     // ── Conversations ───────────────────────────────────────────────────
     getConversations: (params?, opts?) =>
-      withCache(accountId, "conversations:list", params, () =>
-        getConversations(params, opts),
+      withCache(accountId, "conversations:list", params, opts, (cacheOpts) =>
+        getConversations(params, cacheOpts),
       ),
     getConversation: (conversationId, opts?) =>
-      withCache(accountId, "conversations:get", conversationId, () =>
-        getConversation(conversationId, opts),
+      withCache(
+        accountId,
+        "conversations:get",
+        { conversationId },
+        opts,
+        (cacheOpts) => getConversation(conversationId, cacheOpts),
       ),
     getMessages: (params, opts?) =>
-      withCache(accountId, "conversations:messages", params, () =>
-        getMessages(params, opts),
+      withCache(
+        accountId,
+        "conversations:messages",
+        params,
+        opts,
+        (cacheOpts) => getMessages(params, cacheOpts),
       ),
 
     // ── Calendars ───────────────────────────────────────────────────────
     getCalendars: (opts?) =>
-      withCache(accountId, "appointments:calendars", null, () =>
-        getCalendars(opts),
+      withCache(accountId, "appointments:calendars", {}, opts, (cacheOpts) =>
+        getCalendars(cacheOpts),
       ),
     getCalendar: (calendarId, opts?) =>
-      withCache(accountId, "appointments:calendar", calendarId, () =>
-        getCalendar(calendarId, opts),
+      withCache(accountId, "appointments:calendar", { calendarId }, opts, (cacheOpts) =>
+        getCalendar(calendarId, cacheOpts),
       ),
     getCalendarSlots: (params, opts?) =>
-      withCache(accountId, "appointments:slots", params, () =>
-        getCalendarSlots(params, opts),
+      withCache(accountId, "appointments:slots", params, opts, (cacheOpts) =>
+        getCalendarSlots(params, cacheOpts),
       ),
     getAppointments: (params?, opts?) =>
-      withCache(accountId, "appointments:list", params, () =>
-        getAppointments(params, opts),
+      withCache(accountId, "appointments:list", params, opts, (cacheOpts) =>
+        getAppointments(params, cacheOpts),
       ),
     getAppointment: (eventId, opts?) =>
-      withCache(accountId, "appointments:get", eventId, () =>
-        getAppointment(eventId, opts),
+      withCache(accountId, "appointments:get", { eventId }, opts, (cacheOpts) =>
+        getAppointment(eventId, cacheOpts),
       ),
   };
 }
