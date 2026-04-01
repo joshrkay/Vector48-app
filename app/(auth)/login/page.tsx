@@ -60,7 +60,7 @@ export default function LoginPage() {
       // Check onboarding status to decide redirect
       const { data: accountUser, error: accountUserError } = await supabase
         .from("account_users")
-        .select("accounts(onboarding_done_at)")
+        .select("account_id")
         .eq("user_id", userId)
         .single();
 
@@ -69,7 +69,18 @@ export default function LoginPage() {
         return;
       }
 
-      const onboardingDoneAt = accountUser.accounts?.[0]?.onboarding_done_at;
+      const { data: account, error: accountError } = await supabase
+        .from("accounts")
+        .select("onboarding_done_at")
+        .eq("id", accountUser.account_id)
+        .single();
+
+      if (accountError) {
+        toast.error("Unable to load your account. Please try again.");
+        return;
+      }
+
+      const onboardingDoneAt = account.onboarding_done_at;
 
       if (!onboardingDoneAt) {
         router.push("/onboarding");
