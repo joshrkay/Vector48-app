@@ -15,8 +15,8 @@ interface StepProps {
 }
 
 export function NotificationsStep({ onNext, onValidityChange }: StepProps) {
-  const notificationContactName = useOnboarding((s) => s.notificationContactName);
-  const notificationContactPhone = useOnboarding((s) => s.notificationContactPhone);
+  const notificationContact = useOnboarding((s) => s.notificationContact);
+  const notificationSms = useOnboarding((s) => s.notificationSms);
 
   const {
     register,
@@ -26,17 +26,17 @@ export function NotificationsStep({ onNext, onValidityChange }: StepProps) {
   } = useForm<NotificationsData>({
     resolver: zodResolver(notificationsSchema),
     defaultValues: {
-      notificationContactName: notificationContactName || "",
-      notificationContactPhone: notificationContactPhone || "",
+      notificationContact: notificationContact || "",
+      notificationSms: notificationSms ?? false,
     },
     mode: "onSubmit",
   });
 
-  const watchedPhone = watch("notificationContactPhone");
+  const watchedContact = watch("notificationContact");
 
   useEffect(() => {
-    onValidityChange(watchedPhone.trim().length > 0);
-  }, [watchedPhone, onValidityChange]);
+    onValidityChange(watchedContact.trim().length > 0);
+  }, [watchedContact, onValidityChange]);
 
   return (
     <form
@@ -50,26 +50,27 @@ export function NotificationsStep({ onNext, onValidityChange }: StepProps) {
         Get alerts when AI handles a call or a lead comes in.
       </p>
 
-      {/* Contact name */}
-      <input
-        {...register("notificationContactName")}
-        type="text"
-        placeholder="Contact name (optional)"
-        className="mt-6 w-full rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-      />
-
       {/* Phone input */}
       <input
-        {...register("notificationContactPhone")}
+        {...register("notificationContact")}
         type="tel"
         placeholder="(555) 123-4567"
-        className="mt-4 w-full rounded-xl border border-border bg-white px-4 py-3 text-lg text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="mt-6 w-full rounded-xl border border-border bg-white px-4 py-3 text-lg text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
       />
-      {errors.notificationContactPhone && (
+      {errors.notificationContact && (
         <p className="mt-2 text-sm text-error">
-          {errors.notificationContactPhone.message}
+          {errors.notificationContact.message}
         </p>
       )}
+
+      <label className="mt-4 flex items-center gap-2 text-sm text-text-secondary">
+        <input
+          {...register("notificationSms")}
+          type="checkbox"
+          className="h-4 w-4 rounded border-border text-accent focus:ring-accent"
+        />
+        Enable SMS notifications
+      </label>
     </form>
   );
 }

@@ -1,16 +1,15 @@
 "use server";
 
-import { inngest } from "@/lib/inngest/client";
 import { createServerClient } from "@/lib/supabase/server";
 
 // Maps step index to the DB columns that step updates
 const STEP_COLUMN_MAP: Record<number, string[]> = {
   0: ["business_name"],
-  1: ["vertical"],
-  2: ["phone"],
+  1: ["phone"],
+  2: ["vertical"],
   3: ["business_hours"],
-  4: ["voice_gender", "greeting_text"],
-  5: ["notification_contact_name", "notification_contact_phone"],
+  4: ["voice_gender", "voice_greeting"],
+  5: ["notification_contact", "notification_sms"],
   6: [], // activate recipe — handled separately
 };
 
@@ -22,9 +21,10 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   businessHours: "business_hours",
   preset: "business_hours",
   voiceGender: "voice_gender",
-  greetingText: "greeting_text",
-  notificationContactName: "notification_contact_name",
-  notificationContactPhone: "notification_contact_phone",
+  greetingText: "voice_greeting",
+  notificationContact: "notification_contact",
+  notificationContactPhone: "notification_contact",
+  activateRecipe1: "activate_recipe_1",
 };
 
 
@@ -70,7 +70,7 @@ export async function saveOnboardingStep(
   };
 
   // Special handling for business hours step — merge preset into jsonb
-  if (step === 3) {
+  if (step === 4) {
     update.business_hours = {
       preset: data.preset,
       ...(data.customHours ? { customHours: data.customHours } : {}),
@@ -78,8 +78,16 @@ export async function saveOnboardingStep(
   } else {
     for (const [key, value] of Object.entries(data)) {
       const column = FIELD_TO_COLUMN[key];
-      if (column) {
+      if (column && STEP_COLUMN_MAP[step]?.includes(column)) {
         update[column] = value;
+      }
+    }
+
+    // Notifications step: enforce SMS opt-in on onboarding
+    if (step === 6) {
+      update.notification_sms = true;
+      if (!update.notification_contact && data.notificationContactName) {
+        update.notification_contact = data.notificationContactName;
       }
     }
   }
@@ -111,13 +119,12 @@ export async function completeOnboarding(
     return { error: "Not authenticated" };
   }
 
-  // Set onboarding as complete + begin provisioning
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
       onboarding_done_at: new Date().toISOString(),
       onboarding_step: 8,
-      provisioning_status: "in_progress",
+      activate_recipe_1: activateRecipe1,
     })
     .eq("id", accountId);
 
@@ -151,7 +158,9 @@ export async function completeOnboarding(
       return { error: getErrorMessage(recipeError) ?? "Failed to create activation" };
     }
 
-    activationId = activation.id;
+    if (recipeError) {
+      return { error: recipeError.message };
+    }
   }
 
   // Dispatch background provisioning via Inngest.

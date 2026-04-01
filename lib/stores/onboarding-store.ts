@@ -24,9 +24,9 @@ export interface OnboardingState {
   phone: string;
   businessHours: BusinessHours;
   voiceGender: "male" | "female";
-  greetingText: string;
-  notificationContactName: string;
-  notificationContactPhone: string;
+  voiceGreeting: string;
+  notificationContact: string;
+  notificationSms: boolean;
   notificationPreferences: Record<string, unknown>;
   activateRecipe1: boolean;
 }
@@ -49,9 +49,9 @@ export const createOnboardingStore = (initial: Partial<OnboardingState>) =>
     phone: "",
     businessHours: { preset: "weekday_8_5" },
     voiceGender: "male",
-    greetingText: "",
-    notificationContactName: "",
-    notificationContactPhone: "",
+    voiceGreeting: "",
+    notificationContact: "",
+    notificationSms: false,
     notificationPreferences: {},
     activateRecipe1: true,
     ...initial,
