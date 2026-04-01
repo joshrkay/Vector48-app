@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // GoHighLevel — Tier-Aware Per-Account Rate Limiter
-// Uses a sliding-window token bucket per account. Budget is determined by
-// the account's pricing tier. When the budget is exhausted, requests are
-// queued and resolved once the window resets (no errors — just delayed).
+// Uses a per-account 60-second sliding window of request timestamps.
+// Budget is determined by the account's pricing tier. When the budget is
+// exhausted, requests are queued and resolved once capacity is available.
 // Server-only.
 // ---------------------------------------------------------------------------
 
@@ -18,12 +18,12 @@ const DEFAULT_BUDGET = 60; // fallback if tier lookup hasn't resolved yet
 
 interface Bucket {
   accountId: string;
-  tokens: number;
   budget: number;
-  windowStart: number;
+  requestTimestamps: number[];
   queue: Array<() => void>;
-  refillTimer: ReturnType<typeof setTimeout> | null;
+  wakeTimer: ReturnType<typeof setTimeout> | null;
   lastAccess: number;
+  lock: Promise<void>;
 }
 
 const buckets = new Map<string, Bucket>();
@@ -38,7 +38,7 @@ function ensureCleanup() {
     const now = Date.now();
     for (const [id, bucket] of Array.from(buckets.entries())) {
       if (now - bucket.lastAccess > STALE_CLEANUP_MS) {
-        if (bucket.refillTimer) clearTimeout(bucket.refillTimer);
+        if (bucket.wakeTimer) clearTimeout(bucket.wakeTimer);
         buckets.delete(id);
       }
     }
@@ -47,10 +47,78 @@ function ensureCleanup() {
       cleanupTimer = null;
     }
   }, STALE_CLEANUP_MS);
-  // Don't block process exit
   if (typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
     (cleanupTimer as { unref: () => void }).unref();
   }
+}
+
+async function runExclusive<T>(bucket: Bucket, fn: () => T): Promise<Awaited<T>> {
+  const previous = bucket.lock;
+  let release!: () => void;
+  bucket.lock = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+function pruneExpired(bucket: Bucket, now: number) {
+  const cutoff = now - WINDOW_MS;
+  while (bucket.requestTimestamps.length > 0 && bucket.requestTimestamps[0]! <= cutoff) {
+    bucket.requestTimestamps.shift();
+  }
+}
+
+function scheduleWake(bucket: Bucket, delayMs: number) {
+  if (bucket.wakeTimer) return;
+
+  bucket.wakeTimer = setTimeout(() => {
+    void runExclusive(bucket, () => {
+      bucket.wakeTimer = null;
+      const now = Date.now();
+      bucket.lastAccess = now;
+      pruneExpired(bucket, now);
+
+      if (bucket.queue.length === 0) return;
+
+      if (bucket.requestTimestamps.length < bucket.budget) {
+        const wake = bucket.queue.shift();
+        wake?.();
+      }
+
+      scheduleNextWake(bucket);
+    });
+  }, Math.max(0, delayMs));
+
+  if (typeof bucket.wakeTimer === "object" && "unref" in bucket.wakeTimer) {
+    (bucket.wakeTimer as { unref: () => void }).unref();
+  }
+}
+
+function scheduleNextWake(bucket: Bucket) {
+  if (bucket.queue.length === 0 || bucket.wakeTimer) return;
+
+  const now = Date.now();
+  pruneExpired(bucket, now);
+
+  if (bucket.requestTimestamps.length < bucket.budget) {
+    scheduleWake(bucket, 0);
+    return;
+  }
+
+  const earliest = bucket.requestTimestamps[0];
+  if (typeof earliest !== "number") {
+    scheduleWake(bucket, 0);
+    return;
+  }
+
+  const delayMs = earliest + WINDOW_MS - now;
+  scheduleWake(bucket, delayMs);
 }
 
 // ── Get or create a bucket for an account ─────────────────────────────────
@@ -62,7 +130,6 @@ async function getBucket(accountId: string): Promise<Bucket> {
     return bucket;
   }
 
-  // Load the tier budget
   let budget = DEFAULT_BUDGET;
   try {
     const config = await getTierConfig(accountId);
@@ -73,12 +140,12 @@ async function getBucket(accountId: string): Promise<Bucket> {
 
   bucket = {
     accountId,
-    tokens: budget,
     budget,
-    windowStart: Date.now(),
+    requestTimestamps: [],
     queue: [],
-    refillTimer: null,
+    wakeTimer: null,
     lastAccess: Date.now(),
+    lock: Promise.resolve(),
   };
 
   buckets.set(accountId, bucket);
@@ -87,72 +154,58 @@ async function getBucket(accountId: string): Promise<Bucket> {
   return bucket;
 }
 
-// ── Refill tokens and drain queued requests ───────────────────────────────
-
-function refill(bucket: Bucket) {
-  // Re-read tier config to pick up plan changes (getTierConfig is cached 60s)
-  getTierConfig(bucket.accountId)
-    .then((config) => {
-      bucket.budget = config.rateLimitBudget;
-    })
-    .catch(() => {
-      // Keep existing budget on error
-    });
-
-  bucket.tokens = bucket.budget;
-  bucket.windowStart = Date.now();
-  bucket.refillTimer = null;
-
-  // Drain as many queued callers as we have tokens
-  while (bucket.queue.length > 0 && bucket.tokens > 0) {
-    bucket.tokens--;
-    const resolve = bucket.queue.shift()!;
-    resolve();
-  }
-
-  // If there are still queued requests, schedule the next refill
-  if (bucket.queue.length > 0) {
-    scheduleRefill(bucket);
-  }
-}
-
-function scheduleRefill(bucket: Bucket) {
-  if (bucket.refillTimer) return;
-
-  const elapsed = Date.now() - bucket.windowStart;
-  const waitMs = Math.max(WINDOW_MS - elapsed, 50);
-
-  bucket.refillTimer = setTimeout(() => refill(bucket), waitMs);
-  if (typeof bucket.refillTimer === "object" && "unref" in bucket.refillTimer) {
-    (bucket.refillTimer as { unref: () => void }).unref();
+async function refreshBudget(bucket: Bucket) {
+  try {
+    const config = await getTierConfig(bucket.accountId);
+    bucket.budget = config.rateLimitBudget;
+  } catch {
+    // Keep existing budget on error
   }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
 
 /**
- * Acquires a rate-limit token for the given account. Resolves immediately
- * if budget is available; otherwise queues and resolves when the window
- * resets. Never rejects — the caller just waits.
+ * Acquires a rate-limit slot for the given account. Resolves immediately
+ * if budget is available; otherwise queues and resolves when capacity
+ * becomes available. Never rejects — the caller just waits.
  */
 export async function acquireRateLimit(accountId: string): Promise<void> {
   const bucket = await getBucket(accountId);
+  await runExclusive(bucket, () => refreshBudget(bucket));
 
-  // Refill if the window has fully elapsed
-  const elapsed = Date.now() - bucket.windowStart;
-  if (elapsed >= WINDOW_MS) {
-    refill(bucket);
+  while (true) {
+    let wakePromise: Promise<void> | null = null;
+    const acquired = await runExclusive(bucket, () => {
+      const now = Date.now();
+      bucket.lastAccess = now;
+      pruneExpired(bucket, now);
+
+      // Preserve ordering: while there is a queue, all new callers join it.
+      if (bucket.requestTimestamps.length < bucket.budget && bucket.queue.length === 0) {
+        bucket.requestTimestamps.push(now);
+        return true;
+      }
+
+      wakePromise = new Promise<void>((resolve) => {
+        bucket.queue.push(resolve);
+      });
+
+      scheduleNextWake(bucket);
+      return false;
+    });
+
+    if (acquired) {
+      // Successfully recorded this request timestamp.
+      await runExclusive(bucket, () => {
+        if (bucket.queue.length > 0) {
+          scheduleNextWake(bucket);
+        }
+      });
+      return;
+    }
+
+    await wakePromise;
+    // On wakeup, loop and re-check budget under lock.
   }
-
-  // Try to consume a token immediately
-  if (bucket.tokens > 0) {
-    bucket.tokens--;
-    return;
-  }
-
-  // No tokens available — queue this request
-  return new Promise<void>((resolve) => {
-    bucket.queue.push(resolve);
-    scheduleRefill(bucket);
-  });
 }
