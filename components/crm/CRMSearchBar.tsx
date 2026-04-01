@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "@/hooks/useSWR";
-import { Search } from "lucide-react";
 import useSWR from "swr";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { upsertContactsInCache } from "@/lib/crm/contactCache";
@@ -14,36 +13,28 @@ import {
 } from "@/lib/crm/contactCache";
 import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
-async function searchContacts([endpoint, query]: readonly unknown[]) {
-  if (typeof endpoint !== "string" || typeof query !== "string") {
-    return [];
-  }
+const QUERY_CACHE_TTL_MS = 30_000;
+const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
 
-interface ContactSearchPayload {
-  contacts: CRMContactSearchItem[];
-  error: {
-    message: string;
-  } | null;
-}
-
-async function searchContacts(query: string) {
+async function searchContacts(query: string): Promise<CRMContactSearchItem[]> {
   const cached = queryCache.get(query);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.contacts;
   }
 
-  const res = await fetch(`/api/ghl/contacts/search?q=${encodeURIComponent(query)}`);
-  const payload: CRMContactSearchResponse = await res.json();
+  const response = await fetch(`/api/ghl/contacts/search?q=${encodeURIComponent(query)}`);
+  const payload: CRMContactSearchResponse = await response.json();
 
-  if (!res.ok) {
+  if (!response.ok) {
     throw new Error(payload.error?.message ?? "Failed to search contacts");
   }
+
   queryCache.set(query, {
-    contacts: payload.items,
+    contacts: payload.contacts,
     expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
   });
 
-  return payload.items;
+  return payload.contacts;
 }
 
 export function CRMSearchBar() {
@@ -53,7 +44,7 @@ export function CRMSearchBar() {
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const { data: contacts = [], isLoading } = useSWR<CRMContactSearchItem[]>(
+  const { data: contacts = [], isLoading, isValidating } = useSWR<CRMContactSearchItem[]>(
     debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
     searchContacts,
     {
@@ -64,31 +55,21 @@ export function CRMSearchBar() {
     }
   );
 
-    let cancelled = false;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query.trim());
+    }, 300);
 
-    (async () => {
-      setIsLoading(true);
-      try {
-        const results = await searchContacts(debouncedQuery);
-        if (!cancelled) {
-          setContacts(results);
-          cacheContacts(results);
-        }
-      } catch {
-        if (!cancelled) {
-          setContacts([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    })();
+    return () => clearTimeout(timer);
+  }, [query]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQuery]);
+  useEffect(() => {
+    if (contacts.length) {
+      upsertContactsInCache(contacts);
+    }
+  }, [contacts]);
+
+  const visibleContacts = useMemo(() => contacts, [contacts]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -155,13 +136,15 @@ export function CRMSearchBar() {
                     type="button"
                     className={cn(
                       "w-full px-3 py-2 text-left",
-                      index === selectedIndex ? "bg-[var(--v48-accent-light)]" : "hover:bg-gray-50"
+                      index === selectedIndex ? "bg-[var(--v48-accent-light)]" : "hover:bg-gray-50",
                     )}
                     onMouseEnter={() => setSelectedIndex(index)}
                     onClick={() => handleSelect(contact)}
                   >
                     <p className="text-sm font-medium">{contact.name}</p>
-                    <p className="text-xs text-[var(--text-secondary)]">{contact.email ?? contact.phone ?? "No email or phone"}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      {contact.email ?? contact.phone ?? "No email or phone"}
+                    </p>
                   </button>
                 </li>
               ))}
