@@ -20,23 +20,18 @@ async function fetchThreadBundle(key: readonly unknown[]): Promise<ThreadBundle>
     return { messages: [], recipeActive: false };
   }
 
-  const [msgRes, actRes] = await Promise.all([
-    fetch(`/api/ghl/conversations/${encodeURIComponent(convId)}/messages?limit=100`),
-    fetch(`/api/recipes/active-for-contact?contactId=${encodeURIComponent(contactId)}`),
-  ]);
+  const response = await fetch(
+    `/api/ghl/conversations/${encodeURIComponent(convId)}/messages?limit=100&contactId=${encodeURIComponent(contactId)}`,
+  );
+  const payload = (await response.json()) as ThreadBundle & { error?: string };
 
-  const msgJson = (await msgRes.json()) as { messages?: GHLMessage[]; error?: string };
-  const actJson = (await actRes.json()) as { active?: boolean; error?: string };
-
-  if (!msgRes.ok) {
-    throw new Error(msgJson.error ?? "Failed to load messages");
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Failed to load messages");
   }
 
-  const recipeActive = actRes.ok && Boolean(actJson.active);
-
   return {
-    messages: msgJson.messages ?? [],
-    recipeActive,
+    messages: payload.messages ?? [],
+    recipeActive: Boolean(payload.recipeActive),
   };
 }
 

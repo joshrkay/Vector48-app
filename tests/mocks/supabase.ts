@@ -92,10 +92,11 @@ function createAutomationEventsSelect() {
     maybeSingle() {
       const event =
         mockAutomationEvents.find((candidate) => {
-          for (const [field, value] of filters.entries()) {
-            if (candidate[field] !== value) return false;
-          }
-          return true;
+          let matches = true;
+          filters.forEach((value, field) => {
+            if (candidate[field] !== value) matches = false;
+          });
+          return matches;
         }) ?? null;
       return Promise.resolve({ data: event, error: null });
     },
