@@ -88,8 +88,8 @@ export async function POST(req: Request) {
 
   const { error: insertError } = await supabase
     .from("automation_events")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .upsert(insertRow as any, {
+    // @ts-ignore – insertRow type is structurally compatible with Insert
+    .upsert(insertRow, {
       onConflict: "account_id,ghl_event_id",
       ignoreDuplicates: true,
     });

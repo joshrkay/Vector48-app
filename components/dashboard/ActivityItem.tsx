@@ -61,6 +61,8 @@ export function ActivityItem({ event, nowTick }: { event: AutomationEvent; nowTi
     [event.detail],
   );
 
+  // nowTick is passed as a prop to trigger re-renders; formatRelativeTime is cheap enough to call directly
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const relative = useMemo(() => formatRelativeTime(event.created_at), [event.created_at, nowTick]);
 
   return (
