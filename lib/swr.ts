@@ -9,6 +9,8 @@ type SWROptions = {
   revalidateOnFocus?: boolean;
   revalidateIfStale?: boolean;
   keepPreviousData?: boolean;
+  /** When set, revalidates on this interval (ms) while the hook is mounted. */
+  refreshIntervalMs?: number;
 };
 
 type SWRResponse<Data> = {
@@ -59,6 +61,7 @@ export default function useSWR<Data>(
     revalidateOnFocus = true,
     revalidateIfStale = true,
     keepPreviousData = false,
+    refreshIntervalMs,
   } = options;
 
   const serializedKey = useMemo(() => serializeKey(key), [key]);
@@ -104,7 +107,9 @@ export default function useSWR<Data>(
       .catch((fetchError: unknown) => {
         if (!cancelled) {
           setError(fetchError instanceof Error ? fetchError : new Error("Failed to fetch data"));
-          setData(undefined);
+          if (!keepPreviousData) {
+            setData(undefined);
+          }
         }
       })
       .finally(() => {
@@ -126,14 +131,31 @@ export default function useSWR<Data>(
     const onFocus = () => {
       runFetcher(serializedKey, key, fetcher)
         .then((result) => setData(result))
-        .catch((fetchError: unknown) =>
-          setError(fetchError instanceof Error ? fetchError : new Error("Failed to fetch data"))
-        );
+        .catch((fetchError: unknown) => {
+          setError(fetchError instanceof Error ? fetchError : new Error("Failed to fetch data"));
+        });
     };
 
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [fetcher, key, revalidateOnFocus, serializedKey]);
+
+  useEffect(() => {
+    if (!refreshIntervalMs || refreshIntervalMs < 1e3 || !serializedKey || !key) {
+      return;
+    }
+
+    const tick = () => {
+      runFetcher(serializedKey, key, fetcher)
+        .then((result) => setData(result))
+        .catch((fetchError: unknown) => {
+          setError(fetchError instanceof Error ? fetchError : new Error("Failed to fetch data"));
+        });
+    };
+
+    const id = window.setInterval(tick, refreshIntervalMs);
+    return () => window.clearInterval(id);
+  }, [fetcher, key, refreshIntervalMs, serializedKey]);
 
   return { data, error, isLoading };
 }

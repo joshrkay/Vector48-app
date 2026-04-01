@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { sendMessage } from "@/lib/ghl/conversations";
+import { getMessages } from "@/lib/ghl/conversations";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 import type { GHLMessageType } from "@/lib/ghl/types";
 
-export async function POST(
+export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -17,35 +17,26 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { type: GHLMessageType; message: string; contactId: string };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  if (!body.message?.trim()) {
-    return NextResponse.json({ error: "Message is required" }, { status: 400 });
-  }
-  if (!body.contactId) {
-    return NextResponse.json({ error: "contactId is required" }, { status: 400 });
-  }
+  const { searchParams } = new URL(request.url);
+  const limitRaw = searchParams.get("limit");
+  const lastMessageId = searchParams.get("lastMessageId") ?? undefined;
+  const type = searchParams.get("type") as GHLMessageType | undefined;
+  const limit = limitRaw ? Math.min(Math.max(Number(limitRaw), 1), 100) : 50;
 
   try {
     const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const message = await sendMessage(
-      conversationId,
+    const result = await getMessages(
       {
-        type: body.type ?? "TYPE_SMS",
-        message: body.message.trim(),
-        contactId: body.contactId,
         conversationId,
+        limit,
+        lastMessageId,
+        ...(type ? { type } : {}),
       },
       { locationId, apiKey: accessToken },
     );
-    return NextResponse.json(message, { status: 201 });
+    return NextResponse.json(result);
   } catch (error) {
-    console.error("[ghl-conversation-send-message]", error);
-    return NextResponse.json({ error: "Failed to send message" }, { status: 502 });
+    console.error("[ghl-conversation-messages-get]", error);
+    return NextResponse.json({ error: "Failed to load messages" }, { status: 502 });
   }
 }
