@@ -67,9 +67,10 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
         await saveOnboardingStep(accountId, currentStep, data);
       } else {
         // Last step — complete onboarding
+        const shouldActivateRecipe = Boolean(data["activateRecipe1"] ?? true);
         await completeOnboarding(
           accountId,
-          (data.activateRecipe1 as boolean) ?? true,
+          shouldActivateRecipe,
           {
             voiceGender: store.voiceGender,
             greetingText: store.greetingText,
