@@ -1,43 +1,46 @@
 import { NextResponse } from "next/server";
+import { requireAccountForUser } from "@/lib/auth/account";
+import { GHLClient, getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
-import { ghlGet } from "@/lib/ghl/client";
+
+const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
+
+export const dynamic = "force-dynamic";
+
+function noStoreJson(body: unknown, init?: ResponseInit) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      ...NO_STORE_HEADERS,
+      ...init?.headers,
+    },
+  });
+}
 
 export async function GET() {
-  const startedAt = Date.now();
+  const supabase = await createServerClient();
+  const session = await requireAccountForUser(supabase);
+
+  if (!session) {
+    return noStoreJson({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let start: number | null = null;
 
   try {
-    const supabase = await createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { locationId, accessToken } = await getAccountGhlCredentials(
+      session.accountId,
+    );
+    const client = GHLClient.forLocation(locationId, accessToken);
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    start = Date.now();
+    await client.contacts.list({ limit: 1 });
 
-    const { data: account, error } = await supabase
-      .from("accounts")
-      .select("ghl_location_id")
-      .eq("owner_user_id", user.id)
-      .single();
-
-    if (error || !account?.ghl_location_id) {
-      return NextResponse.json({ status: "error", latencyMs: Date.now() - startedAt }, { status: 200 });
-    }
-
-    await ghlGet("/contacts/", {
-      locationId: account.ghl_location_id,
-      params: { limit: 1 },
-    });
-
-    return NextResponse.json({
-      status: "connected",
-      latencyMs: Date.now() - startedAt,
-    });
+    return noStoreJson({ status: "connected", latencyMs: Date.now() - start });
   } catch {
-    return NextResponse.json({
-      status: "error",
-      latencyMs: Date.now() - startedAt,
-    });
+    return noStoreJson(
+      { status: "error", latencyMs: start ? Date.now() - start : 0 },
+      { status: 503 },
+    );
   }
 }

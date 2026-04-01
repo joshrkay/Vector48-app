@@ -42,6 +42,8 @@ export interface GHLClientOptions {
   locationId?: string;
   apiKey?: string;
   params?: Record<string, string | number | boolean | undefined>;
+  cacheTTLSeconds?: number;
+  cacheTags?: string[];
 }
 
 // ── Contacts ────────────────────────────────────────────────────────────────
@@ -547,6 +549,7 @@ export interface GHLCreateWebhookPayload {
   locationId: string;
   url: string;
   events: GHLWebhookEvent[];
+  secret?: string;
 }
 
 export interface GHLWebhookResponse {
@@ -565,4 +568,18 @@ export interface GHLTokenExchangeResponse {
   expires_in: number;
   scope: string;
   locationId: string;
+}
+export interface GHLWebhooksListResponse {
+  webhooks: GHLWebhook[];
+}
+
+// ── Error ──────────────────────────────────────────────────────────────────
+
+export interface GHLCampaign {
+  id: string;
+  name: string;
+  locationId: string;
+  url: string;
+  events: string[];
+  secret?: string;
 }
