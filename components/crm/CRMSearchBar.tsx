@@ -6,17 +6,18 @@ import useSWR from "swr";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { upsertContactsInCache } from "@/lib/crm/contactCache";
 import {
   type CRMContactSearchItem,
-  upsertContactsInCache as cacheContacts,
+  upsertContactsInCache,
 } from "@/lib/crm/contactCache";
 import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const QUERY_CACHE_TTL_MS = 30_000;
 const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
 
-async function searchContacts(query: string): Promise<CRMContactSearchItem[]> {
+async function searchContacts([, query]: readonly unknown[]): Promise<CRMContactSearchItem[]> {
+  if (typeof query !== "string") return [];
+
   const cached = queryCache.get(query);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.contacts;
@@ -44,7 +45,7 @@ export function CRMSearchBar() {
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const { data: contacts = [], isLoading, isValidating } = useSWR<CRMContactSearchItem[]>(
+  const { data: contacts = [], isLoading } = useSWR<CRMContactSearchItem[]>(
     debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
     searchContacts,
     {
@@ -76,7 +77,7 @@ export function CRMSearchBar() {
   }, [debouncedQuery]);
 
   const handleSelect = (contact: CRMContactSearchItem) => {
-    cacheContacts([contact]);
+    upsertContactsInCache([contact]);
     setQuery("");
     setDebouncedQuery("");
     setOpen(false);
