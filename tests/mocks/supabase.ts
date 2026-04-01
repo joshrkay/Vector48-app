@@ -76,11 +76,16 @@ export function createMockAccount(
 // ── Chainable query builder mock ──────────────────────────────────────────
 
 function createAutomationEventsSelect() {
-  const filters = new Map<string, unknown>();
+  const filters: Array<{ field: string; value: unknown }> = [];
 
   const api = {
     eq(field: string, value: unknown) {
-      filters.set(field, value);
+      const existingFilter = filters.find((filter) => filter.field === field);
+      if (existingFilter) {
+        existingFilter.value = value;
+      } else {
+        filters.push({ field, value });
+      }
       return api;
     },
     order() {
@@ -92,11 +97,7 @@ function createAutomationEventsSelect() {
     maybeSingle() {
       const event =
         mockAutomationEvents.find((candidate) => {
-          let matches = true;
-          filters.forEach((value, field) => {
-            if (candidate[field] !== value) matches = false;
-          });
-          return matches;
+          return filters.every(({ field, value }) => candidate[field] === value);
         }) ?? null;
       return Promise.resolve({ data: event, error: null });
     },
