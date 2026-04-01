@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+
 import { createServerClient } from "@/lib/supabase/server";
 import { deprovisionRecipe } from "@/lib/n8n/provision";
+
+const bodySchema = z.object({
+  recipeSlug: z.string().min(1),
+});
 
 export async function POST(req: Request) {
   const supabase = await createServerClient();
@@ -23,24 +29,24 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
-  const recipeSlug = body?.recipeSlug as string | undefined;
+  const parsed = bodySchema.safeParse(body);
 
-  if (!recipeSlug || typeof recipeSlug !== "string") {
+  if (!parsed.success) {
     return NextResponse.json({ error: "recipeSlug is required" }, { status: 400 });
   }
 
+  const recipeSlug = parsed.data.recipeSlug;
+
   const { data: row } = await supabase
     .from("recipe_activations")
-    .select("id, status, n8n_workflow_id")
+    .select("id, status")
     .eq("account_id", account.id)
     .eq("recipe_slug", recipeSlug)
+    .order("activated_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  if (!row) {
-    return NextResponse.json({ success: true, idempotent: true });
-  }
-
-  if (row.status === "deactivated") {
+  if (!row || row.status === "deactivated") {
     return NextResponse.json({ success: true, idempotent: true });
   }
 

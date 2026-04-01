@@ -223,6 +223,7 @@ export async function deprovisionRecipe(
     .update({
       status: "deactivated",
       n8n_workflow_id: null,
+      deactivated_at: new Date().toISOString(),
       error_message: null,
     })
     .eq("id", row.id);
