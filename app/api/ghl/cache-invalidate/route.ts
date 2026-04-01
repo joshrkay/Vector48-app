@@ -37,7 +37,8 @@ export async function POST(request: Request) {
       );
     }
 
-    invalidateGHLCache(accountId, eventType);
+    // Shared helper performs tag revalidation and optional in-memory fallback.
+    invalidateGHLCache(accountId, eventType, { invalidateInMemoryFallback: true });
 
     return NextResponse.json({ ok: true });
   } catch {

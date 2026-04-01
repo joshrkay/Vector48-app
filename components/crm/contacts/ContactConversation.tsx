@@ -69,7 +69,7 @@ function Thread({ conversation, messages: initialMsgs, contactId }: ThreadProps)
     setSending(true);
 
     try {
-      const res = await fetch(`/api/ghl/conversations/${conversation.id}/messages`, {
+      const res = await fetch(`/api/ghl/conversations/${conversation.id}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
