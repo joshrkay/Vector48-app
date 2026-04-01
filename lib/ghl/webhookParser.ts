@@ -1,290 +1,203 @@
-// ---------------------------------------------------------------------------
-// GHL Webhook Parser — Pure function that normalizes raw GHL webhook payloads
-// into AutomationEventInsert objects for the automation_events table.
-// ---------------------------------------------------------------------------
-
 import type {
   AutomationEventInsert,
-  GHLWebhookAppointmentCreate,
-  GHLWebhookAppointmentStatusUpdate,
-  GHLWebhookBase,
-  GHLWebhookCallCompleted,
-  GHLWebhookContactCreate,
-  GHLWebhookContactUpdate,
-  GHLWebhookConversationUnreadUpdate,
-  GHLWebhookInboundMessage,
-  GHLWebhookOpportunityCreate,
-  GHLWebhookOpportunityStageUpdate,
+  GHLWebhookPayload,
 } from "./webhookTypes";
-import { normalizeGHLEventType } from "./webhookTypes";
 
-function str(val: unknown): string | undefined {
-  return typeof val === "string" && val.length > 0 ? val : undefined;
+const EVENT_TYPE_MAP: Record<string, AutomationEventInsert["event_type"]> = {
+  CallCompleted: "call_completed",
+  InboundMessage: "message_received",
+  ContactCreate: "contact_created",
+  ContactUpdate: "contact_updated",
+  OpportunityCreate: "opportunity_created",
+  OpportunityStageUpdate: "opportunity_moved",
+  AppointmentCreate: "appointment_created",
+  AppointmentStatusUpdate: "appointment_updated",
+  ConversationUnreadUpdate: "conversation_unread",
+};
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function num(val: unknown): number | undefined {
-  return typeof val === "number" ? val : undefined;
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function nestedStr(obj: unknown, ...keys: string[]): string | undefined {
-  let current: unknown = obj;
+function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
   for (const key of keys) {
-    if (typeof current !== "object" || current === null) return undefined;
-    current = (current as Record<string, unknown>)[key];
+    const value = asString(obj[key]);
+    if (value) return value;
   }
-  return str(current);
+  return null;
 }
 
-function formatDuration(seconds: unknown): string {
-  const s = num(seconds);
-  if (s == null) return "unknown duration";
-  if (s < 60) return `${s} sec`;
-  const minutes = Math.round(s / 60);
-  return `${minutes} min`;
-}
-
-function truncate(text: string, maxLen: number = 60): string {
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 1)}…`;
-}
-
-function formatDateTime(raw: unknown): string {
-  const s = str(raw);
-  if (!s) return "date TBD";
-  try {
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return "date TBD";
-    return d.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "date TBD";
-  }
-}
-
-function formatContactName(payload: Record<string, unknown>): string {
+function formatContactName(payload: Record<string, unknown>): string | null {
   const contact =
     typeof payload.contact === "object" && payload.contact !== null
       ? (payload.contact as Record<string, unknown>)
       : null;
 
-  const firstName = str(payload.firstName) ?? str(contact?.firstName);
-  const lastName = str(payload.lastName) ?? str(contact?.lastName);
-  const fullName = str(payload.name) ?? str(contact?.name) ?? str(payload.contactName);
+  const full = pickString(payload, ["contactName", "name"]) ?? pickString(contact ?? {}, ["name"]);
+  if (full) return full;
 
-  if (firstName && lastName) {
-    return `${firstName} ${lastName.charAt(0)}.`;
+  const first = pickString(payload, ["firstName"]) ?? pickString(contact ?? {}, ["firstName"]);
+  const last = pickString(payload, ["lastName"]) ?? pickString(contact ?? {}, ["lastName"]);
+
+  if (first && last) return `${first} ${last}`;
+  return first;
+}
+
+function formatPhone(phone: string | null): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   }
-  return firstName ?? fullName ?? "Unknown contact";
+  return phone;
+}
+
+function previewText(text: string | null, max = 42): string | null {
+  if (!text) return null;
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= max) return oneLine;
+  return `${oneLine.slice(0, max - 1)}…`;
+}
+
+function formatCallDuration(rawSeconds: unknown): string {
+  const seconds = asNumber(rawSeconds);
+  if (seconds === null || seconds < 0) return "unknown duration";
+  const mins = Math.max(1, Math.round(seconds / 60));
+  return `${mins} min`;
+}
+
+function formatDateTime(raw: unknown): string | null {
+  const value = asString(raw);
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function extractContactId(payload: Record<string, unknown>, ghlEventType: string): string | null {
   if (ghlEventType === "ContactCreate" || ghlEventType === "ContactUpdate") {
-    return str(payload.id) ?? str(payload.contactId) ?? null;
+    return pickString(payload, ["id", "contactId", "contact_id"]);
   }
 
   const contact =
     typeof payload.contact === "object" && payload.contact !== null
       ? (payload.contact as Record<string, unknown>)
-      : null;
+      : {};
 
-  return str(payload.contactId) ?? str(payload.contact_id) ?? str(contact?.id) ?? null;
+  return pickString(payload, ["contactId", "contact_id"]) ?? pickString(contact, ["id"]);
 }
 
-function extractEventId(payload: Record<string, unknown>, ghlEventType: string): string | null {
-  const entityId =
-    str(payload.id) ?? str(payload.appointmentId) ?? str(payload.opportunityId) ?? str(payload.conversationId);
+function extractGhlEventId(payload: Record<string, unknown>, ghlEventType: string): string | null {
+  const explicitId = pickString(payload, ["webhookId", "eventId", "id"]);
+  if (explicitId) return `${ghlEventType}:${explicitId}`;
 
-  if (!entityId) return null;
+  const fallbackEntity = pickString(payload, ["contactId", "contact_id", "conversationId", "appointmentId", "opportunityId"]);
+  const fallbackTime = pickString(payload, ["dateUpdated", "dateAdded", "timestamp", "updatedAt", "createdAt"]);
 
-  const timestamp = str(payload.dateUpdated) ?? str(payload.dateAdded) ?? str(payload.timestamp);
-  if (timestamp) {
-    return `${ghlEventType}:${entityId}:${timestamp}`;
+  if (fallbackEntity && fallbackTime) {
+    return `${ghlEventType}:${fallbackEntity}:${fallbackTime}`;
   }
-  return `${ghlEventType}:${entityId}`;
+
+  return fallbackEntity ? `${ghlEventType}:${fallbackEntity}` : null;
 }
 
-function sanitizeDetail(payload: Record<string, unknown>): Record<string, unknown> {
-  const blocked = new Set(["token", "webhooktoken", "verificationtoken", "signature", "x-ghl-signature"]);
+function summaryForEvent(ghlEventType: string, payload: Record<string, unknown>): string {
+  const contactName = formatContactName(payload);
+  const contact =
+    typeof payload.contact === "object" && payload.contact !== null
+      ? (payload.contact as Record<string, unknown>)
+      : {};
+  const phone = formatPhone(pickString(payload, ["phone"]) ?? pickString(contact, ["phone"]));
 
-  const sanitizeValue = (value: unknown): unknown => {
-    if (Array.isArray(value)) {
-      return value.map((item) => sanitizeValue(item));
+  switch (ghlEventType) {
+    case "CallCompleted": {
+      const name = contactName ?? phone ?? "unknown contact";
+      const duration = formatCallDuration(payload.callDuration ?? payload.duration);
+      const direction = (pickString(payload, ["callDirection", "direction"]) ?? "unknown").toLowerCase();
+      return `Call completed with ${name} — ${duration}, ${direction}`;
     }
-    if (typeof value === "object" && value !== null) {
-      const obj = value as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
-      for (const [key, nestedValue] of Object.entries(obj)) {
-        if (blocked.has(key.toLowerCase())) continue;
-        if (nestedValue === undefined) continue;
-        result[key] = sanitizeValue(nestedValue);
-      }
-      return result;
+    case "InboundMessage": {
+      const from = contactName ?? phone ?? "unknown number";
+      const body = previewText(pickString(payload, ["body", "message"]));
+      return body ? `New message from ${from} — '${body}'` : `New message from ${from}`;
     }
-    return value;
-  };
-
-  return sanitizeValue(payload) as Record<string, unknown>;
-}
-
-type EventParseResult = {
-  summary: string;
-  detail: Record<string, unknown>;
-};
-
-function parseContactCreated(payload: GHLWebhookContactCreate): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  const name = formatContactName(cast);
-  const identifier = str(payload.phone) ?? str(payload.email) ?? "";
-  return {
-    summary: identifier ? `New contact: ${name}, ${identifier}` : `New contact: ${name}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseContactUpdated(payload: GHLWebhookContactUpdate): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  return {
-    summary: `Contact updated: ${formatContactName(cast)}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseCallCompleted(payload: GHLWebhookCallCompleted): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  const duration = formatDuration(payload.callDuration ?? payload.duration);
-  const direction = str(payload.callDirection) ?? str(payload.direction) ?? "unknown";
-  return {
-    summary: `Call completed with ${formatContactName(cast)} — ${duration}, ${direction}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseInboundMessage(payload: GHLWebhookInboundMessage): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  const body = str(payload.body) ?? str(payload.message) ?? "";
-  return {
-    summary: body
-      ? `New message from ${formatContactName(cast)}: ${truncate(body)}`
-      : `New message from ${formatContactName(cast)}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseOpportunityCreated(payload: GHLWebhookOpportunityCreate): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  const oppName = str(payload.name) ?? "Untitled opportunity";
-  const value = num(payload.monetaryValue);
-  return {
-    summary: value != null ? `New opportunity: ${oppName} — $${value.toLocaleString()}` : `New opportunity: ${oppName}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseOpportunityMoved(payload: GHLWebhookOpportunityStageUpdate): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  const stageName =
-    str(payload.currentStage) ??
-    str(payload.pipelineStage) ??
-    str(payload.stageName) ??
-    nestedStr(payload, "pipeline", "stage", "name") ??
-    "unknown stage";
-
-  return {
-    summary: `Lead moved to '${stageName}' stage — ${str(payload.name) ?? "opportunity"} for ${formatContactName(cast)}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseAppointmentCreated(payload: GHLWebhookAppointmentCreate): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  const when = formatDateTime(payload.startTime ?? payload.start_time ?? payload.appointmentTime);
-  return {
-    summary: `Appointment booked: ${formatContactName(cast)}, ${when}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseAppointmentUpdated(payload: GHLWebhookAppointmentStatusUpdate): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  const status = str(payload.status) ?? str(payload.appointmentStatus) ?? "updated";
-  const when = formatDateTime(payload.startTime ?? payload.start_time ?? payload.appointmentTime);
-  return {
-    summary: `Appointment ${status}: ${formatContactName(cast)}, ${when}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseConversationUnread(payload: GHLWebhookConversationUnreadUpdate): EventParseResult {
-  const cast = payload as Record<string, unknown>;
-  const count = num(payload.unreadCount) ?? 0;
-  return {
-    summary: `${count} unread ${count === 1 ? "message" : "messages"} from ${formatContactName(cast)}`,
-    detail: sanitizeDetail(cast),
-  };
-}
-
-function parseUnknown(payload: GHLWebhookBase, ghlEventType: string): EventParseResult {
-  return {
-    summary: `Activity recorded: ${ghlEventType}`,
-    detail: sanitizeDetail(payload as Record<string, unknown>),
-  };
+    case "ContactCreate": {
+      const who = contactName ?? "New contact";
+      return phone ? `New contact: ${who}, ${phone}` : `New contact: ${who}`;
+    }
+    case "ContactUpdate": {
+      const who = contactName ?? "contact";
+      return `Contact updated: ${who}`;
+    }
+    case "OpportunityCreate": {
+      const opp = pickString(payload, ["name"]) ?? "opportunity";
+      return `New opportunity: ${opp}`;
+    }
+    case "OpportunityStageUpdate": {
+      const stage = pickString(payload, ["currentStage", "pipelineStage", "stageName"]) ?? "unknown stage";
+      const opp = pickString(payload, ["name"]) ?? "opportunity";
+      const lead = contactName ? ` for ${contactName}` : "";
+      return `Lead moved to '${stage}' stage — ${opp}${lead}`;
+    }
+    case "AppointmentCreate": {
+      const who = contactName ?? "contact";
+      const at = formatDateTime(payload.startTime ?? payload.start_time ?? payload.appointmentTime);
+      return at ? `Appointment booked: ${who}, ${at}` : `Appointment booked: ${who}`;
+    }
+    case "AppointmentStatusUpdate": {
+      const who = contactName ?? "contact";
+      const status = (pickString(payload, ["status", "appointmentStatus"]) ?? "updated").toLowerCase();
+      const at = formatDateTime(payload.startTime ?? payload.start_time ?? payload.appointmentTime);
+      return at ? `Appointment ${status}: ${who}, ${at}` : `Appointment ${status}: ${who}`;
+    }
+    case "ConversationUnreadUpdate": {
+      const count = asNumber(payload.unreadCount) ?? 0;
+      const label = count === 1 ? "message" : "messages";
+      const who = contactName ?? phone ?? "contact";
+      return `${count} unread ${label} from ${who}`;
+    }
+    default:
+      return "Customer activity received";
+  }
 }
 
 export function parseGHLWebhook(
-  rawPayload: Record<string, unknown>,
-  ghlEventType: string
+  rawPayload: GHLWebhookPayload | Record<string, unknown>,
+  ghlEventType: string,
 ): Omit<AutomationEventInsert, "account_id"> {
-  const eventType = normalizeGHLEventType(ghlEventType);
-  const contactId = extractContactId(rawPayload, ghlEventType);
-  const ghlEventId = extractEventId(rawPayload, ghlEventType);
+  const payload = rawPayload as Record<string, unknown>;
 
   const contact =
-    typeof rawPayload.contact === "object" && rawPayload.contact !== null
-      ? (rawPayload.contact as Record<string, unknown>)
-      : null;
+    typeof payload.contact === "object" && payload.contact !== null
+      ? (payload.contact as Record<string, unknown>)
+      : {};
 
-  const contactPhone = str(rawPayload.phone) ?? str(contact?.phone) ?? null;
-  const contactName = formatContactName(rawPayload);
+  const contactPhone = formatPhone(
+    pickString(payload, ["phone"]) ?? pickString(contact, ["phone"]),
+  );
 
-  const parsed = (() => {
-    switch (eventType) {
-      case "contact_created":
-        return parseContactCreated(rawPayload as GHLWebhookContactCreate);
-      case "contact_updated":
-        return parseContactUpdated(rawPayload as GHLWebhookContactUpdate);
-      case "call_completed":
-        return parseCallCompleted(rawPayload as GHLWebhookCallCompleted);
-      case "message_received":
-        return parseInboundMessage(rawPayload as GHLWebhookInboundMessage);
-      case "opportunity_created":
-        return parseOpportunityCreated(rawPayload as GHLWebhookOpportunityCreate);
-      case "opportunity_moved":
-        return parseOpportunityMoved(rawPayload as GHLWebhookOpportunityStageUpdate);
-      case "appointment_created":
-        return parseAppointmentCreated(rawPayload as GHLWebhookAppointmentCreate);
-      case "appointment_updated":
-        return parseAppointmentUpdated(rawPayload as GHLWebhookAppointmentStatusUpdate);
-      case "conversation_unread":
-        return parseConversationUnread(rawPayload as GHLWebhookConversationUnreadUpdate);
-      default:
-        return parseUnknown(rawPayload as GHLWebhookBase, ghlEventType);
-    }
-  })();
+  const contactName = formatContactName(payload);
 
   return {
     recipe_slug: null,
-    event_type: eventType,
+    event_type: EVENT_TYPE_MAP[ghlEventType] ?? "ghl_event",
     ghl_event_type: ghlEventType,
-    contact_id: contactId,
+    ghl_event_id: extractGhlEventId(payload, ghlEventType),
+    contact_id: extractContactId(payload, ghlEventType),
     contact_phone: contactPhone,
-    contact_name: contactName !== "Unknown contact" ? contactName : null,
-    ghl_event_id: ghlEventId,
-    summary: parsed.summary,
-    detail: parsed.detail,
+    contact_name: contactName,
+    summary: summaryForEvent(ghlEventType, payload),
+    detail: payload,
   };
 }
