@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,7 +46,6 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
     storeRef.current = createOnboardingStore({ ...initialData, accountId });
   }
 
-  const [direction, setDirection] = useState(1);
   const [isStepValid, setIsStepValid] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -77,7 +76,6 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
         );
       }
 
-      setDirection(1);
       storeRef.current.getState().nextStep();
       setIsStepValid(false);
       setIsSaving(false);
@@ -86,7 +84,6 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
   );
 
   const handleBack = useCallback(() => {
-    setDirection(-1);
     storeRef.current?.getState().prevStep();
     setIsStepValid(true);
   }, []);
@@ -95,14 +92,11 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
     setIsStepValid(valid);
   }, []);
 
-  const slideVariants = useMemo(
-    () => ({
-      enter: (dir: number) => ({ x: dir > 0 ? 80 : -80, opacity: 0 }),
-      center: { x: 0, opacity: 1 },
-      exit: (dir: number) => ({ x: dir > 0 ? -80 : 80, opacity: 0 }),
-    }),
-    []
-  );
+  const stepVariants = {
+    initial: { x: 40, opacity: 0 },
+    animate: { x: 0, opacity: 1 },
+    exit: { x: -40, opacity: 0 },
+  };
 
   // Completion screen — no header or progress bar
   if (currentStep >= TOTAL_STEPS) {
@@ -141,13 +135,12 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
         {/* Step content */}
         <div className="flex flex-1 items-center justify-center px-4 py-8">
           <div className="w-full max-w-lg rounded-2xl bg-surface p-8 shadow-xl">
-            <AnimatePresence mode="wait" custom={direction}>
+            <AnimatePresence mode="wait">
               <motion.div
                 key={currentStep}
-                custom={direction}
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
+                variants={stepVariants}
+                initial="initial"
+                animate="animate"
                 exit="exit"
                 transition={{ duration: 0.25, ease: "easeInOut" }}
               >
