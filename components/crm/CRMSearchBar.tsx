@@ -1,46 +1,51 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import useSWR, { mutate as globalMutate } from "swr";
+
 import { cn } from "@/lib/utils";
-import {
-  type CRMContactSearchItem,
-  upsertContactsInCache,
-} from "@/lib/crm/contactCache";
+import { Input } from "@/components/ui/input";
 
-const QUERY_CACHE_TTL_MS = 30_000;
-const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
+type CRMContactSearchResult = {
+  id: string;
+  name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
 
-async function searchContacts(query: string) {
-  const cached = queryCache.get(query);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.contacts;
-  }
+type CRMContactSearchResponse = {
+  contacts?: CRMContactSearchResult[];
+};
 
-  const res = await fetch(`/api/ghl/contacts/search?q=${encodeURIComponent(query)}`);
+const fetcher = async (url: string): Promise<CRMContactSearchResponse> => {
+  const res = await fetch(url);
+
   if (!res.ok) {
     throw new Error("Failed to search contacts");
   }
 
-  const payload = (await res.json()) as { contacts: CRMContactSearchItem[] };
-  queryCache.set(query, {
-    contacts: payload.contacts,
-    expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
-  });
+  return res.json();
+};
 
-  return payload.contacts;
-}
+const getContactDisplayName = (contact: CRMContactSearchResult) => {
+  if (contact.name?.trim()) return contact.name.trim();
+
+  const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
+  if (fullName) return fullName;
+
+  return contact.email || contact.phone || "Unnamed contact";
+};
 
 export function CRMSearchBar() {
   const router = useRouter();
+
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [contacts, setContacts] = useState<CRMContactSearchItem[]>([]);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -50,118 +55,125 @@ export function CRMSearchBar() {
     return () => clearTimeout(timer);
   }, [query]);
 
+  const searchKey = debouncedQuery
+    ? `/api/ghl/contacts/search?q=${encodeURIComponent(debouncedQuery)}`
+    : null;
+
+  const { data, isLoading } = useSWR<CRMContactSearchResponse>(searchKey, fetcher, {
+    dedupingInterval: 30_000,
+    focusThrottleInterval: 30_000,
+    revalidateOnFocus: false,
+    keepPreviousData: true,
+  });
+
+  const contacts = useMemo(() => data?.contacts ?? [], [data?.contacts]);
+
   useEffect(() => {
-    if (!debouncedQuery) {
-      setContacts([]);
+    if (!contacts.length) return;
+
+    contacts.forEach((contact) => {
+      const displayName = getContactDisplayName(contact);
+
+      void globalMutate(`/api/ghl/contacts/${contact.id}/name`, displayName, {
+        revalidate: false,
+        populateCache: true,
+      });
+    });
+  }, [contacts]);
+
+  useEffect(() => {
+    if (!contacts.length) {
+      setHighlightedIndex(-1);
       return;
     }
 
-    let cancelled = false;
+    setHighlightedIndex(0);
+  }, [contacts]);
 
-    (async () => {
-      setIsLoading(true);
-      try {
-        const results = await searchContacts(debouncedQuery);
-        if (!cancelled) {
-          setContacts(results);
-          upsertContactsInCache(results);
-        }
-      } catch {
-        if (!cancelled) {
-          setContacts([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQuery]);
-
-  const visibleContacts = useMemo(() => contacts, [contacts]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [debouncedQuery]);
-
-  const handleSelect = (contact: CRMContactSearchItem) => {
-    upsertContactsInCache([contact]);
-    setQuery("");
-    setDebouncedQuery("");
-    setOpen(false);
-    router.push(`/crm/contacts/${contact.id}`);
+  const navigateToContact = (contactId: string) => {
+    setIsDropdownOpen(false);
+    router.push(`/crm/contacts/${contactId}`);
   };
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!isDropdownOpen && event.key !== "Escape") {
+      setIsDropdownOpen(true);
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!contacts.length) return;
+      setHighlightedIndex((prev) => (prev + 1) % contacts.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!contacts.length) return;
+      setHighlightedIndex((prev) => (prev - 1 + contacts.length) % contacts.length);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (highlightedIndex < 0 || highlightedIndex >= contacts.length) return;
+      event.preventDefault();
+      navigateToContact(contacts[highlightedIndex].id);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setIsDropdownOpen(false);
+    }
+  };
+
+  const shouldShowDropdown =
+    isDropdownOpen && debouncedQuery.length > 0 && (isLoading || contacts.length > 0);
+
   return (
-    <div className="relative w-full max-w-xl">
-      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+    <div className="relative w-full max-w-md">
       <Input
         value={query}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
         onChange={(event) => {
           setQuery(event.target.value);
-          setOpen(true);
+          setIsDropdownOpen(true);
         }}
-        onKeyDown={(event) => {
-          if (!open || !visibleContacts.length) {
-            if (event.key === "Escape") setOpen(false);
-            return;
-          }
-
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setSelectedIndex((prev) => (prev + 1) % visibleContacts.length);
-          }
-
-          if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setSelectedIndex((prev) => (prev - 1 + visibleContacts.length) % visibleContacts.length);
-          }
-
-          if (event.key === "Enter") {
-            event.preventDefault();
-            handleSelect(visibleContacts[selectedIndex]);
-          }
-
-          if (event.key === "Escape") {
-            event.preventDefault();
-            setOpen(false);
-          }
-        }}
-        placeholder="Search contacts by name, phone, or email..."
-        className="pl-9"
+        onFocus={() => setIsDropdownOpen(true)}
+        onKeyDown={handleKeyDown}
+        placeholder="Search contacts..."
+        aria-label="Search contacts"
+        autoComplete="off"
       />
 
-      {open && debouncedQuery ? (
-        <div className="absolute z-30 mt-2 w-full rounded-lg border bg-white shadow-lg">
+      {shouldShowDropdown ? (
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md">
           {isLoading ? (
-            <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">Searching...</p>
-          ) : visibleContacts.length ? (
-            <ul className="max-h-80 overflow-auto py-1">
-              {visibleContacts.map((contact, index) => (
-                <li key={contact.id}>
-                  <button
-                    type="button"
-                    className={cn(
-                      "w-full px-3 py-2 text-left",
-                      index === selectedIndex ? "bg-[var(--v48-accent-light)]" : "hover:bg-gray-50"
-                    )}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                    onClick={() => handleSelect(contact)}
-                  >
-                    <p className="text-sm font-medium">{contact.name}</p>
-                    <p className="text-xs text-[var(--text-secondary)]">{contact.email ?? contact.phone ?? "No email or phone"}</p>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="px-3 py-2 text-sm text-muted-foreground">Searching...</div>
           ) : (
-            <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">No contacts found.</p>
+            <ul className="max-h-72 overflow-y-auto py-1">
+              {contacts.map((contact, index) => {
+                const displayName = getContactDisplayName(contact);
+
+                return (
+                  <li key={contact.id}>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent",
+                        highlightedIndex === index && "bg-accent"
+                      )}
+                      onMouseEnter={() => setHighlightedIndex(index)}
+                      onClick={() => navigateToContact(contact.id)}
+                    >
+                      <span className="font-medium text-foreground">{displayName}</span>
+                      {contact.email ? (
+                        <span className="text-xs text-muted-foreground">{contact.email}</span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       ) : null}
