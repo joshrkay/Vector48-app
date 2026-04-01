@@ -29,12 +29,12 @@ export const businessHoursSchema = z.object({
 
 export const voiceAISchema = z.object({
   voiceGender: z.enum(["male", "female"]),
-  greetingText: z.string().min(1, "Enter a greeting for callers").max(500),
+  voiceGreeting: z.string().min(1, "Enter a greeting for callers").max(500),
 });
 
 export const notificationsSchema = z.object({
-  notificationContactName: z.string().optional(),
-  notificationContactPhone: z.string().min(1, "Enter a phone number for notifications"),
+  notificationContact: z.string().min(1, "Enter a phone number for notifications"),
+  notificationSms: z.boolean(),
 });
 
 export const activateRecipeSchema = z.object({

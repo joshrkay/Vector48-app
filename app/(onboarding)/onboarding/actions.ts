@@ -1,16 +1,15 @@
 "use server";
 
-import { inngest } from "@/lib/inngest/client";
 import { createServerClient } from "@/lib/supabase/server";
 
 // Maps step index to the DB columns that step updates
 const STEP_COLUMN_MAP: Record<number, string[]> = {
   0: ["business_name"],
-  1: ["vertical"],
-  2: ["phone"],
+  1: ["phone"],
+  2: ["vertical"],
   3: ["business_hours"],
-  4: ["voice_gender", "greeting_text"],
-  5: ["notification_contact_name", "notification_contact_phone"],
+  4: ["voice_gender", "voice_greeting"],
+  5: ["notification_contact", "notification_sms"],
   6: [], // activate recipe — handled separately
 };
 
@@ -22,9 +21,10 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   businessHours: "business_hours",
   preset: "business_hours",
   voiceGender: "voice_gender",
-  greetingText: "greeting_text",
-  notificationContactName: "notification_contact_name",
-  notificationContactPhone: "notification_contact_phone",
+  greetingText: "voice_greeting",
+  notificationContact: "notification_contact",
+  notificationContactPhone: "notification_contact",
+  activateRecipe1: "activate_recipe_1",
 };
 
 
@@ -70,7 +70,7 @@ export async function saveOnboardingStep(
   };
 
   // Special handling for business hours step — merge preset into jsonb
-  if (step === 3) {
+  if (step === 4) {
     update.business_hours = {
       preset: data.preset,
       ...(data.customHours ? { customHours: data.customHours } : {}),
@@ -78,8 +78,16 @@ export async function saveOnboardingStep(
   } else {
     for (const [key, value] of Object.entries(data)) {
       const column = FIELD_TO_COLUMN[key];
-      if (column) {
+      if (column && STEP_COLUMN_MAP[step]?.includes(column)) {
         update[column] = value;
+      }
+    }
+
+    // Notifications step: enforce SMS opt-in on onboarding
+    if (step === 6) {
+      update.notification_sms = true;
+      if (!update.notification_contact && data.notificationContactName) {
+        update.notification_contact = data.notificationContactName;
       }
     }
   }
@@ -99,7 +107,7 @@ export async function saveOnboardingStep(
 export async function completeOnboarding(
   accountId: string,
   activateRecipe: boolean,
-  voiceConfig?: { voiceGender: string; greetingText: string }
+  voiceConfig?: { voiceGender: string; voiceGreeting: string }
 ) {
   const supabase = await createServerClient();
 
@@ -111,13 +119,12 @@ export async function completeOnboarding(
     return { error: "Not authenticated" };
   }
 
-  // Set onboarding as complete + begin provisioning
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
       onboarding_done_at: new Date().toISOString(),
       onboarding_step: 8,
-      provisioning_status: "in_progress",
+      activate_recipe_1: activateRecipe1,
     })
     .eq("id", accountId);
 
@@ -132,7 +139,7 @@ export async function completeOnboarding(
     const config = voiceConfig
       ? {
           voice_gender: voiceConfig.voiceGender,
-          greeting_text: voiceConfig.greetingText,
+          voice_greeting: voiceConfig.voiceGreeting,
         }
       : null;
 
@@ -151,34 +158,12 @@ export async function completeOnboarding(
       return { error: getErrorMessage(recipeError) ?? "Failed to create activation" };
     }
 
-    activationId = activation.id;
+    if (recipeError) {
+      return { error: recipeError.message };
+    }
   }
 
-  // Dispatch background provisioning via Inngest.
-  // GHL sub-account creation + Voice AI setup + n8n recipe activation
-  // all run asynchronously. The user is redirected to the dashboard
-  // immediately while provisioning runs in the background.
-  //
-  // Dashboard contract: show "Setting up your AI..." when
-  // provisioning_status = 'in_progress', full dashboard when 'complete'.
-  try {
-    await inngest.send({
-      name: "app/customer.onboarding.completed",
-      data: {
-        accountId,
-        activateRecipe,
-        voiceConfig,
-        activationId,
-      },
-    });
-  } catch (err) {
-    // Inngest dispatch failure is non-fatal — provisioning can be retried
-    // via the reconciliation cron job.
-    console.error(
-      "[onboarding] Failed to dispatch provisioning event:",
-      err instanceof Error ? err.message : err,
-    );
-  }
+  console.log("GHL provisioning job queued for", accountId);
 
   return { success: true };
 }
