@@ -52,7 +52,6 @@ export function CRMSearchBar() {
       dedupingInterval: 30_000,
       revalidateOnFocus: false,
       revalidateIfStale: false,
-      keepPreviousData: true,
     }
   );
 
