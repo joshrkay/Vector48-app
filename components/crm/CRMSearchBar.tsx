@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   type CRMContactSearchItem,
-  upsertContactsInCache,
+  upsertContactsInCache as cacheContacts,
 } from "@/lib/crm/contactCache";
+import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const QUERY_CACHE_TTL_MS = 30_000;
 const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
@@ -20,11 +21,11 @@ async function searchContacts(query: string) {
   }
 
   const res = await fetch(`/api/ghl/contacts/search?q=${encodeURIComponent(query)}`);
-  if (!res.ok) {
-    throw new Error("Failed to search contacts");
-  }
+  const payload: CRMContactSearchResponse = await res.json();
 
-  const payload = (await res.json()) as { contacts: CRMContactSearchItem[] };
+  if (!res.ok) {
+    throw new Error(payload.error?.message ?? "Failed to search contacts");
+  }
   queryCache.set(query, {
     contacts: payload.contacts,
     expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
@@ -64,7 +65,7 @@ export function CRMSearchBar() {
         const results = await searchContacts(debouncedQuery);
         if (!cancelled) {
           setContacts(results);
-          upsertContactsInCache(results);
+          cacheContacts(results);
         }
       } catch {
         if (!cancelled) {
@@ -89,7 +90,7 @@ export function CRMSearchBar() {
   }, [debouncedQuery]);
 
   const handleSelect = (contact: CRMContactSearchItem) => {
-    upsertContactsInCache([contact]);
+    cacheContacts([contact]);
     setQuery("");
     setDebouncedQuery("");
     setOpen(false);
