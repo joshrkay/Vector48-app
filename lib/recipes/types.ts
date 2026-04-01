@@ -1,12 +1,11 @@
 import type { RecipeDefinition, FunnelStage } from "@/types/recipes";
 import type { Database } from "@/lib/supabase/types";
-import type { RecipeDefinition } from "@/types/recipes";
 
 export type { FunnelStage };
 
 export type Vertical = Database["public"]["Tables"]["accounts"]["Row"]["vertical"];
 
-export type RecipeStatus = "active" | "paused" | "available" | "coming_soon";
+export type RecipeStatus = "active" | "paused" | "error" | "available" | "coming_soon";
 
 export interface RecipeWithStatus extends RecipeDefinition {
   status: RecipeStatus;

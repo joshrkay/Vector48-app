@@ -30,6 +30,8 @@ export async function POST(req: Request) {
 
   let text: string;
   try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore – pdf-parse types not available; library used only at runtime
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: new Uint8Array(buf) });
     const result = await parser.getText();

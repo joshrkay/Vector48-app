@@ -73,10 +73,6 @@ export type Database = {
           onboarding_step: number;
           onboarding_completed_at: string | null;
           activate_recipe_1: boolean;
-          plan_slug: string;
-          trial_ends_at: string | null;
-          stripe_customer_id: string | null;
-          stripe_subscription_id: string | null;
           subscription_status: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at: string;
           service_area: string | null;
@@ -125,10 +121,6 @@ export type Database = {
           onboarding_step?: number;
           onboarding_completed_at?: string | null;
           activate_recipe_1?: boolean;
-          plan_slug?: string;
-          trial_ends_at?: string | null;
-          stripe_customer_id?: string | null;
-          stripe_subscription_id?: string | null;
           subscription_status?: "trialing" | "active" | "past_due" | "canceled" | "paused";
           created_at?: string;
           service_area?: string | null;

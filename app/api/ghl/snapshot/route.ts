@@ -27,7 +27,7 @@ function inferLastSyncedIso(accountId: string, cacheTtlSeconds: number): string 
   const now = Date.now();
   const inferredAges: number[] = [];
 
-  for (const [key, entry] of cacheStore.entries()) {
+  for (const [key, entry] of Array.from(cacheStore.entries())) {
     if (!key.startsWith(prefix)) continue;
 
     const inferredWrittenAt = entry.expiresAt - cacheTtlSeconds * 1_000;
