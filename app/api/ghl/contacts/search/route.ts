@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { getContacts } from "@/lib/ghl/contacts";
-import { getAccountGhlCredentials } from "@/lib/ghl/token";
+import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 const MIN_QUERY_LENGTH = 2;
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { locationId, token } = await getAccountGhlCredentials(session.accountId);
+    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
 
     const response = await getContacts(
       {
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
       },
       {
         locationId,
-        apiKey: token,
+        apiKey: accessToken,
       },
     );
 
