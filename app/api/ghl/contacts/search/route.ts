@@ -16,7 +16,7 @@ interface ContactSearchItem {
 }
 
 interface ContactSearchResponse {
-  items: ContactSearchItem[];
+  contacts: ContactSearchItem[];
   error: {
     message: string;
   } | null;
@@ -83,13 +83,13 @@ export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   if (!q) {
-    return NextResponse.json<ContactSearchResponse>({ items: [], error: null });
+    return NextResponse.json<ContactSearchResponse>({ contacts: [], error: null });
   }
 
   if (q.length < MIN_QUERY_LENGTH) {
     return NextResponse.json<ContactSearchResponse>(
       {
-        items: [],
+        contacts: [],
         error: null,
       },
     );
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
 
   if (!session) {
     return NextResponse.json<ContactSearchResponse>(
-      { items: [], error: { message: "Unauthorized" } },
+      { contacts: [], error: { message: "Unauthorized" } },
       { status: 401 },
     );
   }
@@ -126,13 +126,13 @@ export async function GET(request: NextRequest) {
 
     const sorted = sortByRelevance(normalized, q).slice(0, MAX_RESULTS);
 
-    return NextResponse.json<ContactSearchResponse>({ items: sorted, error: null });
+    return NextResponse.json<ContactSearchResponse>({ contacts: sorted, error: null });
   } catch (error) {
     console.error("[ghl-contact-search] failed", error);
 
     return NextResponse.json<ContactSearchResponse>(
       {
-        items: [],
+        contacts: [],
         error: {
           message: "Unable to search contacts right now.",
         },
