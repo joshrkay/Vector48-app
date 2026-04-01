@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { voiceAISchema, type VoiceAIData } from "@/lib/validations/onboarding";
@@ -25,16 +25,19 @@ const GREETING_TEMPLATES: Record<string, string> = {
 };
 
 export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewMessage, setPreviewMessage] = useState<string | null>(null);
   const voiceGender = useOnboarding((s) => s.voiceGender);
   const voiceGreeting = useOnboarding((s) => s.voiceGreeting);
   const businessName = useOnboarding((s) => s.businessName);
   const vertical = useOnboarding((s) => s.vertical);
+  const businessFirstWord = businessName.trim().split(/\s+/)[0] || "our company";
 
   const defaultGreeting =
     voiceGreeting ||
     (GREETING_TEMPLATES[vertical || "hvac"] || GREETING_TEMPLATES.hvac).replace(
       "{business}",
-      businessName || "our company"
+      businessFirstWord
     );
 
   const {
@@ -58,6 +61,21 @@ export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
   useEffect(() => {
     onValidityChange(watchedGreeting.trim().length > 0);
   }, [watchedGreeting, onValidityChange]);
+
+  const handlePreview = async () => {
+    setIsPreviewLoading(true);
+    try {
+      const res = await fetch("/api/voice/preview");
+      const data = (await res.json().catch(() => null)) as
+        | { message?: string }
+        | null;
+      setPreviewMessage(data?.message || "Voice preview coming soon");
+    } catch {
+      setPreviewMessage(null);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
 
   return (
     <form
@@ -88,6 +106,35 @@ export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
             {g}
           </button>
         ))}
+      </div>
+
+      <div className="mt-4 rounded-xl border border-border bg-surface/40 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-text-primary">
+              Audio preview
+            </p>
+            <p className="text-xs text-text-secondary">
+              Hear a sample of your current greeting voice.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handlePreview}
+            disabled={isPreviewLoading}
+            className={cn(
+              "rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-primary transition-colors",
+              isPreviewLoading
+                ? "cursor-not-allowed opacity-60"
+                : "hover:border-accent/40 hover:bg-accent-light"
+            )}
+          >
+            {isPreviewLoading ? "Loading..." : "Play preview"}
+          </button>
+        </div>
+        {previewMessage && (
+          <p className="mt-3 text-xs text-text-secondary">{previewMessage}</p>
+        )}
       </div>
 
       {/* Greeting textarea */}
