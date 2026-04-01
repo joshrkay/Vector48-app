@@ -569,6 +569,12 @@ export interface GHLWebhook {
 }
 
 export interface GHLCreateWebhookPayload {
+  locationId: string;
+  url: string;
+  events: GHLWebhookEvent[];
+  secret?: string;
+}
+
 export interface GHLWebhookResponse {
   webhook: GHLWebhook;
 }
@@ -596,16 +602,3 @@ export interface GHLCampaign {
   events: string[];
   secret?: string;
 }
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  nextPage: boolean;
-  lastMessageId?: string;
-}
-
-export interface GHLWebhooksListResponse {
-  webhooks: GHLWebhook[];
-}
-
-// ── (duplicate declarations removed — end of file) ─────────────────────────
-
