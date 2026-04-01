@@ -1,8 +1,9 @@
-import { Suspense } from "react";
-import { createServerClient } from "@/lib/supabase/server";
-import { SignOutButton } from "@/components/SignOutButton";
 import { redirect } from "next/navigation";
-import { getSessionData } from "@/lib/data/session";
+import { SignOutButton } from "@/components/SignOutButton";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { RecipeFilter } from "@/components/dashboard/RecipeFilter";
+import { createServerClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
 
 type DashboardStatCard = {
   label: string;
@@ -10,12 +11,7 @@ type DashboardStatCard = {
   periodLabel: string;
 };
 
-type GHLSnapshot = {
-  integrationStatus: "connected" | "disconnected" | "error";
-  provisioningStatus: string;
-  healthStatus: string;
-  lastHealthCheck: string | null;
-};
+type AutomationEvent = Database["public"]["Tables"]["automation_events"]["Row"];
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -54,132 +50,59 @@ async function getStatCards(accountId: string): Promise<DashboardStatCard[]> {
   ];
 }
 
-async function getGHLSnapshot(accountId: string): Promise<GHLSnapshot> {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: { recipe?: string };
+}) {
   const supabase = await createServerClient();
 
-  const [accountResult, integrationResult] = await Promise.all([
-    supabase
-      .from("accounts")
-      .select("ghl_provisioning_status, ghl_health_status, ghl_last_health_check")
-      .eq("id", accountId)
-      .single(),
-    supabase
-      .from("integrations")
-      .select("status")
-      .eq("account_id", accountId)
-      .eq("provider", "ghl")
-      .maybeSingle(),
-  ]);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  return {
-    integrationStatus: integrationResult.data?.status ?? "disconnected",
-    provisioningStatus: accountResult.data?.ghl_provisioning_status ?? "pending",
-    healthStatus: accountResult.data?.ghl_health_status ?? "unknown",
-    lastHealthCheck: accountResult.data?.ghl_last_health_check ?? null,
-  };
-}
+  if (!user) redirect("/login");
 
-function DashboardStatCardsSkeleton() {
-  return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, idx) => (
-        <div
-          key={idx}
-          className="rounded-2xl border border-[var(--v48-border)] bg-white p-5 animate-pulse"
-        >
-          <div className="h-3 w-24 rounded bg-gray-200" />
-          <div className="mt-3 h-8 w-14 rounded bg-gray-200" />
-          <div className="mt-3 h-3 w-16 rounded bg-gray-200" />
-        </div>
-      ))}
-    </div>
-  );
-}
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("id, business_name, created_at")
+    .eq("owner_user_id", user.id)
+    .single();
 
-function DashboardGHLSnapshotSkeleton() {
-  return (
-    <div className="min-h-[280px] rounded-2xl border border-[var(--v48-border)] bg-white p-5 animate-pulse">
-      <div className="h-5 w-40 rounded bg-gray-200" />
-      <div className="mt-5 space-y-3">
-        {Array.from({ length: 4 }).map((_, idx) => (
-          <div key={idx} className="h-4 w-full rounded bg-gray-200" />
-        ))}
-      </div>
-    </div>
-  );
-}
+  if (!account) redirect("/login");
 
-async function DashboardStatCardsSection({
-  statCardsPromise,
-}: {
-  statCardsPromise: Promise<DashboardStatCard[]>;
-}) {
-  const statCards = await statCardsPromise;
+  const recipe = searchParams?.recipe;
 
-  return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-      {statCards.map((card) => (
-        <div
-          key={card.label}
-          className="rounded-2xl border border-[var(--v48-border)] bg-white p-5"
-        >
-          <p className="text-[13px] text-[var(--text-secondary)]">{card.label}</p>
-          <p className="mt-1 font-heading text-[32px] font-bold">{card.value}</p>
-          <p className="mt-1 text-[12px] text-[var(--text-secondary)]">{card.periodLabel}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
+  let query = supabase
+    .from("automation_events")
+    .select(
+      "id, account_id, recipe_slug, event_type, ghl_event_type, ghl_event_id, contact_id, contact_phone, contact_name, summary, detail, created_at",
+    )
+    .eq("account_id", account.id)
+    .order("created_at", { ascending: false })
+    .limit(21);
 
-async function DashboardGHLSnapshotSection({
-  snapshotPromise,
-}: {
-  snapshotPromise: Promise<GHLSnapshot>;
-}) {
-  const snapshot = await snapshotPromise;
+  if (recipe) query = query.eq("recipe_slug", recipe);
 
-  return (
-    <section className="rounded-2xl border border-[var(--v48-border)] bg-white p-5">
-      <h2 className="font-heading text-xl font-semibold">GHL Snapshot</h2>
-      <dl className="mt-4 space-y-3 text-sm">
-        <div className="flex items-center justify-between gap-4">
-          <dt className="text-[var(--text-secondary)]">Integration</dt>
-          <dd className="font-medium capitalize">{snapshot.integrationStatus}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <dt className="text-[var(--text-secondary)]">Provisioning</dt>
-          <dd className="font-medium capitalize">{snapshot.provisioningStatus}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <dt className="text-[var(--text-secondary)]">Health</dt>
-          <dd className="font-medium capitalize">{snapshot.healthStatus}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <dt className="text-[var(--text-secondary)]">Last health check</dt>
-          <dd className="font-medium">
-            {snapshot.lastHealthCheck
-              ? new Date(snapshot.lastHealthCheck).toLocaleString()
-              : "Not available"}
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
+  const { data: eventRows } = await query;
 
-export default async function DashboardPage() {
-  const { user, account } = await getSessionData();
+  const initialRows = (eventRows ?? []) as AutomationEvent[];
+  const initialItems = initialRows.slice(0, 20);
+  const initialNextCursor =
+    initialRows.length > 20 ? initialItems[initialItems.length - 1]?.created_at ?? null : null;
 
-  if (!user || !account) {
-    redirect("/login");
-  }
+  const { data: activations } = await supabase
+    .from("recipe_activations")
+    .select("recipe_slug")
+    .eq("account_id", account.id)
+    .eq("status", "active")
+    .order("recipe_slug", { ascending: true });
+
+  const recipes = Array.from(new Set((activations ?? []).map((row) => row.recipe_slug)));
+  const statCards = await getStatCards(account.id);
 
   const greeting = getGreeting();
   const headline = account.business_name ? `${greeting}, ${account.business_name}` : greeting;
-
-  const statCardsPromise = getStatCards(account.id);
-  const snapshotPromise = getGHLSnapshot(account.id);
 
   return (
     <div>
@@ -192,31 +115,31 @@ export default async function DashboardPage() {
         Alerts will appear here when recipes require attention.
       </section>
 
-      <section className="mt-6">
-        <Suspense fallback={<DashboardStatCardsSkeleton />}>
-          <DashboardStatCardsSection statCardsPromise={statCardsPromise} />
-        </Suspense>
-      </section>
+      <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+        {statCards.map((card) => (
+          <div
+            key={card.label}
+            className="rounded-2xl border border-[var(--v48-border)] bg-white p-5"
+          >
+            <p className="text-[13px] text-[var(--text-secondary)]">{card.label}</p>
+            <p className="mt-1 font-heading text-[32px] font-bold">{card.value}</p>
+            <p className="mt-1 text-[12px] text-[var(--text-secondary)]">{card.periodLabel}</p>
+          </div>
+        ))}
+      </div>
 
-      <section className="mt-6 rounded-2xl border border-[var(--v48-border)] bg-white p-5">
-        <h2 className="font-heading text-lg font-semibold">Active Recipes</h2>
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          Activate recipes to stream automation events into your dashboard.
-        </p>
-      </section>
-
-      <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-[var(--v48-border)] bg-white p-5">
-          <h2 className="font-heading text-lg font-semibold">Activity Feed</h2>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            No activity yet. Activate a recipe to get started.
-          </p>
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <RecipeFilter accountId={account.id} initialRecipes={recipes} />
+          <ActivityFeed
+            initialItems={initialItems}
+            initialNextCursor={initialNextCursor}
+            accountId={account.id}
+            accountCreatedAt={account.created_at}
+          />
         </div>
-
-        <Suspense fallback={<DashboardGHLSnapshotSkeleton />}>
-          <DashboardGHLSnapshotSection snapshotPromise={snapshotPromise} />
-        </Suspense>
-      </section>
+        <div className="lg:col-span-2" />
+      </div>
     </div>
   );
 }
