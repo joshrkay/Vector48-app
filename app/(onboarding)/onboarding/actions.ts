@@ -3,6 +3,19 @@
 import { inngest } from "@/lib/inngest/client";
 import { createServerClient } from "@/lib/supabase/server";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 // Maps step index to the DB columns that step updates
 const STEP_COLUMN_MAP: Record<number, string[]> = {
   0: ["business_name"],
@@ -80,7 +93,7 @@ export async function saveOnboardingStep(
     .eq("id", accountId);
 
   if (error) {
-    return { error: error.message };
+    return { error: getErrorMessage(error, "Failed to save onboarding step") };
   }
 
   return { success: true };
@@ -112,7 +125,7 @@ export async function completeOnboarding(
     .eq("id", accountId);
 
   if (updateError) {
-    return { error: updateError.message };
+    return { error: getErrorMessage(updateError, "Failed to update account") };
   }
 
   // Optionally create Recipe 1 activation row (before background provisioning)
@@ -138,7 +151,9 @@ export async function completeOnboarding(
       .single();
 
     if (recipeError || !activation) {
-      return { error: recipeError?.message ?? "Failed to create activation" };
+      return {
+        error: getErrorMessage(recipeError, "Failed to create activation"),
+      };
     }
 
     activationId = activation.id;
@@ -161,12 +176,12 @@ export async function completeOnboarding(
         activationId,
       },
     });
-  } catch (err) {
+  } catch (err: unknown) {
     // Inngest dispatch failure is non-fatal — provisioning can be retried
     // via the reconciliation cron job.
     console.error(
       "[onboarding] Failed to dispatch provisioning event:",
-      err instanceof Error ? err.message : err,
+      err instanceof Error ? err.message : String(err),
     );
   }
 
