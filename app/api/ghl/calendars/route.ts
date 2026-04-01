@@ -1,0 +1,22 @@
+import { NextResponse } from "next/server";
+import { requireAccountForUser } from "@/lib/auth/account";
+import { getCalendars } from "@/lib/ghl/calendars";
+import { getAccountGhlCredentials } from "@/lib/ghl";
+import { createServerClient } from "@/lib/supabase/server";
+
+export async function GET() {
+  const supabase = await createServerClient();
+  const session = await requireAccountForUser(supabase);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
+    const result = await getCalendars({ locationId, apiKey: accessToken });
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("[ghl-calendars-list]", error);
+    return NextResponse.json({ error: "Failed to fetch calendars" }, { status: 502 });
+  }
+}
