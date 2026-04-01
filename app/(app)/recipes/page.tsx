@@ -56,8 +56,8 @@ export default async function RecipesPage() {
     activations ?? [],
   );
 
-  const activeCount = recipes.filter((r) => r.activationStatus === "active").length;
-  const availableCount = recipes.filter((r) => r.activationStatus === "available").length;
+  const activeCount = recipes.filter((r) => r.status === "active").length;
+  const availableCount = recipes.filter((r) => r.status === "available").length;
 
   return (
     <div>

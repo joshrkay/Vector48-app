@@ -11,8 +11,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   let planSlug: string | undefined;
-  let trialEndsAt: string | null = null;
-  let businessName = "";
+  let trialDaysLeft: number | undefined;
 
   try {
     const supabase = await createServerClient();
@@ -28,8 +27,15 @@ export default async function AppLayout({
 
       if (account) {
         planSlug = account.plan_slug;
-        trialEndsAt = account.trial_ends_at ?? null;
-        businessName = account.business_name ?? "";
+        if (account.trial_ends_at) {
+          trialDaysLeft = Math.max(
+            0,
+            Math.ceil(
+              (new Date(account.trial_ends_at).getTime() - Date.now()) /
+                86400000
+            )
+          );
+        }
       }
     }
   } catch {
@@ -39,11 +45,11 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen bg-[var(--bg)]">
       <Sidebar
-        planSlug={planSlug ?? ""}
-        trialEndsAt={trialEndsAt}
+        planSlug={account.plan_slug}
+        trialEndsAt={account.trial_ends_at}
       />
       <div className="md:ml-60">
-        <TopBar businessName={businessName} />
+        <TopBar businessName={account.business_name} />
         <main className="p-4 md:p-6 pb-20 md:pb-6 max-w-6xl mx-auto">
           {children}
         </main>

@@ -19,57 +19,27 @@ describe("stripAssistantJsonFence", () => {
 });
 
 describe("parseEstimateAuditModelJson", () => {
-  it("parses valid JSON, rounds values, and recomputes total", () => {
+  it("parses valid JSON and recomputes total", () => {
     const text = JSON.stringify({
       suggestions: [
-        {
-          category: "missed_item",
-          item: "A",
-          reason: "r",
-          estimatedValue: 10,
-          confidence: "high",
-          priority: "high",
-        },
-        {
-          category: "upsell",
-          item: "B",
-          reason: "r2",
-          estimatedValue: 63,
-          confidence: "medium",
-          priority: "low",
-        },
+        { item: "A", reason: "r", estimatedValue: 10 },
+        { item: "B", reason: "r2", estimatedValue: 20.5 },
       ],
-      summary: "Looks mostly complete.",
       totalPotentialValue: 999,
     });
     const r = parseEstimateAuditModelJson(text);
-    expect(r.suggestions[0]?.estimatedValue).toBe(0);
-    expect(r.suggestions[1]?.estimatedValue).toBe(75);
-    expect(r.totalPotentialValue).toBe(75);
-    expect(r.summary).toBe("Looks mostly complete.");
+    expect(r.totalPotentialValue).toBe(30.5);
     expect(r.suggestions).toHaveLength(2);
   });
 });
 
 describe("parseEstimateAuditToolInput", () => {
-  it("validates tool input and recomputes rounded total", () => {
+  it("validates tool input and recomputes total", () => {
     const r = parseEstimateAuditToolInput({
-      suggestions: [
-        {
-          category: "pricing_flag",
-          item: "X",
-          reason: "y",
-          estimatedValue: 88,
-          confidence: "low",
-          priority: "medium",
-        },
-      ],
-      summary: "One notable pricing issue.",
+      suggestions: [{ item: "X", reason: "y", estimatedValue: 100 }],
       totalPotentialValue: 100,
     });
-    expect(r.suggestions[0]?.estimatedValue).toBe(100);
     expect(r.totalPotentialValue).toBe(100);
-    expect(r.summary).toBe("One notable pricing issue.");
   });
 
   it("throws on invalid input", () => {

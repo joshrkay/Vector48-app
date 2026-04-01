@@ -21,7 +21,7 @@ export function RecipeGrid({
 
   const filtered =
     filter === "active"
-      ? recipes.filter((r) => r.activationStatus === "active")
+      ? recipes.filter((r) => r.status === "active")
       : recipes;
 
   return (

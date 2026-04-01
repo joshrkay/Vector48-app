@@ -232,7 +232,9 @@ export async function provisionGHL(accountId: string): Promise<void> {
   if (currentStep < 3) {
     try {
       await updateLocation(locationId, {
-        name: account.business_name,
+        settings: {
+          businessName: account.business_name,
+        },
       }, locationOpts);
 
       await updateAccount(accountId, {
