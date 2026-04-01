@@ -580,9 +580,3 @@ export interface GHLCampaign {
   events: string[];
   secret?: string;
 }
-
-export interface GHLMessagesListResponse {
-  messages: GHLMessage[];
-  nextPage: boolean;
-  lastMessageId?: string;
-}
