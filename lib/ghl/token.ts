@@ -6,44 +6,31 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
-/**
- * Encrypt a plaintext token with AES-256-GCM.
- * Output format: base64(iv + ciphertext + authTag)
- */
-export function encryptToken(plaintext: string): string {
+type EncryptedTokenParts = {
+  iv: Buffer;
+  ciphertext: Buffer;
+  authTag: Buffer;
+};
+
+function getKey(): Buffer {
   const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
   if (!key) {
     throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
   }
 
   const keyBuffer = Buffer.from(key, "hex");
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv);
-
-  const encrypted = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
-  const tag = cipher.getAuthTag();
-
-  return Buffer.concat([iv, encrypted, tag]).toString("base64");
-}
-
-/**
- * Decrypt a token that was encrypted with AES-256-GCM.
- * Expected format: base64(iv + ciphertext + authTag)
- */
-function decryptToken(encrypted: string): string {
-  const key = process.env.GHL_TOKEN_ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error("GHL_TOKEN_ENCRYPTION_KEY is not configured");
+  if (keyBuffer.length !== 32) {
+    throw new Error("GHL_TOKEN_ENCRYPTION_KEY must be a 64-char hex string");
   }
 
+  return keyBuffer;
+}
+
+function parseEncryptedToken(encrypted: string): EncryptedTokenParts {
   const data = Buffer.from(encrypted, "base64");
   if (data.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
     throw new Error("Invalid encrypted token payload.");
   }
-
   return {
     iv: data.subarray(0, IV_LENGTH),
     ciphertext: data.subarray(IV_LENGTH, data.length - AUTH_TAG_LENGTH),
@@ -51,6 +38,10 @@ function decryptToken(encrypted: string): string {
   };
 }
 
+/**
+ * Encrypt a plaintext token with AES-256-GCM.
+ * Output format: base64(iv + ciphertext + authTag)
+ */
 export function encryptToken(plaintext: string): string {
   const key = getKey();
   const iv = randomBytes(IV_LENGTH);
@@ -64,10 +55,13 @@ export function encryptToken(plaintext: string): string {
   ]);
   const authTag = cipher.getAuthTag();
 
-  // Canonical format: base64(iv + ciphertext + authTag).
   return Buffer.concat([iv, ciphertext, authTag]).toString("base64");
 }
 
+/**
+ * Decrypt a token that was encrypted with AES-256-GCM.
+ * Expected format: base64(iv + ciphertext + authTag)
+ */
 export function decryptToken(encrypted: string): string {
   const key = getKey();
   const parts = parseEncryptedToken(encrypted);

@@ -69,8 +69,6 @@ export interface RecipeDefinition {
   name: string;
   description: string;
   detailedDescription: string;
-  /** When set, used for vertical-specific recommendations in the recipe grid */
-  vertical?: Vertical | null;
   funnelStage: FunnelStage;
   releasePhase: ReleasePhase;
   /** When set, recipe is scoped to that vertical; null = all verticals */
