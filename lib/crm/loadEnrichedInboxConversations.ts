@@ -38,7 +38,7 @@ export async function loadEnrichedInboxConversations(accountId: string): Promise
     ghlOpts,
   );
 
-  const uniqueIds = [...new Set(raw.map((c) => c.contactId))];
+  const uniqueIds = Array.from(new Set(raw.map((c) => c.contactId)));
   const contacts: Record<string, InboxContactPreview> = {};
 
   await Promise.all(
