@@ -3,10 +3,21 @@ import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
-import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
+import {
+  normalizeGHLEventType,
+  type GHLWebhookBase,
+  type GHLWebhookCallCompleted,
+  type GHLWebhookContactCreate,
+  type GHLWebhookContactUpdate,
+  type GHLWebhookConversationUnreadUpdate,
+  type GHLWebhookDiscriminatedPayload,
+  type GHLWebhookInboundMessage,
+  type GHLWebhookOpportunityCreate,
+  type GHLWebhookOpportunityStageUpdate,
+  type GHLWebhookAppointmentCreate,
+  type GHLWebhookAppointmentStatusUpdate,
+} from "@/lib/ghl/webhookTypes";
 
-// Timing-safe token comparison — hash both sides to fixed length so
-// timingSafeEqual never leaks the secret's length via early return.
 function verifyToken(provided: string | null, expected: string): boolean {
   if (!provided) return false;
   try {
@@ -18,8 +29,50 @@ function verifyToken(provided: string | null, expected: string): boolean {
   }
 }
 
+function narrowPayload(
+  normalizedType: ReturnType<typeof normalizeGHLEventType>,
+  body: Record<string, unknown>
+): GHLWebhookDiscriminatedPayload {
+  switch (normalizedType) {
+    case "contact_created":
+      return { normalizedType, payload: body as GHLWebhookContactCreate };
+    case "contact_updated":
+      return { normalizedType, payload: body as GHLWebhookContactUpdate };
+    case "call_completed":
+      return { normalizedType, payload: body as GHLWebhookCallCompleted };
+    case "message_received":
+      return { normalizedType, payload: body as GHLWebhookInboundMessage };
+    case "opportunity_created":
+      return { normalizedType, payload: body as GHLWebhookOpportunityCreate };
+    case "opportunity_moved":
+      return { normalizedType, payload: body as GHLWebhookOpportunityStageUpdate };
+    case "appointment_created":
+      return { normalizedType, payload: body as GHLWebhookAppointmentCreate };
+    case "appointment_updated":
+      return { normalizedType, payload: body as GHLWebhookAppointmentStatusUpdate };
+    case "conversation_unread":
+      return { normalizedType, payload: body as GHLWebhookConversationUnreadUpdate };
+    default:
+      return { normalizedType: "ghl_event", payload: body as GHLWebhookBase & Record<string, unknown> };
+  }
+}
+
 export async function POST(req: Request) {
-  // 1. Parse body
+  const parseStartedAt = Date.now();
+  let parseMs = 0;
+
+  // 1. Verify webhook token — secret must be configured
+  const webhookSecret = process.env.GHL_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error("[ghl-webhook] GHL_WEBHOOK_SECRET is not set. Rejecting request.");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const signature = req.headers.get("x-ghl-signature");
+  if (!verifyToken(signature, webhookSecret)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: Record<string, unknown>;
   const parseStartedAt = Date.now();
   try {
@@ -29,91 +82,52 @@ export async function POST(req: Request) {
   }
   parseMs = Date.now() - parseStartedAt;
 
-  // 2. Extract and validate location ID (casing varies across GHL events)
   const rawLocationId = body.locationId ?? body.location_id;
-  const locationId =
-    typeof rawLocationId === "string" && rawLocationId.length > 0
-      ? rawLocationId
-      : null;
+  const locationId = typeof rawLocationId === "string" && rawLocationId.length > 0 ? rawLocationId : null;
+
+  if (parseMs > 1000) {
+    console.warn(`[ghl-webhook] Slow payload parse: ${parseMs}ms`);
+  }
 
   if (!locationId) {
     console.warn("[ghl-webhook] Payload missing locationId:", body.type ?? body.event);
     return NextResponse.json({ received: true });
   }
 
-  // GHL location IDs are alphanumeric — reject anything unexpected
-  // to prevent PostgREST filter injection via special characters
   if (!/^[\w-]+$/.test(locationId)) {
     console.warn("[ghl-webhook] Invalid locationId format:", locationId);
     return NextResponse.json({ received: true });
   }
 
-  // 3. Look up account by GHL location ID
-  // Use .limit(1) instead of .single() to avoid errors when no rows match
   const supabase = getSupabaseAdmin();
-  const lookupStartedAt = Date.now();
-  const { data: accounts } = await supabase
-    .from("accounts")
-    .select("id, ghl_webhook_secret")
-    .eq("ghl_location_id", locationId)
-    .limit(1);
-  lookupMs = Date.now() - lookupStartedAt;
+  const { data: accounts } = await supabase.from("accounts").select("id").eq("ghl_location_id", locationId).limit(1);
 
   const account = accounts?.[0] ?? null;
   if (!account) {
-    // Don't retry — likely a deleted or unlinked account
     console.warn("[ghl-webhook] No account for locationId:", locationId);
     return NextResponse.json({ received: true });
   }
 
-  // 4. Verify webhook token using account-level shared secret
-  const providedTokenFromHeader = req.headers.get("x-ghl-signature");
-  const providedTokenFromBody =
-    (typeof body.token === "string" && body.token.length > 0
-      ? body.token
-      : null) ??
-    (typeof body.webhookSecret === "string" && body.webhookSecret.length > 0
-      ? body.webhookSecret
-      : null) ??
-    (typeof body.webhook_secret === "string" && body.webhook_secret.length > 0
-      ? body.webhook_secret
-      : null);
+  const rawType = (typeof body.type === "string" ? body.type : undefined) ??
+    (typeof body.event === "string" ? body.event : undefined) ??
+    "unknown";
+  const parsed = parseGHLWebhook(body, rawType);
 
-  const providedToken = providedTokenFromHeader ?? providedTokenFromBody;
-  const expectedToken = account.ghl_webhook_secret;
-  if (!expectedToken || !verifyToken(providedToken, expectedToken)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // 5. Parse event type and build normalized event
-  const ghlEventType = (body.type as string) ?? (body.event as string) ?? "unknown";
-  const parsed = parseGHLWebhook(body, ghlEventType);
   const eventRow = {
     ...parsed,
     account_id: account.id,
   };
 
-  // 5) Attempt deduplicated insert (conflict-safe for retries)
-  const insertStartedAt = Date.now();
-  const { error: insertError } = await supabase
-    .from("automation_events")
-    .upsert(eventRow, {
-      onConflict: "account_id,ghl_event_id",
-      ignoreDuplicates: true,
-    });
-  insertMs = Date.now() - insertStartedAt;
+  const { error: insertError } = await supabase.from("automation_events").insert(eventRow);
 
   if (insertError) {
+    if (insertError.code === "23505") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
     console.error("[ghl-webhook] Insert failed:", insertError.message);
     return NextResponse.json({ error: "Insert failed" }, { status: 500 });
   }
 
-  // 7. Fire-and-forget cache invalidation — must not block the response
-  Promise.resolve()
-    .then(() => invalidateGHLCache(account.id, ghlEventType))
-    .catch((err) => console.error("[ghl-webhook] Cache invalidation error:", err));
-
-  // 8. Fire side effects async — must not block the response
   processSideEffects(account.id, eventRow, body).catch((err) =>
     console.error("[ghl-webhook] Side effect error:", err)
   );
