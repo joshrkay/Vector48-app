@@ -69,6 +69,11 @@ export default function LoginPage() {
         return;
       }
 
+      if (!accountUser?.account_id) {
+        toast.error("Unable to find your account. Please contact support.");
+        return;
+      }
+
       const { data: account, error: accountError } = await supabase
         .from("accounts")
         .select("onboarding_done_at")
