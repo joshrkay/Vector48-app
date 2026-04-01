@@ -38,6 +38,7 @@ export interface GHLError {
 // ── Client Options (used by function-style wrappers) ───────────────────────
 
 export interface GHLClientOptions {
+  accountId?: string;
   locationId?: string;
   apiKey?: string;
   params?: Record<string, string | number | boolean | undefined>;
@@ -546,6 +547,7 @@ export interface GHLCreateWebhookPayload {
   locationId: string;
   url: string;
   events: GHLWebhookEvent[];
+  secret?: string;
 }
 
 export interface GHLWebhookResponse {
