@@ -111,9 +111,7 @@ export async function POST(req: Request) {
   const rawType = (typeof body.type === "string" ? body.type : undefined) ??
     (typeof body.event === "string" ? body.event : undefined) ??
     "unknown";
-  const normalizedType = normalizeGHLEventType(rawType);
-  const narrowed = narrowPayload(normalizedType, body);
-  const parsed = parseGHLWebhook(narrowed.payload as Record<string, unknown>, rawType);
+  const parsed = parseGHLWebhook(body, rawType);
 
   const eventRow = {
     ...parsed,
