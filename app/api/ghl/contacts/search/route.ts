@@ -3,28 +3,12 @@ import { requireAccountForUser } from "@/lib/auth/account";
 import { getContacts } from "@/lib/ghl/contacts";
 import { getAccountGhlCredentials } from "@/lib/ghl/token";
 import { createServerClient } from "@/lib/supabase/server";
-import {
-  type CRMContactSearchItem,
-  type CRMContactSearchResponse,
-} from "@/lib/crm/types";
+import type { CRMContactSearchItem } from "@/lib/crm/contactCache";
+import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_FETCH_LIMIT = 25;
 const MAX_RESULTS = 10;
-
-interface ContactSearchItem {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-}
-
-interface ContactSearchResponse {
-  contacts: ContactSearchItem[];
-  error: {
-    message: string;
-  } | null;
-}
 
 function normalizeContact(raw: {
   id?: string | null;
@@ -56,7 +40,7 @@ function scoreContact(contact: CRMContactSearchItem, query: string): number {
   const normalizedPhoneQuery = q.replace(/\D/g, "");
 
   const name = contact.name.toLowerCase();
-  const email = contact.email?.toLowerCase() ?? "";
+  const email = (contact.email ?? "").toLowerCase();
   const phoneDigits = (contact.phone ?? "").replace(/\D/g, "");
 
   if (name === q || email === q || (normalizedPhoneQuery && phoneDigits === normalizedPhoneQuery)) {
@@ -90,7 +74,7 @@ export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   if (!q) {
-    return NextResponse.json<ContactSearchResponse>({ contacts: [], error: null });
+    return NextResponse.json<CRMContactSearchResponse>({ contacts: [], error: null });
   }
 
   if (q.length < MIN_QUERY_LENGTH) {
@@ -106,7 +90,7 @@ export async function GET(request: NextRequest) {
   const session = await requireAccountForUser(supabase);
 
   if (!session) {
-    return NextResponse.json<ContactSearchResponse>(
+    return NextResponse.json<CRMContactSearchResponse>(
       { contacts: [], error: { message: "Unauthorized" } },
       { status: 401 },
     );
@@ -133,7 +117,7 @@ export async function GET(request: NextRequest) {
 
     const sorted = sortByRelevance(normalized, q).slice(0, MAX_RESULTS);
 
-    return NextResponse.json<ContactSearchResponse>({ contacts: sorted, error: null });
+    return NextResponse.json<CRMContactSearchResponse>({ contacts: sorted, error: null });
   } catch (error) {
     console.error("[ghl-contact-search] failed", error);
 

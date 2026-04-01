@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils";
 import { upsertContactsInCache } from "@/lib/crm/contactCache";
 import {
   type CRMContactSearchItem,
-  type CRMContactSearchResponse,
-} from "@/lib/crm/types";
+  upsertContactsInCache,
+} from "@/lib/crm/contactCache";
+import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
 
 const QUERY_CACHE_TTL_MS = 30_000;
 const queryCache = new Map<string, { expiresAt: number; contacts: CRMContactSearchItem[] }>();
@@ -28,7 +29,7 @@ async function searchContacts(query: string) {
   }
 
   const res = await fetch(`/api/ghl/contacts/search?q=${encodeURIComponent(query)}`);
-  const payload: ContactSearchPayload = await res.json();
+  const payload: CRMContactSearchResponse = await res.json();
 
   if (!res.ok) {
     throw new Error(payload.error?.message ?? "Failed to search contacts");
