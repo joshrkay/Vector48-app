@@ -5,6 +5,7 @@
 // Server-only.
 // ---------------------------------------------------------------------------
 
+import { cacheStore, ensureSweep } from "./cacheStore";
 import { getTierConfig } from "./tierConfig";
 import type { GHLClientOptions } from "./client";
 
@@ -122,6 +123,15 @@ async function withCache<T>(
 ): Promise<T> {
   const cacheKey = buildCacheKey(accountId, resource, params);
   const cacheTag = buildResourceTag(accountId, resource);
+  const cached = cacheStore.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data as T;
+  }
+
+  if (cached) {
+    cacheStore.delete(cacheKey);
+  }
 
   // Deduplicate concurrent requests for the same key (cache stampede protection)
   const pending = inflight.get(cacheKey);
@@ -133,7 +143,15 @@ async function withCache<T>(
     try {
       const config = await getTierConfig(accountId);
       const nextOpts = mergeOptions(opts, config.cacheTTL, [cacheTag]);
-      return fetcher(nextOpts);
+      const data = await fetcher(nextOpts);
+
+      cacheStore.set(cacheKey, {
+        data,
+        expiresAt: Date.now() + config.cacheTTL * 1_000,
+      });
+      ensureSweep();
+
+      return data;
     } finally {
       inflight.delete(cacheKey);
     }

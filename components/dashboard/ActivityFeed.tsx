@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Inbox } from "lucide-react";
-import { useSearchParams } from "next/navigation";
 import { ActivityItem } from "@/components/dashboard/ActivityItem";
 import { useRealtimeInserts } from "@/lib/supabase/realtime";
 import type { Database } from "@/lib/supabase/types";
@@ -14,18 +13,13 @@ interface ActivityFeedProps {
   initialItems: AutomationEvent[];
   initialNextCursor: string | null;
   accountId: string;
-  accountCreatedAt: string;
 }
 
 export function ActivityFeed({
   initialItems,
   initialNextCursor,
   accountId,
-  accountCreatedAt,
 }: ActivityFeedProps) {
-  const searchParams = useSearchParams();
-  const recipe = searchParams.get("recipe") ?? "all";
-
   const [items, setItems] = useState<AutomationEvent[]>(initialItems);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const [loading, setLoading] = useState(false);
@@ -51,7 +45,6 @@ export function ActivityFeed({
     try {
       const params = new URLSearchParams();
       params.set("cursor", nextCursor);
-      if (recipe !== "all") params.set("recipe", recipe);
       params.set("limit", "20");
 
       const res = await fetch(`/api/activity?${params.toString()}`);
@@ -67,12 +60,12 @@ export function ActivityFeed({
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [dedupeMerge, nextCursor, recipe]);
+  }, [dedupeMerge, nextCursor]);
 
   useEffect(() => {
     setItems(initialItems);
     setNextCursor(initialNextCursor);
-  }, [initialItems, initialNextCursor, recipe]);
+  }, [initialItems, initialNextCursor]);
 
   useEffect(() => {
     const target = sentinelRef.current;
@@ -109,8 +102,6 @@ export function ActivityFeed({
 
   const handleRealtimeInsert = useCallback(
     (newRow: AutomationEvent) => {
-      if (recipe !== "all" && newRow.recipe_slug !== recipe) return;
-
       if (window.scrollY > 120) {
         pendingPreserveRef.current = {
           height: document.body.scrollHeight,
@@ -120,28 +111,20 @@ export function ActivityFeed({
 
       setItems((prev) => dedupeMerge(prev, [newRow], true));
     },
-    [dedupeMerge, recipe],
+    [dedupeMerge],
   );
 
   useRealtimeInserts("automation_events", `account_id=eq.${accountId}`, handleRealtimeInsert);
 
-  const withinFirst24Hours = useMemo(() => {
-    const accountAgeMs = Date.now() - new Date(accountCreatedAt).getTime();
-    return accountAgeMs <= 24 * 60 * 60 * 1000;
-  }, [accountCreatedAt]);
-
-  if (items.length === 0 && withinFirst24Hours) {
+  if (items.length === 0) {
     return (
-      <section className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center">
-        <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
+      <section className="rounded-2xl border border-[#E2E8F0] bg-white p-10">
+        <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 text-center">
           <div className="rounded-full bg-slate-100 p-4">
-            <Inbox className="h-8 w-8 text-slate-500" />
+            <Inbox className="h-8 w-8 text-[#64748B]" />
           </div>
-          <p className="font-heading text-[18px] text-[var(--text-primary)]">
-            Your first automation is warming up.
-          </p>
-          <p className="text-sm text-[var(--text-secondary)]">
-            Activity will appear here once a recipe triggers.
+          <p className="text-[14px] text-[#64748B]">
+            No activity yet. Activate a recipe to get started.
           </p>
         </div>
       </section>
@@ -149,7 +132,7 @@ export function ActivityFeed({
   }
 
   return (
-    <section className="mt-4 space-y-3">
+    <section className="rounded-2xl border border-[#E2E8F0] bg-white px-4 py-1">
       <ul className="space-y-2">
         <AnimatePresence initial={false}>
           {items.map((event) => (
@@ -168,9 +151,9 @@ export function ActivityFeed({
       </ul>
 
       <div ref={sentinelRef} className="h-8" aria-hidden />
-      {loading ? <p className="text-center text-xs text-slate-500">Loading…</p> : null}
+      {loading ? <p className="pb-3 text-center text-xs text-slate-500">Loading…</p> : null}
       {!hasMore && items.length > 0 ? (
-        <p className="pb-2 text-center text-xs text-slate-400">You&apos;re all caught up.</p>
+        <p className="pb-3 text-center text-xs text-slate-400">You&apos;re all caught up.</p>
       ) : null}
     </section>
   );

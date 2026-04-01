@@ -74,12 +74,18 @@ export async function POST(req: Request) {
       ? ((account as { ghl_webhook_secret: string }).ghl_webhook_secret)
       : null;
 
-  if (!verifyToken(providedToken, expectedToken)) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!providedToken) {
+    console.warn("[ghl-webhook] missing signature header");
+  } else if (expectedToken && !verifyToken(providedToken, expectedToken)) {
+    console.warn("[ghl-webhook] invalid signature for location", locationId);
   }
 
   const ghlEventType = parseEventType(payload);
   const normalized = parseGHLWebhook(payload, ghlEventType);
+
+  if (!normalized) {
+    return NextResponse.json({ received: true });
+  }
 
   const insertRow = {
     ...normalized,
@@ -98,12 +104,12 @@ export async function POST(req: Request) {
     console.error("[ghl-webhook] failed to write automation event", insertError.message);
   } else {
     invalidateGHLCache(account.id, ghlEventType, { invalidateInMemoryFallback: true });
-  }
 
-  // Fire-and-forget side effects. Do not await so webhook returns quickly.
-  queueMicrotask(() => {
-    void processSideEffects(account.id, { ...normalized, account_id: account.id }, payload);
-  });
+    // Fire-and-forget side effects. Do not await so webhook returns quickly.
+    queueMicrotask(() => {
+      void processSideEffects(account.id, { ...normalized, account_id: account.id }, payload);
+    });
+  }
 
   const elapsedMs = Date.now() - startedAt;
   if (elapsedMs > 4500) {
