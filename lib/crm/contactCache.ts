@@ -1,9 +1,6 @@
-export interface CRMContactSearchItem {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-}
+import { type CRMContactSearchItem } from "@/lib/crm/types";
+
+export type { CRMContactSearchItem };
 
 const contactNameCache = new Map<string, CRMContactSearchItem>();
 

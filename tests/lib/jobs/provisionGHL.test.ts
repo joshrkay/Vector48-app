@@ -7,7 +7,7 @@ import {
   createMockAccount,
   setMockAccount,
 } from "../../mocks/supabase";
-import { encryptToken } from "@/lib/ghl/token";
+import { encryptToken } from "@/lib/ghl";
 import { provisionGHL } from "@/lib/jobs/provisionGHL";
 
 const ACCOUNT_ID = "acc_test_001";

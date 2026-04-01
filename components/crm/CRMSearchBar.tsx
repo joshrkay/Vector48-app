@@ -2,14 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "@/hooks/useSWR";
 import { Search } from "lucide-react";
 import useSWR from "swr";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { upsertContactsInCache } from "@/lib/crm/contactCache";
 import {
   type CRMContactSearchItem,
-  upsertContactsInCache,
-} from "@/lib/crm/contactCache";
+  type CRMContactSearchResponse,
+} from "@/lib/crm/types";
 
 async function searchContacts([endpoint, query]: readonly unknown[]) {
   if (typeof endpoint !== "string" || typeof query !== "string") {
@@ -118,7 +120,7 @@ export function CRMSearchBar() {
 
       {open && debouncedQuery ? (
         <div className="absolute z-30 mt-2 w-full rounded-lg border bg-white shadow-lg">
-          {isLoading ? (
+          {isLoading || isValidating ? (
             <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">Searching...</p>
           ) : visibleContacts.length ? (
             <ul className="max-h-80 overflow-auto py-1">
