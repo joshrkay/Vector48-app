@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR from "@/hooks/useSWR";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -44,14 +44,13 @@ export function CRMSearchBar() {
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const { data: contacts = [], isLoading, isValidating } = useSWR<CRMContactSearchItem[]>(
+  const { data: contacts = [], isLoading, isValidating } = useSWR<CRMContactSearchItem[], readonly [string, string]>(
     debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
     searchContacts,
     {
       dedupingInterval: 30_000,
       revalidateOnFocus: false,
       revalidateIfStale: false,
-      keepPreviousData: true,
     }
   );
 
