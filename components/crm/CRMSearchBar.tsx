@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "@/hooks/useSWR";
-import { Search } from "lucide-react";
 import useSWR from "swr";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { upsertContactsInCache } from "@/lib/crm/contactCache";
@@ -35,7 +34,7 @@ async function searchContacts(query: string): Promise<CRMContactSearchItem[]> {
     expiresAt: Date.now() + QUERY_CACHE_TTL_MS,
   });
 
-  return payload.items;
+  return payload.contacts;
 }
 
 export function CRMSearchBar() {
@@ -45,7 +44,7 @@ export function CRMSearchBar() {
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const { data: contacts = [], isLoading } = useSWR<CRMContactSearchItem[]>(
+  const { data: contacts = [], isLoading, isValidating } = useSWR<CRMContactSearchItem[]>(
     debouncedQuery ? ["/api/ghl/contacts/search", debouncedQuery] : null,
     searchContacts,
     {
@@ -64,40 +63,11 @@ export function CRMSearchBar() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const visibleContacts = useMemo(() => contacts, [contacts]);
-
   useEffect(() => {
     if (contacts.length) {
       upsertContactsInCache(contacts);
     }
-
-    let cancelled = false;
-
-    const run = async () => {
-      setIsLoading(true);
-      try {
-        const results = await searchContacts(debouncedQuery);
-        if (!cancelled) {
-          setContacts(results);
-          cacheContacts(results);
-        }
-      } catch {
-        if (!cancelled) {
-          setContacts([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQuery]);
+  }, [contacts]);
 
   const visibleContacts = useMemo(() => contacts, [contacts]);
 
