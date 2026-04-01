@@ -39,7 +39,8 @@ export default function LoginPage() {
     try {
       const supabase = createBrowserClient();
 
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
       });
@@ -49,13 +50,28 @@ export default function LoginPage() {
         return;
       }
 
+      const userId = authData.session?.user.id;
+
+      if (!userId) {
+        toast.error("Unable to load your account. Please try again.");
+        return;
+      }
+
       // Check onboarding status to decide redirect
-      const { data: account } = await supabase
-        .from("accounts")
-        .select("onboarding_done_at")
+      const { data: accountUser, error: accountUserError } = await supabase
+        .from("account_users")
+        .select("accounts(onboarding_done_at)")
+        .eq("user_id", userId)
         .single();
 
-      if (!account || !account.onboarding_done_at) {
+      if (accountUserError) {
+        toast.error("Unable to load your account. Please try again.");
+        return;
+      }
+
+      const onboardingDoneAt = accountUser.accounts?.[0]?.onboarding_done_at;
+
+      if (!onboardingDoneAt) {
         router.push("/onboarding");
       } else {
         router.push("/dashboard");
