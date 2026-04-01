@@ -126,7 +126,7 @@ export function CRMSearchBar() {
 
       {open && debouncedQuery ? (
         <div className="absolute z-30 mt-2 w-full rounded-lg border bg-white shadow-lg">
-          {isLoading || isValidating ? (
+          {isLoading ? (
             <p className="px-3 py-2 text-sm text-[var(--text-secondary)]">Searching...</p>
           ) : visibleContacts.length ? (
             <ul className="max-h-80 overflow-auto py-1">
