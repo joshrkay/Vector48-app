@@ -19,6 +19,7 @@ import type { RecipeActivationRow, RecipeWithStatus, Vertical } from "./types";
 export function mergeRecipesWithActivations(
   catalog: RecipeDefinition[],
   activations: RecipeActivationRow[],
+  accountVertical?: Vertical,
 ): RecipeWithStatus[] {
   const activationMap = new Map(
     activations.map((a) => [a.recipe_slug, a]),
@@ -30,10 +31,9 @@ export function mergeRecipesWithActivations(
     let status: RecipeWithStatus["status"];
     if (activation && activation.status === "active") {
       status = "active";
-    } else if (
-      activation &&
-      (activation.status === "paused" || activation.status === "error")
-    ) {
+    } else if (activation && activation.status === "error") {
+      status = "error";
+    } else if (activation && activation.status === "paused") {
       status = "paused";
     } else if (entry.releasePhase === "coming_soon") {
       status = "coming_soon";

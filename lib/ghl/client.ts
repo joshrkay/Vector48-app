@@ -308,23 +308,18 @@ export class GHLClient {
         ...rest,
       } as Record<string, string | number | boolean | undefined>);
     },
-
     get: (contactId: string) => {
       return this.get<GHLContactResponse>(`/contacts/${contactId}`);
     },
-
     create: (data: GHLCreateContactPayload) => {
       return this.post<GHLContactResponse>("/contacts/", data);
     },
-
     update: (contactId: string, data: GHLUpdateContactPayload) => {
       return this.put<GHLContactResponse>(`/contacts/${contactId}`, data);
     },
-
     search: (query: string, params?: Omit<GHLContactsListParams, "query">) => {
       return this.contacts.list({ ...params, query });
     },
-
     addTag: (contactId: string, tags: string[]) => {
       return this.post<GHLContactResponse>(`/contacts/${contactId}/tags`, { tags });
     },
@@ -336,7 +331,6 @@ export class GHLClient {
         { body: { tags } },
       );
     },
-
     getNotes: (contactId: string) => {
       return this.get<{ notes: GHLNote[] }>(`/contacts/${contactId}/notes`);
     },

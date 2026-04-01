@@ -31,7 +31,6 @@ function parseEncryptedToken(encrypted: string): EncryptedTokenParts {
   if (data.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
     throw new Error("Invalid encrypted token payload.");
   }
-
   return {
     iv: data.subarray(0, IV_LENGTH),
     ciphertext: data.subarray(IV_LENGTH, data.length - AUTH_TAG_LENGTH),
