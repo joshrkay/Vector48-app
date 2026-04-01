@@ -10,6 +10,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
 type AutomationEvent = Database["public"]["Tables"]["automation_events"]["Row"];
+const WARMUP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -29,7 +30,7 @@ export default async function DashboardPage() {
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, business_name, ghl_provisioning_status, ghl_provisioning_error")
+    .select("id, business_name, ghl_provisioning_status, ghl_provisioning_error, created_at")
     .eq("owner_user_id", user.id)
     .single();
 
@@ -103,6 +104,10 @@ export default async function DashboardPage() {
   const bannerAlerts = provisioningAlert
     ? [provisioningAlert, ...unresolvedAlerts]
     : unresolvedAlerts;
+  const accountCreatedAtMs = new Date(account.created_at).getTime();
+  const showWarmupEmptyState =
+    Number.isFinite(accountCreatedAtMs) &&
+    Date.now() - accountCreatedAtMs < WARMUP_WINDOW_MS;
 
   const greeting = getGreeting();
   const headline = account.business_name ? `${greeting}, ${account.business_name}` : greeting;
@@ -151,6 +156,7 @@ export default async function DashboardPage() {
             initialItems={initialItems}
             initialNextCursor={initialNextCursor}
             accountId={account.id}
+            showWarmupEmptyState={showWarmupEmptyState}
           />
         </div>
         <div className="lg:col-span-2">
