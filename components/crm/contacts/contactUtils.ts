@@ -85,3 +85,20 @@ export function normalizePhone(raw: string | null | undefined): string | null {
     digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
   return trimmed.length === 10 ? trimmed : null;
 }
+
+/**
+ * True when recipe_activations.config.phone matches the GHL contact phone
+ * using the same normalization as search / GHL-08 (10-digit US).
+ */
+export function activationConfigPhoneMatchesContact(
+  contactPhone: string | null | undefined,
+  config: Record<string, unknown> | null | undefined,
+): boolean {
+  const raw =
+    config?.phone === undefined || config?.phone === null
+      ? ""
+      : String(config.phone);
+  const c = normalizePhone(contactPhone);
+  const a = normalizePhone(raw);
+  return c !== null && a !== null && c === a;
+}

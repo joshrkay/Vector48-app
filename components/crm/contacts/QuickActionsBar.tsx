@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   MessageSquare,
   CalendarPlus,
@@ -22,6 +22,7 @@ import {
 import { AddAppointmentSheet } from "./AddAppointmentSheet";
 import { ActivationSheet } from "@/components/recipes/ActivationSheet";
 import { cn } from "@/lib/utils";
+import { normalizePhone } from "@/components/crm/contacts/contactUtils";
 import type { GHLContact, GHLOpportunity, GHLPipeline, GHLMessageType } from "@/lib/ghl/types";
 import type { RecipeWithStatus } from "@/lib/recipes/types";
 import type { AccountProfileSlice } from "@/lib/recipes/activationValidator";
@@ -73,6 +74,11 @@ export function QuickActionsBar({
 
   const primaryOpportunity = opportunities[0] ?? null;
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
+
+  const activationContactPrefill = useMemo(() => {
+    const p = normalizePhone(contact.phone);
+    return p ? { phone: p } : undefined;
+  }, [contact.phone]);
 
   function togglePanel(panel: ActivePanel) {
     setActivePanel((prev) => (prev === panel ? null : panel));
@@ -408,6 +414,7 @@ export function QuickActionsBar({
           recipe={activationRecipe}
           profile={profile}
           connectedProviders={connectedProviders}
+          contactPrefill={activationContactPrefill}
         />
       ) : null}
     </div>
