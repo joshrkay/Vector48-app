@@ -1,8 +1,4 @@
-import type { CRMContactSearchItem } from "@/lib/crm/contactCache";
-
-export interface CRMContactSearchResponse {
-  contacts: CRMContactSearchItem[];
-  error: {
-    message: string;
-  } | null;
-}
+export type {
+  CRMContactSearchItem,
+  CRMContactSearchResponse,
+} from "@/lib/crm/types";

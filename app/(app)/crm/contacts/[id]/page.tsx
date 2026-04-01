@@ -13,6 +13,7 @@ import { ContactTimeline } from "@/components/crm/contacts/ContactTimeline";
 import { ContactConversation } from "@/components/crm/contacts/ContactConversation";
 import { ContactRecipeStatus } from "@/components/crm/contacts/ContactRecipeStatus";
 import { ContactNotes } from "@/components/crm/contacts/ContactNotes";
+import { CRMContactCacheHydrator } from "@/components/crm/CRMContactCacheHydrator";
 import { activationConfigPhoneMatchesContact } from "@/components/crm/contacts/contactUtils";
 import type { Database } from "@/lib/supabase/types";
 import type { GHLConversation, GHLMessage, GHLClientOptions, GHLContactResponse } from "@/lib/ghl/types";
@@ -203,6 +204,8 @@ export default async function ContactDetailPage({
 
   return (
     <div className="space-y-4">
+      <CRMContactCacheHydrator contacts={[contact]} />
+
       {/* Back link */}
       <a
         href="/crm/contacts"
