@@ -18,6 +18,9 @@ function verifyToken(provided: string | null, expected: string): boolean {
 }
 
 export async function POST(req: Request) {
+  const bodyParseStartedAt = Date.now();
+  let bodyParseMs = 0;
+
   // 1. Verify webhook token — secret must be configured
   const webhookSecret = process.env.GHL_WEBHOOK_SECRET;
   if (!webhookSecret) {
@@ -37,6 +40,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  bodyParseMs = Date.now() - bodyParseStartedAt;
 
   // 3. Extract and validate location ID (casing varies across GHL events)
   const rawLocationId = body.locationId ?? body.location_id;
@@ -44,6 +48,10 @@ export async function POST(req: Request) {
     typeof rawLocationId === "string" && rawLocationId.length > 0
       ? rawLocationId
       : null;
+
+  if (bodyParseMs > 1000) {
+    console.warn(`[ghl-webhook] Slow payload parse: ${bodyParseMs}ms`);
+  }
 
   if (!locationId) {
     console.warn("[ghl-webhook] Payload missing locationId:", body.type ?? body.event);
