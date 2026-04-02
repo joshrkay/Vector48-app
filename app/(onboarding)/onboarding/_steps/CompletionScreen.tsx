@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useOnboarding } from "./WizardShell";
 
 const VERTICAL_LABELS: Record<string, string> = {
