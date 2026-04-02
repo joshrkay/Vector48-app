@@ -23,11 +23,6 @@ const PRESETS: {
     label: "7 Days a Week",
     desc: "Mon–Sun, 8am–6pm",
   },
-  {
-    value: "custom",
-    label: "Custom Hours",
-    desc: "Set your own schedule",
-  },
 ];
 
 export function BusinessHoursFields({
