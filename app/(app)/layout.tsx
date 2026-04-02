@@ -1,7 +1,9 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TabBar } from "@/components/layout/TabBar";
 import { TopBar } from "@/components/layout/TopBar";
+import { VoiceButton } from "@/components/shared/VoiceButton";
 import { createServerClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
 
 export default async function AppLayout({
   children,
@@ -11,6 +13,9 @@ export default async function AppLayout({
   let businessName = "";
   let planSlug = "";
   let trialEndsAt: string | null = null;
+  let accountId: string | null = null;
+  let vertical: Database["public"]["Enums"]["vertical"] | null = null;
+  let activeRecipes: string[] = [];
 
   try {
     const supabase = await createServerClient();
@@ -21,13 +26,23 @@ export default async function AppLayout({
     if (user) {
       const { data: account } = await supabase
         .from("accounts")
-        .select("business_name, plan_slug, trial_ends_at")
+        .select("id, business_name, plan_slug, trial_ends_at, vertical")
         .single();
 
       if (account) {
+        accountId = account.id;
         businessName = account.business_name ?? "";
         planSlug = account.plan_slug ?? "";
         trialEndsAt = account.trial_ends_at;
+        vertical = account.vertical;
+
+        const { data: activeRecipeRows } = await supabase
+          .from("recipe_activations")
+          .select("recipe_slug")
+          .eq("account_id", account.id)
+          .eq("status", "active");
+
+        activeRecipes = (activeRecipeRows ?? []).map((row) => row.recipe_slug);
       }
     }
   } catch {
@@ -43,6 +58,11 @@ export default async function AppLayout({
           {children}
         </main>
       </div>
+      <VoiceButton
+        accountId={accountId}
+        vertical={vertical}
+        activeRecipes={activeRecipes}
+      />
       <TabBar />
     </div>
   );
