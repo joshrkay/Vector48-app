@@ -11,15 +11,16 @@ import {
   displayName,
   getInitials,
   formatRelativeTime,
+  normalizePhone,
 } from "./contactUtils";
 import type { GHLContact } from "@/lib/ghl/types";
 
 interface ContactsTableProps {
   contacts: GHLContact[];
-  aiContactIds: Set<string>;
+  aiPhones: Set<string>;
 }
 
-export function ContactsTable({ contacts, aiContactIds }: ContactsTableProps) {
+export function ContactsTable({ contacts, aiPhones }: ContactsTableProps) {
   const router = useRouter();
 
   return (
@@ -42,7 +43,9 @@ export function ContactsTable({ contacts, aiContactIds }: ContactsTableProps) {
               const stage = deriveStage(contact.tags);
               const stageConfig = stage ? STAGE_CONFIG[stage] : null;
               const extraTags = nonStageTags(contact.tags);
-              const isAI = aiContactIds.has(contact.id);
+              
+              const p = normalizePhone(contact.phone);
+              const isAI = p ? aiPhones.has(p) : false;
               const name = displayName(contact);
 
               return (

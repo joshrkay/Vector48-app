@@ -15,7 +15,7 @@ import type { GHLContact } from "@/lib/ghl/types";
 interface ContactsClientShellProps {
   initialContacts: GHLContact[];
   initialNextCursor: string | null;
-  aiContactIds: string[];
+  aiPhones: string[];
   filter: string;
   accountId: string;
 }
@@ -23,7 +23,7 @@ interface ContactsClientShellProps {
 export function ContactsClientShell({
   initialContacts,
   initialNextCursor,
-  aiContactIds,
+  aiPhones,
   filter,
 }: ContactsClientShellProps) {
   const searchParams = useSearchParams();
@@ -34,7 +34,7 @@ export function ContactsClientShell({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
-  const aiSet = new Set(aiContactIds);
+  const aiSet = new Set(aiPhones);
   const isFetchingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -103,9 +103,9 @@ export function ContactsClientShell({
           No contacts found.
         </p>
       ) : isDesktop ? (
-        <ContactsTable contacts={contacts} aiContactIds={aiSet} />
+        <ContactsTable contacts={contacts} aiPhones={aiSet} />
       ) : (
-        <ContactsCardList contacts={contacts} aiContactIds={aiSet} />
+        <ContactsCardList contacts={contacts} aiPhones={aiSet} />
       )}
 
       {/* Infinite scroll sentinel */}

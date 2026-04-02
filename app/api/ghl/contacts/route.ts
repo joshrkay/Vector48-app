@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { getAccountGhlCredentials } from "@/lib/ghl";
-import { getContacts, createContact } from "@/lib/ghl/contacts";
+import { createContact } from "@/lib/ghl/contacts";
+import { cachedGHLClient } from "@/lib/ghl/cache";
 import { createServerClient } from "@/lib/supabase/server";
 
 const TAG_MAP: Record<string, string> = {
@@ -18,23 +19,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-
   const url = new URL(req.url);
   const cursor = url.searchParams.get("cursor") ?? undefined;
   const filter = url.searchParams.get("filter") ?? "all";
   const q = url.searchParams.get("q") ?? undefined;
 
-  const { contacts } = await getContacts(
-    {
-      locationId,
-      limit: 20,
-      startAfterId: cursor,
-      tag: TAG_MAP[filter],
-      query: q,
-    },
-    { locationId, apiKey: accessToken },
-  );
+  const { contacts } = await cachedGHLClient(session.accountId).getContacts({
+    limit: 20,
+    startAfterId: cursor,
+    tag: TAG_MAP[filter],
+    query: q,
+  });
 
   const nextCursor =
     contacts.length === 20 ? contacts[contacts.length - 1].id : null;
