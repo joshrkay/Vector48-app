@@ -62,8 +62,9 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
       storeRef.current.getState().setStepData(data);
 
       // Persist to DB
+      let result: { success?: boolean; error?: string } | undefined;
       if (currentStep < TOTAL_STEPS - 1) {
-        await saveOnboardingStep(accountId, currentStep, data);
+        result = await saveOnboardingStep(accountId, currentStep, data);
       } else {
         // Last step — complete onboarding
         const shouldActivateRecipe =
@@ -75,6 +76,12 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
           voiceGender: onboardingState.voiceGender,
           voiceGreeting: onboardingState.greetingText,
         });
+      }
+
+      if (result?.error) {
+        console.error("[onboarding] failed to persist step", result.error);
+        setIsSaving(false);
+        return;
       }
 
       storeRef.current.getState().nextStep();

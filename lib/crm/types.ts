@@ -6,8 +6,17 @@ export interface CRMContactSearchItem {
 }
 
 export interface CRMContactSearchResponse {
-  items: CRMContactSearchItem[];
+  contacts: CRMContactSearchItem[];
   error: {
     message: string;
   } | null;
+}
+
+export interface CRMContactSeed {
+  id?: string | null;
+  name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
 }

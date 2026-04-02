@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
+import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
 import { updateOpportunity } from "@/lib/ghl/opportunities";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
@@ -27,6 +28,11 @@ export async function PATCH(
   try {
     const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
     const result = await updateOpportunity(id, body, { locationId, apiKey: accessToken });
+
+    invalidateGHLCache(session.accountId, "OpportunityStageUpdate", {
+      invalidateInMemoryFallback: true,
+    });
+
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-opportunity-update]", error);

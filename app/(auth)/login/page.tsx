@@ -39,23 +39,45 @@ export default function LoginPage() {
     try {
       const supabase = createBrowserClient();
 
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
-      });
+      const { data: signInData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: values.email,
+          password: values.password,
+        });
 
       if (authError) {
-        toast.error("Invalid email or password");
+        const msg = authError.message.toLowerCase();
+        if (msg.includes("email not confirmed")) {
+          toast.error(
+            "Confirm your email using the link we sent, then try again.",
+          );
+        } else if (msg.includes("invalid login credentials")) {
+          toast.error("Invalid email or password.");
+        } else {
+          toast.error(authError.message);
+        }
         return;
       }
 
-      // Check onboarding status to decide redirect
+      if (!signInData.user) {
+        toast.error("Sign-in did not return a user. Try again.");
+        return;
+      }
+
+      router.refresh();
+
       const { data: account } = await supabase
         .from("accounts")
-        .select("onboarding_done_at")
-        .single();
+        .select("onboarding_done_at, onboarding_completed_at, ghl_provisioning_status")
+        .eq("owner_user_id", signInData.user.id)
+        .maybeSingle();
 
-      if (!account || !account.onboarding_done_at) {
+      const onboardingDone =
+        Boolean(account?.onboarding_done_at) ||
+        Boolean(account?.onboarding_completed_at) ||
+        account?.ghl_provisioning_status === "failed";
+
+      if (!account || !onboardingDone) {
         router.push("/onboarding");
       } else {
         router.push("/dashboard");

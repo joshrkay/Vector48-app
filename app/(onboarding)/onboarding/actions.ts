@@ -122,9 +122,14 @@ export async function completeOnboarding(
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
-      onboarding_done_at: new Date().toISOString(),
       onboarding_step: 8,
-      activate_recipe_1: activateRecipe1,
+      activate_recipe_1: activateRecipe,
+      onboarding_completed_at: null,
+      onboarding_done_at: null,
+      ghl_provisioning_status: "pending",
+      ghl_provisioning_error: null,
+      provisioning_status: "pending",
+      provisioning_error: null,
     })
     .eq("id", accountId);
 
@@ -133,8 +138,6 @@ export async function completeOnboarding(
   }
 
   // Optionally create Recipe 1 activation row (before background provisioning)
-  let activationId: string | undefined;
-
   if (activateRecipe) {
     const config = voiceConfig
       ? {
@@ -156,10 +159,6 @@ export async function completeOnboarding(
 
     if (recipeError || !activation) {
       return { error: getErrorMessage(recipeError) ?? "Failed to create activation" };
-    }
-
-    if (recipeError) {
-      return { error: recipeError.message };
     }
   }
 

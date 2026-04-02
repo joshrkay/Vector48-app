@@ -47,6 +47,8 @@ export interface RecipeConfigFormProps {
   formId: string;
   onSubmit: (data: Record<string, unknown>) => void;
   className?: string;
+  /** Pre-fill editable fields when activating from a CRM contact (e.g. phone). Profile-locked fields win. */
+  contactPrefill?: Record<string, unknown>;
 }
 
 export function RecipeConfigForm({
@@ -55,6 +57,7 @@ export function RecipeConfigForm({
   formId,
   onSubmit,
   className,
+  contactPrefill,
 }: RecipeConfigFormProps) {
   const { lockedKeys, lockedValues, editableFields } = useMemo(() => {
     const locked = new Set<string>();
@@ -83,12 +86,25 @@ export function RecipeConfigForm({
   const defaultValues = useMemo(() => {
     const v: Record<string, unknown> = {};
     for (const f of editableFields) {
-      if (f.type === "toggle" || f.type === "boolean") v[f.name] = false;
+      const pre = contactPrefill?.[f.name];
+      const hasPre =
+        pre !== undefined &&
+        pre !== null &&
+        (typeof pre !== "string" || pre.trim() !== "");
+
+      if (hasPre) {
+        if (f.type === "toggle" || f.type === "boolean") v[f.name] = Boolean(pre);
+        else if (f.type === "number")
+          v[f.name] = typeof pre === "number" ? pre : Number(pre);
+        else if (f.type === "phone")
+          v[f.name] = String(pre).replace(/\D/g, "").slice(0, 10);
+        else v[f.name] = String(pre);
+      } else if (f.type === "toggle" || f.type === "boolean") v[f.name] = false;
       else if (f.type === "number") v[f.name] = undefined;
       else v[f.name] = "";
     }
     return v;
-  }, [editableFields]);
+  }, [editableFields, contactPrefill]);
 
   const form = useForm<Record<string, unknown>>({
     resolver: zodResolver(schema),

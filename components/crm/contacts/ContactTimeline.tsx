@@ -1,34 +1,66 @@
 "use client";
 
 import { useMemo } from "react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, StickyNote } from "lucide-react";
 import { ActivityItem } from "@/components/dashboard/ActivityItem";
 import { formatRelativeTime } from "@/lib/dashboard/formatRelativeTime";
 import type { Database } from "@/lib/supabase/types";
-import type { GHLMessage } from "@/lib/ghl/types";
+import type { GHLMessage, GHLNote } from "@/lib/ghl/types";
 
 type AutomationEvent = Database["public"]["Tables"]["automation_events"]["Row"];
 
 interface TimelineItem {
   id: string;
   timestamp: string;
-  source: "automation_event" | "ghl_message";
+  source: "automation_event" | "ghl_message" | "ghl_note";
   automationEvent?: AutomationEvent;
   ghlMessage?: GHLMessage;
+  ghlNote?: GHLNote;
 }
 
 interface Props {
   automationEvents: AutomationEvent[] | null;
+  /** null when the conversations/messages fetch failed (distinct from empty thread). */
   ghlMessages: GHLMessage[] | null;
+  /** null when the GHL notes fetch failed. */
+  ghlNotes: GHLNote[] | null;
+}
+
+function detailMaybeNoteId(detail: AutomationEvent["detail"]): string | null {
+  if (!detail || typeof detail !== "object") return null;
+  const o = detail as Record<string, unknown>;
+  const id =
+    typeof o.noteId === "string"
+      ? o.noteId
+      : typeof o.note_id === "string"
+        ? o.note_id
+        : typeof o.ghl_note_id === "string"
+          ? o.ghl_note_id
+          : null;
+  return id;
+}
+
+function detailMaybeMessageId(detail: AutomationEvent["detail"]): string | null {
+  if (!detail || typeof detail !== "object") return null;
+  const o = detail as Record<string, unknown>;
+  return typeof o.messageId === "string"
+    ? o.messageId
+    : typeof o.message_id === "string"
+      ? o.message_id
+      : typeof o.ghl_message_id === "string"
+        ? o.ghl_message_id
+        : null;
 }
 
 function mergeTimeline(
   automationEvents: AutomationEvent[],
-  ghlMessages: GHLMessage[],
+  ghlMessages: GHLMessage[] | null,
+  ghlNotes: GHLNote[] | null,
 ): TimelineItem[] {
   const items = new Map<string, TimelineItem>();
+  const noteIdsInAutomation = new Set<string>();
+  const messageIdsInAutomation = new Set<string>();
 
-  // Automation events first — ghl_event_id is the dedup key
   for (const event of automationEvents) {
     const key = event.ghl_event_id ?? `local-${event.id}`;
     items.set(key, {
@@ -37,10 +69,15 @@ function mergeTimeline(
       source: "automation_event",
       automationEvent: event,
     });
+    const nid = detailMaybeNoteId(event.detail);
+    if (nid) noteIdsInAutomation.add(nid);
+    const mid = detailMaybeMessageId(event.detail);
+    if (mid) messageIdsInAutomation.add(mid);
   }
 
-  // GHL messages — skip if already covered by automation_events
-  for (const msg of ghlMessages) {
+  const messages = ghlMessages ?? [];
+  for (const msg of messages) {
+    if (messageIdsInAutomation.has(msg.id)) continue;
     if (!items.has(msg.id)) {
       items.set(msg.id, {
         id: msg.id,
@@ -49,6 +86,19 @@ function mergeTimeline(
         ghlMessage: msg,
       });
     }
+  }
+
+  const notes = ghlNotes ?? [];
+  for (const note of notes) {
+    if (noteIdsInAutomation.has(note.id)) continue;
+    const key = `ghl-note-${note.id}`;
+    if (items.has(note.id) || items.has(key)) continue;
+    items.set(key, {
+      id: key,
+      timestamp: note.dateAdded,
+      source: "ghl_note",
+      ghlNote: note,
+    });
   }
 
   return Array.from(items.values()).sort(
@@ -76,15 +126,39 @@ function GHLMessageItem({ message }: { message: GHLMessage }) {
   );
 }
 
-export function ContactTimeline({ automationEvents, ghlMessages }: Props) {
+function GHLNoteItem({ note }: { note: GHLNote }) {
+  return (
+    <article className="border-l-4 border-l-amber-400 bg-white px-4 py-3">
+      <div className="flex items-start gap-3">
+        <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <div className="min-w-0">
+          <p className="text-sm text-[var(--text-primary)]">
+            Note
+            {note.body ? `: ${note.body.slice(0, 120)}${note.body.length > 120 ? "…" : ""}` : ""}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {formatRelativeTime(note.dateAdded)}
+          </p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function ContactTimeline({
+  automationEvents,
+  ghlMessages,
+  ghlNotes,
+}: Props) {
   const nowTick = Date.now();
 
   const items = useMemo(
-    () => mergeTimeline(automationEvents ?? [], ghlMessages ?? []),
-    [automationEvents, ghlMessages],
+    () => mergeTimeline(automationEvents ?? [], ghlMessages, ghlNotes),
+    [automationEvents, ghlMessages, ghlNotes],
   );
 
-  const hasError = automationEvents === null && ghlMessages === null;
+  const hasError =
+    automationEvents === null && ghlMessages === null && ghlNotes === null;
 
   return (
     <div className="rounded-2xl border border-[var(--v48-border)] bg-white">
@@ -107,8 +181,10 @@ export function ContactTimeline({ automationEvents, ghlMessages }: Props) {
                 event={item.automationEvent}
                 nowTick={nowTick}
               />
-            ) : item.ghlMessage ? (
+            ) : item.source === "ghl_message" && item.ghlMessage ? (
               <GHLMessageItem key={item.id} message={item.ghlMessage} />
+            ) : item.source === "ghl_note" && item.ghlNote ? (
+              <GHLNoteItem key={item.id} note={item.ghlNote} />
             ) : null,
           )}
         </div>

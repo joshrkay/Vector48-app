@@ -63,24 +63,31 @@ export async function middleware(request: NextRequest) {
   if (user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
     const { data: account } = await supabase
       .from("accounts")
-      .select("trial_ends_at, plan_slug, onboarding_completed_at")
-      .single();
+      .select(
+        "trial_ends_at, plan_slug, onboarding_completed_at, onboarding_done_at, ghl_provisioning_status",
+      )
+      .eq("owner_user_id", user.id)
+      .maybeSingle();
+
+    const onboardingComplete =
+      Boolean(account?.onboarding_completed_at) ||
+      Boolean(account?.onboarding_done_at) ||
+      account?.ghl_provisioning_status === "failed";
+
+    if (!onboardingComplete && !pathname.startsWith("/onboarding")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/onboarding";
+      return NextResponse.redirect(url);
+    }
 
     if (account) {
-      // Onboarding gate — force incomplete onboarding to /onboarding
-      if (!account.onboarding_completed_at && !pathname.startsWith("/onboarding")) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/onboarding";
-        return NextResponse.redirect(url);
-      }
-
       // Trial expiry check
       const trialExpired =
         account.trial_ends_at &&
         new Date(account.trial_ends_at) < new Date();
       const isTrialPlan = account.plan_slug === "trial";
       const isAllowedRoute = TRIAL_ALLOWED_ROUTES.some((r) =>
-        pathname.startsWith(r)
+        pathname.startsWith(r),
       );
 
       if (

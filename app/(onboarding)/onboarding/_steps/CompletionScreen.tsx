@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
@@ -18,6 +20,124 @@ export function CompletionScreen() {
   const businessName = useOnboarding((s) => s.businessName);
   const vertical = useOnboarding((s) => s.vertical);
   const activateRecipe1 = useOnboarding((s) => s.activateRecipe1);
+  const [status, setStatus] = useState<
+    "booting" | "pending" | "in_progress" | "complete" | "failed"
+  >("booting");
+  const [error, setError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    async function fetchStatus() {
+      const response = await fetch(
+        `/api/onboarding/provision/status?accountId=${encodeURIComponent(accountId)}`,
+        { cache: "no-store" },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Status request failed: ${response.status}`);
+      }
+
+      return (await response.json()) as {
+        status: "pending" | "in_progress" | "complete" | "failed";
+        error?: string;
+      };
+    }
+
+    async function startProvisioning() {
+      try {
+        const response = await fetch("/api/onboarding/provision", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountId }),
+        });
+
+        if (!response.ok && response.status !== 409) {
+          throw new Error(`Provision request failed: ${response.status}`);
+        }
+
+        const next = await fetchStatus();
+        if (cancelled) return;
+
+        setStatus(next.status);
+        setError(next.error ?? null);
+
+        if (next.status === "complete") {
+          router.replace("/dashboard");
+          return;
+        }
+
+        intervalId = setInterval(() => {
+          void fetchStatus()
+            .then((payload) => {
+              if (cancelled) return;
+              setStatus(payload.status);
+              setError(payload.error ?? null);
+              if (payload.status === "complete") {
+                router.replace("/dashboard");
+              }
+            })
+            .catch((requestError) => {
+              if (cancelled) return;
+              console.error("[onboarding] status polling failed", requestError);
+              setStatus("failed");
+              setError("Unable to check provisioning status.");
+            });
+        }, 2000);
+      } catch (requestError) {
+        if (cancelled) return;
+        console.error("[onboarding] failed to start provisioning", requestError);
+        setStatus("failed");
+        setError("Unable to start provisioning.");
+      }
+    }
+
+    void startProvisioning();
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [accountId, router]);
+
+  const statusCopy = useMemo(() => {
+    if (status === "failed") {
+      return error ?? "Provisioning failed. You can retry now.";
+    }
+    if (status === "complete") {
+      return "Account setup is complete. Redirecting you now.";
+    }
+    if (activateRecipe1) {
+      return "Setting up your account, webhook subscriptions, and AI Phone Answering.";
+    }
+    return "Setting up your account and webhook subscriptions.";
+  }, [activateRecipe1, error, status]);
+
+  async function retryProvisioning() {
+    try {
+      setIsRetrying(true);
+      setError(null);
+      const response = await fetch("/api/onboarding/provision/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Retry failed: ${response.status}`);
+      }
+
+      window.location.reload();
+    } catch (requestError) {
+      console.error("[onboarding] retry failed", requestError);
+      setStatus("failed");
+      setError("Retry failed. Open the dashboard and try again from the alert banner.");
+    } finally {
+      setIsRetrying(false);
+    }
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#0F1E35] px-4">
@@ -37,7 +157,7 @@ export function CompletionScreen() {
           transition={{ delay: 0.3 }}
           className="mt-6 text-center font-heading text-[28px] font-bold text-[#0F1E35]"
         >
-          You&apos;re live.
+          {status === "failed" ? "Setup paused." : "Setting up your account..."}
         </motion.h1>
 
         <motion.div
@@ -50,7 +170,9 @@ export function CompletionScreen() {
             <span className="font-semibold text-slate-900">{businessName}</span> is set up for{" "}
             <span className="font-semibold text-slate-900">{VERTICAL_LABELS[vertical] || vertical}</span>.
           </p>
-          {activateRecipe1 && <p className="text-teal-600">AI Phone Answering is active and ready.</p>}
+          <p className={status === "failed" ? "text-[#B45309]" : "text-accent"}>
+            {statusCopy}
+          </p>
         </motion.div>
 
         <motion.div
@@ -58,13 +180,29 @@ export function CompletionScreen() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
         >
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="mt-8 inline-flex h-12 w-full items-center justify-center rounded-xl bg-teal-500 text-sm font-semibold text-white transition-colors hover:bg-teal-600"
-          >
-            Go to Dashboard
-          </button>
+          {status === "failed" ? (
+            <div className="mt-8 space-y-3">
+              <button
+                type="button"
+                onClick={() => void retryProvisioning()}
+                disabled={isRetrying}
+                className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-accent text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isRetrying ? "Retrying..." : "Retry setup"}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-border text-sm font-semibold text-text-primary transition-colors hover:bg-white"
+              >
+                Open dashboard
+              </button>
+            </div>
+          ) : (
+            <div className="mt-8 inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#E2E8F0] text-sm font-semibold text-[#475569]">
+              {status === "complete" ? "Redirecting..." : "Working..."}
+            </div>
+          )}
         </motion.div>
       </div>
     </div>

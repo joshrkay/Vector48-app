@@ -13,7 +13,8 @@ import { ContactTimeline } from "@/components/crm/contacts/ContactTimeline";
 import { ContactConversation } from "@/components/crm/contacts/ContactConversation";
 import { ContactRecipeStatus } from "@/components/crm/contacts/ContactRecipeStatus";
 import { ContactNotes } from "@/components/crm/contacts/ContactNotes";
-import { formatRelativeTime } from "@/lib/dashboard/formatRelativeTime";
+import { CRMContactCacheHydrator } from "@/components/crm/CRMContactCacheHydrator";
+import { activationConfigPhoneMatchesContact } from "@/components/crm/contacts/contactUtils";
 import type { Database } from "@/lib/supabase/types";
 import type { GHLConversation, GHLMessage, GHLClientOptions, GHLContactResponse } from "@/lib/ghl/types";
 import type { AccountProfileSlice } from "@/lib/recipes/activationValidator";
@@ -45,25 +46,22 @@ async function fetchDbData(
   ]);
 
   const automationEvents =
-    eventsResult.status === "fulfilled"
+    eventsResult.status === "fulfilled" && !eventsResult.value.error
       ? ((eventsResult.value.data ?? []) as AutomationEvent[])
       : null;
 
   const allActivations =
-    activationsResult.status === "fulfilled"
+    activationsResult.status === "fulfilled" && !activationsResult.value.error
       ? (activationsResult.value.data ?? [])
       : [];
 
-  // Match activations to this contact by phone (normalize to digits)
-  const contactDigits = (contactPhone ?? "").replace(/\D/g, "");
-  const matchedActivations: RecipeActivationRow[] =
-    contactDigits.length > 0
-      ? allActivations.filter((ra: RecipeActivationRow) => {
-          const cfg = ra.config as Record<string, unknown> | null;
-          const raDigits = String(cfg?.phone ?? "").replace(/\D/g, "");
-          return raDigits.length > 0 && raDigits === contactDigits;
-        })
-      : [];
+  const matchedActivations: RecipeActivationRow[] = allActivations.filter(
+    (ra: RecipeActivationRow) =>
+      activationConfigPhoneMatchesContact(
+        contactPhone,
+        ra.config as Record<string, unknown> | null,
+      ),
+  );
 
   return { automationEvents, allActivations, matchedActivations };
 }
@@ -144,17 +142,15 @@ export default async function ContactDetailPage({
 
   // Re-run phone-based recipe matching now that we have the contact phone
   let dbData = dbResult.status === "fulfilled" ? dbResult.value : null;
-  if (dbData && contact.phone) {
-    const contactDigits = contact.phone.replace(/\D/g, "");
+  if (dbData) {
     dbData = {
       ...dbData,
-      matchedActivations: contactDigits
-        ? dbData.allActivations.filter((ra: RecipeActivationRow) => {
-            const cfg = ra.config as Record<string, unknown> | null;
-            const raDigits = String(cfg?.phone ?? "").replace(/\D/g, "");
-            return raDigits.length > 0 && raDigits === contactDigits;
-          })
-        : [],
+      matchedActivations: dbData.allActivations.filter((ra: RecipeActivationRow) =>
+        activationConfigPhoneMatchesContact(
+          contact.phone,
+          ra.config as Record<string, unknown> | null,
+        ),
+      ),
     };
   }
 
@@ -166,6 +162,10 @@ export default async function ContactDetailPage({
     convResult.status === "fulfilled" ? convResult.value.conversations : [];
   const allMessages =
     convResult.status === "fulfilled" ? convResult.value.messages : [];
+  const ghlMessagesForTimeline =
+    convResult.status === "fulfilled" ? convResult.value.messages : null;
+  const ghlNotesForTimeline =
+    notesResult.status === "fulfilled" ? (notesResult.value.notes ?? []) : null;
 
   const appointments =
     apptResult.status === "fulfilled" ? (apptResult.value.events ?? []) : null;
@@ -180,7 +180,7 @@ export default async function ContactDetailPage({
     pipelinesResult.status === "fulfilled" ? (pipelinesResult.value.pipelines ?? []) : [];
 
   const connectedProviders =
-    integrationsResult.status === "fulfilled"
+    integrationsResult.status === "fulfilled" && !integrationsResult.value.error
       ? ((integrationsResult.value.data ?? []) as { status: string; provider: string }[])
           .filter((r) => r.status === "connected")
           .map((r) => r.provider)
@@ -202,13 +202,10 @@ export default async function ContactDetailPage({
 
   const primaryConversationId = conversations[0]?.id ?? null;
 
-  const contactName =
-    contact.name ||
-    `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim() ||
-    "Contact";
-
   return (
     <div className="space-y-4">
+      <CRMContactCacheHydrator contacts={[contact]} />
+
       {/* Back link */}
       <a
         href="/crm/contacts"
@@ -237,7 +234,8 @@ export default async function ContactDetailPage({
           {/* 3. Activity Timeline */}
           <ContactTimeline
             automationEvents={automationEvents}
-            ghlMessages={allMessages}
+            ghlMessages={ghlMessagesForTimeline}
+            ghlNotes={ghlNotesForTimeline}
           />
 
           {/* 4. Conversations */}

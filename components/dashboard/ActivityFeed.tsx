@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Inbox } from "lucide-react";
-import { useSearchParams } from "next/navigation";
 import { ActivityItem } from "@/components/dashboard/ActivityItem";
 import { useRealtimeInserts } from "@/lib/supabase/realtime";
 import type { Database } from "@/lib/supabase/types";
@@ -14,18 +13,15 @@ interface ActivityFeedProps {
   initialItems: AutomationEvent[];
   initialNextCursor: string | null;
   accountId: string;
-  accountCreatedAt: string;
+  showWarmupEmptyState: boolean;
 }
 
 export function ActivityFeed({
   initialItems,
   initialNextCursor,
   accountId,
-  accountCreatedAt,
+  showWarmupEmptyState,
 }: ActivityFeedProps) {
-  const searchParams = useSearchParams();
-  const recipe = searchParams.get("recipe") ?? "all";
-
   const [items, setItems] = useState<AutomationEvent[]>(initialItems);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const [loading, setLoading] = useState(false);
@@ -51,7 +47,6 @@ export function ActivityFeed({
     try {
       const params = new URLSearchParams();
       params.set("cursor", nextCursor);
-      if (recipe !== "all") params.set("recipe", recipe);
       params.set("limit", "20");
 
       const res = await fetch(`/api/activity?${params.toString()}`);
@@ -67,12 +62,12 @@ export function ActivityFeed({
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [dedupeMerge, nextCursor, recipe]);
+  }, [dedupeMerge, nextCursor]);
 
   useEffect(() => {
     setItems(initialItems);
     setNextCursor(initialNextCursor);
-  }, [initialItems, initialNextCursor, recipe]);
+  }, [initialItems, initialNextCursor]);
 
   useEffect(() => {
     const target = sentinelRef.current;
@@ -109,8 +104,6 @@ export function ActivityFeed({
 
   const handleRealtimeInsert = useCallback(
     (newRow: AutomationEvent) => {
-      if (recipe !== "all" && newRow.recipe_slug !== recipe) return;
-
       if (window.scrollY > 120) {
         pendingPreserveRef.current = {
           height: document.body.scrollHeight,
@@ -120,36 +113,63 @@ export function ActivityFeed({
 
       setItems((prev) => dedupeMerge(prev, [newRow], true));
     },
-    [dedupeMerge, recipe],
+    [dedupeMerge],
   );
 
   useRealtimeInserts("automation_events", `account_id=eq.${accountId}`, handleRealtimeInsert);
 
-  const withinFirst24Hours = useMemo(() => {
-    const accountAgeMs = Date.now() - new Date(accountCreatedAt).getTime();
-    return accountAgeMs <= 24 * 60 * 60 * 1000;
-  }, [accountCreatedAt]);
-
-  if (items.length === 0 && withinFirst24Hours) {
+  if (items.length === 0) {
     return (
-      <section className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center">
-        <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
-          <div className="rounded-full bg-slate-100 p-4">
-            <Inbox className="h-8 w-8 text-slate-500" />
-          </div>
-          <p className="font-heading text-[18px] text-[var(--text-primary)]">
-            Your first automation is warming up.
-          </p>
-          <p className="text-sm text-[var(--text-secondary)]">
-            Activity will appear here once a recipe triggers.
-          </p>
+      <section className="rounded-2xl border border-[#E2E8F0] bg-white p-10">
+        <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 text-center">
+          {showWarmupEmptyState ? (
+            <>
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F8FAFC_0%,#E2E8F0_100%)]">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 80 80"
+                  className="h-14 w-14 text-[#0F766E]"
+                  fill="none"
+                >
+                  <circle cx="54" cy="22" r="7" fill="#F59E0B" opacity="0.2" />
+                  <path
+                    d="M54 15.5l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5 1.5-4Z"
+                    fill="#F59E0B"
+                  />
+                  <path
+                    d="M39.3 23.1a4 4 0 0 1 1.4 0l2.2-4.8 5.6 2.3-1.9 5a18.4 18.4 0 0 1 3.4 3.4l5-1.9 2.3 5.6-4.8 2.2a4 4 0 0 1 0 1.4l4.8 2.2-2.3 5.6-5-1.9a18.4 18.4 0 0 1-3.4 3.4l1.9 5-5.6 2.3-2.2-4.8a4 4 0 0 1-1.4 0l-2.2 4.8-5.6-2.3 1.9-5a18.4 18.4 0 0 1-3.4-3.4l-5 1.9-2.3-5.6 4.8-2.2a4 4 0 0 1 0-1.4l-4.8-2.2 2.3-5.6 5 1.9a18.4 18.4 0 0 1 3.4-3.4l-1.9-5 5.6-2.3 2.2 4.8Z"
+                    stroke="#0F766E"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx="40" cy="36" r="7.5" stroke="#0F766E" strokeWidth="3" />
+                </svg>
+              </div>
+              <p className="font-heading text-[18px] text-[#0F1923]">
+                Your first automation is warming up.
+              </p>
+              <p className="max-w-[320px] text-[14px] text-[#64748B]">
+                Activity will appear here once a recipe triggers.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="rounded-full bg-slate-100 p-4">
+                <Inbox className="h-8 w-8 text-[#64748B]" />
+              </div>
+              <p className="text-[14px] text-[#64748B]">
+                No activity yet. Activate a recipe to get started.
+              </p>
+            </>
+          )}
         </div>
       </section>
     );
   }
 
   return (
-    <section className="mt-4 space-y-3">
+    <section className="rounded-2xl border border-[#E2E8F0] bg-white px-4 py-1">
       <ul className="space-y-2">
         <AnimatePresence initial={false}>
           {items.map((event) => (
@@ -168,9 +188,9 @@ export function ActivityFeed({
       </ul>
 
       <div ref={sentinelRef} className="h-8" aria-hidden />
-      {loading ? <p className="text-center text-xs text-slate-500">Loading…</p> : null}
+      {loading ? <p className="pb-3 text-center text-xs text-slate-500">Loading…</p> : null}
       {!hasMore && items.length > 0 ? (
-        <p className="pb-2 text-center text-xs text-slate-400">You&apos;re all caught up.</p>
+        <p className="pb-3 text-center text-xs text-slate-400">You&apos;re all caught up.</p>
       ) : null}
     </section>
   );

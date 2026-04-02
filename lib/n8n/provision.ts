@@ -10,6 +10,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getAccountGhlCredentials } from "@/lib/ghl";
+import { computeExecutionToken } from "@/lib/recipes/executionAuth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 
@@ -141,6 +142,10 @@ export async function provisionRecipe(
       VERTICAL: account.vertical ?? "",
       ELEVENLABS_VOICE_ID: elevenVoice,
       WEBHOOK_URL: webhookUrl,
+      // Per-account HMAC token: N8N uses this in Authorization: Bearer <token>
+      // when calling /api/recipes/execution/* endpoints. Bound to accountId so
+      // cross-tenant calls are cryptographically rejected.
+      RECIPE_EXECUTION_TOKEN: computeExecutionToken(accountId),
     };
 
     const templateStr = loadTemplate(recipeSlug);

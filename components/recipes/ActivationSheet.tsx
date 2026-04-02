@@ -69,6 +69,8 @@ export interface ActivationSheetProps {
   profile: AccountProfileSlice | null;
   /** DB integration_provider values that are connected */
   connectedProviders: string[];
+  /** Optional CRM contact defaults (e.g. normalized phone) for editable config fields. */
+  contactPrefill?: Record<string, unknown>;
 }
 
 export function ActivationSheet({
@@ -77,6 +79,7 @@ export function ActivationSheet({
   recipe,
   profile,
   connectedProviders,
+  contactPrefill,
 }: ActivationSheetProps) {
   const router = useRouter();
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -95,12 +98,18 @@ export function ActivationSheet({
   const { prefilledCount, totalFields } = useMemo(() => {
     let n = 0;
     for (const f of recipe.configFields) {
-      if (!f.defaultFromProfile || !profile) continue;
-      const pv = getAccountProfileValue(profile, f.defaultFromProfile);
-      if (isProfileValuePresent(pv)) n += 1;
+      if (f.defaultFromProfile && profile) {
+        const pv = getAccountProfileValue(profile, f.defaultFromProfile);
+        if (isProfileValuePresent(pv)) {
+          n += 1;
+          continue;
+        }
+      }
+      const cv = contactPrefill?.[f.name];
+      if (isProfileValuePresent(cv)) n += 1;
     }
     return { prefilledCount: n, totalFields: recipe.configFields.length };
-  }, [recipe.configFields, profile]);
+  }, [recipe.configFields, profile, contactPrefill]);
 
   const missingIntegrations = useMemo(
     () =>
@@ -263,6 +272,7 @@ export function ActivationSheet({
             profile={profile}
             formId={FORM_ID}
             onSubmit={onConfigSubmit}
+            contactPrefill={contactPrefill}
           />
         </>
       )}

@@ -1,8 +1,42 @@
-export default function InboxPage() {
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { InboxClientShell } from "@/components/crm/inbox/InboxClientShell";
+import { loadEnrichedInboxConversations } from "@/lib/crm/loadEnrichedInboxConversations";
+import { createServerClient } from "@/lib/supabase/server";
+
+export default async function InboxPage({
+  searchParams,
+}: {
+  searchParams?: { conversation?: string; filter?: string };
+}) {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: account } = await supabase.from("accounts").select("id").eq("owner_user_id", user.id).single();
+  if (!account) redirect("/login");
+
+  let initial;
+  try {
+    initial = await loadEnrichedInboxConversations(account.id);
+  } catch {
+    initial = { conversations: [], contacts: {} };
+  }
+
+  const conversationId = searchParams?.conversation?.trim() || null;
+  const filter = searchParams?.filter?.trim() || null;
+
   return (
-    <div>
-      <h1 className="font-heading text-2xl font-bold">Inbox</h1>
-      <p className="mt-2 text-sm text-text-secondary">Coming soon</p>
-    </div>
+    <Suspense
+      fallback={<p className="text-sm text-[var(--text-secondary)]">Loading inbox…</p>}
+    >
+      <InboxClientShell
+        initial={initial}
+        initialConversationId={conversationId}
+        initialFilter={filter}
+      />
+    </Suspense>
   );
 }
