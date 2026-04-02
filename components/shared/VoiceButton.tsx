@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Check,
   Loader2,
@@ -68,8 +68,6 @@ export function VoiceButton({
   activeRecipes,
 }: VoiceButtonProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   const [status, setStatus] = React.useState<VoiceButtonStatus>("idle");
   const [resultTone, setResultTone] = React.useState<ResultTone>("success");
@@ -86,11 +84,6 @@ export function VoiceButton({
   React.useEffect(() => {
     statusRef.current = status;
   }, [status]);
-
-  const currentRoute = React.useMemo(() => {
-    const query = searchParams.toString();
-    return query ? `${pathname}?${query}` : pathname;
-  }, [pathname, searchParams]);
 
   const showToast = React.useCallback((payload: VoiceToastPayload) => {
     setToast({
@@ -171,7 +164,10 @@ export function VoiceButton({
           context: {
             vertical,
             activeRecipes,
-            currentRoute,
+            currentRoute:
+              typeof window !== "undefined"
+                ? `${window.location.pathname}${window.location.search}`
+                : "/dashboard",
             accountId,
           },
         }),
@@ -233,7 +229,6 @@ export function VoiceButton({
     accountId,
     activeRecipes,
     clearResultTimer,
-    currentRoute,
     requestConfirmation,
     router,
     showToast,
