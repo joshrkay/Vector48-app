@@ -1,8 +1,79 @@
-export default function ReportsPage() {
+import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
+
+import { createServerClient } from "@/lib/supabase/server";
+import { getReportData } from "@/lib/reports/queries";
+import { RecipePerformanceTable } from "@/components/crm/reports/RecipePerformanceTable";
+import { LeadSourceChart } from "@/components/crm/reports/LeadSourceChart";
+import { PipelineFunnel } from "@/components/crm/reports/PipelineFunnel";
+import { ContactGrowthChart } from "@/components/crm/reports/ContactGrowthChart";
+import { ResponseTimeChart } from "@/components/crm/reports/ResponseTimeChart";
+
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <div>
-      <h1 className="font-heading text-2xl font-bold">Reports</h1>
-      <p className="mt-2 text-sm text-text-secondary">Coming soon</p>
+    <div className="rounded-2xl border border-[var(--v48-border)] bg-white p-5">
+      <h2 className="mb-4 font-heading text-base font-semibold text-[var(--text-primary)]">
+        {title}
+      </h2>
+      {children}
+    </div>
+  );
+}
+
+export default async function ReportsPage() {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("owner_user_id", user.id)
+    .single();
+
+  if (!account) redirect("/login");
+
+  const data = await getReportData(account.id);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <h1 className="font-heading text-2xl font-bold md:text-[28px]">Reports</h1>
+        <p className="text-sm text-[var(--text-secondary)]">
+          Strategic performance overview — refreshes every 15 minutes.
+        </p>
+      </div>
+
+      <SectionCard title="Recipe Performance (Last 30 Days)">
+        <RecipePerformanceTable rows={data.recipePerformance} />
+      </SectionCard>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <SectionCard title="Lead Source Breakdown">
+          <LeadSourceChart data={data.leadSources} />
+        </SectionCard>
+
+        <SectionCard title="Pipeline Conversion Funnel">
+          <PipelineFunnel stages={data.pipelineFunnel} />
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Contact Growth (Last 12 Weeks)">
+        <ContactGrowthChart data={data.contactGrowth} />
+      </SectionCard>
+
+      <SectionCard title="Response Time Distribution (Last 30 Days)">
+        <ResponseTimeChart data={data.responseTimes} />
+      </SectionCard>
     </div>
   );
 }
