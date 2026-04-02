@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   createOnboardingStore,
@@ -79,6 +80,7 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
 
       if (result?.error) {
         console.error("[onboarding] failed to persist step", result.error);
+        toast.error("Failed to save. Please try again.");
         setIsSaving(false);
         return;
       }

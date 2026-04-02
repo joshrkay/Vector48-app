@@ -55,6 +55,7 @@ export function NotificationsStep({ onNext, onValidityChange }: StepProps) {
         {...register("notificationContact")}
         type="tel"
         placeholder="(555) 123-4567"
+        data-testid="notification-contact"
         className="mt-6 w-full rounded-xl border border-border bg-white px-4 py-3 text-lg text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
       />
       {errors.notificationContact && (

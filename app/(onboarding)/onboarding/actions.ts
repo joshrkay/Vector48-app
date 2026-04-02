@@ -26,6 +26,7 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   greetingText: "voice_greeting",
   notificationContact: "notification_contact",
   notificationContactPhone: "notification_contact",
+  notificationSms: "notification_sms",
   activateRecipe1: "activate_recipe_1",
 };
 
@@ -75,13 +76,6 @@ export async function saveOnboardingStep(
       }
     }
 
-    // Notifications step: enforce SMS opt-in on onboarding
-    if (step === 6) {
-      update.notification_sms = true;
-      if (!update.notification_contact && data.notificationContactName) {
-        update.notification_contact = data.notificationContactName;
-      }
-    }
   }
 
   const { error } = await supabase
