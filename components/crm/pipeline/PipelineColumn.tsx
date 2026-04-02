@@ -38,7 +38,7 @@ export function PipelineColumn({
   });
 
   return (
-    <section className="flex h-full min-w-[290px] max-w-[290px] flex-col rounded-2xl border border-[var(--v48-border)] bg-[var(--bg-secondary)]">
+    <section className="flex h-full min-w-[290px] max-w-[290px] flex-col rounded-2xl border border-[var(--v48-border)] bg-[var(--bg)]">
       <header className="flex items-start justify-between gap-3 border-b border-[var(--v48-border)] px-4 py-4">
         <div className="space-y-1">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">

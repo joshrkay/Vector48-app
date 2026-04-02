@@ -56,6 +56,7 @@ export function OpportunityDetailSheet({
       return;
     }
 
+    const opportunityId = opportunity.id;
     const controller = new AbortController();
 
     async function loadDetail() {
@@ -63,7 +64,7 @@ export function OpportunityDetailSheet({
       setError(null);
 
       try {
-        const response = await fetch(`/api/ghl/opportunities/${opportunity.id}/detail`, {
+        const response = await fetch(`/api/ghl/opportunities/${opportunityId}/detail`, {
           signal: controller.signal,
         });
 
@@ -184,7 +185,7 @@ export function OpportunityDetailSheet({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 rounded-2xl border border-[var(--v48-border)] bg-[var(--bg-secondary)] p-4">
+              <div className="grid grid-cols-1 gap-3 rounded-2xl border border-[var(--v48-border)] bg-[var(--bg)] p-4">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">
                     Job Description
