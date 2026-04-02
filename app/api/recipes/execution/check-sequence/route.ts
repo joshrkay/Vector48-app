@@ -22,16 +22,18 @@ export async function GET(request: NextRequest) {
   try {
     const admin = getSupabaseAdmin();
 
-    const query = admin
+    // Build query — chain filters before awaiting
+    let q = admin
       .from("recipe_activations")
       .select("status, config")
-      .eq("account_id", accountId);
+      .eq("account_id", accountId)
+      .eq("status", "active");
 
     if (recipeSlug) {
-      query.eq("recipe_slug", recipeSlug);
+      q = q.eq("recipe_slug", recipeSlug);
     }
 
-    const { data, error } = await query.limit(1).maybeSingle();
+    const { data, error } = await q.limit(1).maybeSingle();
 
     if (error) {
       console.error("[execution/check-sequence]", error.message);
@@ -39,17 +41,19 @@ export async function GET(request: NextRequest) {
     }
 
     if (!data) {
-      // No activation found — not in sequence
+      // No active activation found — not in sequence
       return NextResponse.json({ inSequence: false, paused: false });
     }
 
-    const isActive = data.status === "active";
-    const cfg = (data.config ?? {}) as Record<string, unknown>;
+    const cfg = data.config as Record<string, unknown>;
     const pausedIds = Array.isArray(cfg.paused_contact_ids) ? cfg.paused_contact_ids : [];
-    const isPaused = pausedIds.includes(contactId);
+    const isPaused = (pausedIds as string[]).includes(contactId);
 
+    // N8N workflows should call this before each send step.
+    // Note: a message already in-flight at the exact moment of pause may still
+    // complete — this is an inherent timing window, not a bug.
     return NextResponse.json({
-      inSequence: isActive && !isPaused,
+      inSequence: !isPaused,
       paused: isPaused,
     });
   } catch (err) {

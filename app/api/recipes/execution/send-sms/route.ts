@@ -34,19 +34,20 @@ export async function POST(request: NextRequest) {
     const { locationId, accessToken } = await getAccountGhlCredentials(body.accountId);
     const opts = { locationId, apiKey: accessToken };
 
-    // Find existing conversation for this contact, or create one
-    const convList = await getConversations({ contactId: body.contactId, locationId }, opts);
-    const conversations = Array.isArray(convList)
-      ? convList
-      : (convList as { conversations?: { id: string }[] }).conversations ?? [];
+    // Find existing conversation for this contact (locationId comes from opts)
+    const convListResult = await getConversations({ contactId: body.contactId }, opts);
+    const existingConvs = convListResult.conversations ?? [];
 
     let conversationId: string;
-    if (conversations.length > 0 && conversations[0].id) {
-      conversationId = conversations[0].id;
+    if (existingConvs.length > 0) {
+      conversationId = existingConvs[0].id;
     } else {
-      const created = await createConversation({ contactId: body.contactId, locationId }, opts);
-      const conv = (created as { conversation?: { id: string } }).conversation ?? (created as { id: string });
-      conversationId = conv.id ?? "";
+      // No existing conversation — create one (GHL ties it to the contact automatically)
+      const createResult = await createConversation(
+        { contactId: body.contactId, locationId },
+        opts,
+      );
+      conversationId = createResult.conversation.id;
     }
 
     if (!conversationId) {
@@ -63,12 +64,7 @@ export async function POST(request: NextRequest) {
       opts,
     );
 
-    const msgId =
-      typeof (msg as { id?: string }).id === "string"
-        ? (msg as { id: string }).id
-        : null;
-
-    return NextResponse.json({ ok: true, messageId: msgId });
+    return NextResponse.json({ ok: true, messageId: msg.id });
   } catch (err) {
     console.error("[execution/send-sms]", err);
     return NextResponse.json({ error: "Failed to send SMS" }, { status: 502 });
