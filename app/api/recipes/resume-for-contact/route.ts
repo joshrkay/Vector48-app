@@ -48,35 +48,44 @@ export async function POST(request: NextRequest) {
     }
 
     const resumedSlugs: string[] = [];
+    const webhookPromises: Promise<void>[] = [];
 
     for (const activation of toResume) {
-      const cfg = (activation.config ?? {}) as Record<string, unknown>;
-      const pausedIds = Array.isArray(cfg.paused_contact_ids)
-        ? (cfg.paused_contact_ids as string[]).filter((id) => id !== contactId)
-        : [];
+      // Atomic JSONB removal — idempotent, safe under concurrent calls
+      const { error: rpcError } = await admin.rpc("remove_paused_contact_id", {
+        p_activation_id: activation.id,
+        p_contact_id: contactId,
+      });
 
-      const { error: updateError } = await admin
-        .from("recipe_activations")
-        .update({ config: { ...cfg, paused_contact_ids: pausedIds } })
-        .eq("id", activation.id);
-
-      if (updateError) {
-        console.error("[resume-for-contact] update config", updateError.message);
+      if (rpcError) {
+        console.error("[resume-for-contact] remove_paused_contact_id rpc", rpcError.message);
         continue;
       }
 
       resumedSlugs.push(activation.recipe_slug);
 
-      // Best-effort: notify N8N resume webhook
+      // Best-effort: notify N8N resume webhook; awaited before response to
+      // prevent serverless context termination from dropping the calls.
+      const cfg = activation.config as Record<string, unknown>;
       if (typeof cfg.resume_webhook_url === "string" && cfg.resume_webhook_url) {
-        fetch(cfg.resume_webhook_url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactId }),
-          signal: AbortSignal.timeout(5000),
-        }).catch((err) => console.error("[resume-for-contact] n8n resume webhook failed", err));
+        webhookPromises.push(
+          fetch(cfg.resume_webhook_url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contactId }),
+            signal: AbortSignal.timeout(5000),
+          })
+            .then((res) => {
+              if (!res.ok) {
+                console.warn("[resume-for-contact] n8n resume webhook non-OK", res.status, activation.id);
+              }
+            })
+            .catch((err) => console.error("[resume-for-contact] n8n resume webhook failed", err)),
+        );
       }
     }
+
+    await Promise.allSettled(webhookPromises);
 
     if (resumedSlugs.length > 0) {
       await admin.from("automation_events").insert({

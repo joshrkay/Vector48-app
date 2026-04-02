@@ -33,21 +33,27 @@ export async function GET(request: NextRequest) {
       q = q.eq("recipe_slug", recipeSlug);
     }
 
-    const { data, error } = await q.limit(1).maybeSingle();
+    // Fetch all matching activations (no limit) so that when recipeSlug is
+    // omitted the check covers every active recipe for this account, not just
+    // an arbitrary one.  A contact is considered paused if ANY activation has
+    // them in paused_contact_ids.
+    const { data: activations, error } = await q;
 
     if (error) {
       console.error("[execution/check-sequence]", error.message);
       return NextResponse.json({ error: "Failed to check sequence" }, { status: 502 });
     }
 
-    if (!data) {
-      // No active activation found — not in sequence
+    if (!activations || activations.length === 0) {
+      // No active activation found — not in any sequence
       return NextResponse.json({ inSequence: false, paused: false });
     }
 
-    const cfg = data.config as Record<string, unknown>;
-    const pausedIds = Array.isArray(cfg.paused_contact_ids) ? cfg.paused_contact_ids : [];
-    const isPaused = (pausedIds as string[]).includes(contactId);
+    const isPaused = activations.some((row) => {
+      const cfg = row.config as Record<string, unknown>;
+      const pausedIds = Array.isArray(cfg.paused_contact_ids) ? (cfg.paused_contact_ids as string[]) : [];
+      return pausedIds.includes(contactId);
+    });
 
     // N8N workflows should call this before each send step.
     // Note: a message already in-flight at the exact moment of pause may still

@@ -75,14 +75,18 @@ export async function GET(request: NextRequest) {
 
     const matchedSlugs = matched.map((a) => a.recipe_slug);
 
-    // Fetch last automation_event per recipe_slug in a single query
+    // Fetch recent automation_events per recipe_slug and take the first
+    // (most recent) per slug in JS.  Capped at 20 per matched slug to avoid
+    // unbounded table scans as the table grows.  A DISTINCT ON query via .rpc()
+    // would be more efficient long-term if volume warrants it.
     const admin = getSupabaseAdmin();
     const { data: events, error: eventsError } = await admin
       .from("automation_events")
       .select("recipe_slug, event_type, summary, created_at")
       .eq("account_id", session.accountId)
       .in("recipe_slug", matchedSlugs)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(matchedSlugs.length * 20);
 
     if (eventsError) {
       console.error("[status-for-contact] events query", eventsError.message);
