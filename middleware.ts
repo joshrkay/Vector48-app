@@ -2,7 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
-const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding"];
+// /auth/callback handles PKCE code exchange and must be reachable without a session
+// /reset-password is reached after a recovery email link and must not be blocked
+const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding", "/auth/callback", "/reset-password"];
 const TRIAL_ALLOWED_ROUTES = ["/billing", "/settings"];
 
 export async function middleware(request: NextRequest) {

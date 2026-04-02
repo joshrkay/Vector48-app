@@ -1,8 +1,84 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { createBrowserClient } from "@/lib/supabase/client";
+import {
+  forgotPasswordSchema,
+  type ForgotPasswordValues,
+} from "@/lib/validations/auth";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 
 export default function ForgotPasswordPage() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const form = useForm<ForgotPasswordValues>({
+    resolver: zodResolver(forgotPasswordSchema),
+    defaultValues: { email: "" },
+  });
+
+  async function onSubmit(values: ForgotPasswordValues) {
+    setIsLoading(true);
+    try {
+      const supabase = createBrowserClient();
+      const redirectTo = `${window.location.origin}/auth/callback?next=/reset-password`;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        values.email,
+        { redirectTo }
+      );
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      setSent(true);
+    } catch {
+      toast.error("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <div>
+        <h1 className="font-heading font-bold text-[22px]">Check your email</h1>
+        <p className="mt-1 text-[13px] text-[#64748B]">
+          We sent a password reset link to{" "}
+          <span className="font-medium text-foreground">
+            {form.getValues("email")}
+          </span>
+          . Click the link in the email to set a new password.
+        </p>
+        <p className="mt-6 text-center text-[13px] text-[#64748B]">
+          <Link
+            href="/login"
+            className="text-[var(--v48-accent)] font-medium hover:underline"
+          >
+            &larr; Back to sign in
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h1 className="font-heading font-bold text-[22px]">Reset your password</h1>
@@ -10,28 +86,48 @@ export default function ForgotPasswordPage() {
         Enter your email and we&apos;ll send you a reset link.
       </p>
 
-      <div className="mt-6 space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="you@company.com" disabled />
-        </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="mt-6 space-y-4">
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    placeholder="you@company.com"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <div className="relative group">
-          <button
-            type="button"
-            disabled
-            className="flex w-full items-center justify-center rounded-lg bg-[#00B4A6] text-white font-medium h-11 text-sm opacity-60 cursor-not-allowed"
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-[var(--v48-accent)] hover:bg-[var(--v48-accent)]/90 text-white"
           >
-            Send reset link
-          </button>
-          <span className="absolute -top-8 left-1/2 -translate-x-1/2 rounded bg-gray-800 px-2 py-1 text-[11px] text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-            Coming soon
-          </span>
-        </div>
-      </div>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Sending…
+              </>
+            ) : (
+              "Send reset link"
+            )}
+          </Button>
+        </form>
+      </Form>
 
       <p className="mt-6 text-center text-[13px] text-[#64748B]">
-        <Link href="/login" className="text-[#00B4A6] font-medium hover:underline">
+        <Link
+          href="/login"
+          className="text-[var(--v48-accent)] font-medium hover:underline"
+        >
           &larr; Back to sign in
         </Link>
       </p>
