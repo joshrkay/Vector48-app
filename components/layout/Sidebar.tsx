@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Kanban,
   CalendarDays,
+  BarChart3,
   Settings,
   CreditCard,
   Workflow,
@@ -47,6 +48,7 @@ const crmNavItems: NavItem[] = [
   { label: "Inbox", href: "/crm/inbox", icon: MessageSquare },
   { label: "Pipeline", href: "/crm/pipeline", icon: Kanban },
   { label: "Calendar", href: "/crm/calendar", icon: CalendarDays },
+  { label: "Reports", href: "/crm/reports", icon: BarChart3 },
 ];
 
 const bottomNavItems: NavItem[] = [

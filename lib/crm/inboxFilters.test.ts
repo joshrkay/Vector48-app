@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GHLConversation } from "../ghl/types.ts";
 import {
+  buildInboxFilterHref,
   conversationNeedsReply,
   filterConversationsForInbox,
   isConversationAiHandledLast,
@@ -54,6 +55,10 @@ describe("conversationNeedsReply", () => {
   it("true when unread and last is inbound", () => {
     assert.equal(conversationNeedsReply(2, "inbound", t0, now), true);
   });
+  it("false exactly at the 2 hour cutoff only when outbound is still recent", () => {
+    const boundary = new Date("2026-04-01T11:00:00.000Z").toISOString();
+    assert.equal(conversationNeedsReply(1, "outbound", boundary, now), true);
+  });
 });
 
 describe("isConversationAiHandledLast", () => {
@@ -94,5 +99,37 @@ describe("filterConversationsForInbox", () => {
       filterConversationsForInbox(rows, "ai_handled", now).map((r) => r.id),
       ["b"],
     );
+  });
+  it("needs_reply", () => {
+    assert.deepEqual(
+      filterConversationsForInbox(rows, "needs_reply", now).map((r) => r.id),
+      ["a"],
+    );
+  });
+});
+
+describe("buildInboxFilterHref", () => {
+  const now = new Date("2026-04-01T15:00:00.000Z").getTime();
+  const rows = [
+    conv({ id: "a", contactId: "1", unreadCount: 1, lastMessageDirection: "inbound" }),
+    conv({ id: "b", contactId: "2", unreadCount: 0, lastMessageSource: "automation" }),
+  ];
+
+  it("preserves the selected conversation when it still matches the new filter", () => {
+    assert.equal(
+      buildInboxFilterHref("unread", "a", rows, now),
+      "/crm/inbox?filter=unread&conversation=a",
+    );
+  });
+
+  it("drops the selected conversation when it no longer matches the new filter", () => {
+    assert.equal(
+      buildInboxFilterHref("unread", "b", rows, now),
+      "/crm/inbox?filter=unread",
+    );
+  });
+
+  it("omits the filter param for all", () => {
+    assert.equal(buildInboxFilterHref("all", null, rows, now), "/crm/inbox");
   });
 });

@@ -11,7 +11,7 @@ interface Props {
   conversationId: string | null;
   contactId: string | null;
   locationId: string;
-  shouldPauseSequence: boolean;
+  recipeActive: boolean;
   onDraft: (msg: GHLMessage | null) => void;
   onSent: () => void;
 }
@@ -20,7 +20,7 @@ export function ReplyInput({
   conversationId,
   contactId,
   locationId,
-  shouldPauseSequence,
+  recipeActive,
   onDraft,
   onSent,
 }: Props) {
@@ -58,8 +58,6 @@ export function ReplyInput({
     setSending(true);
     adjustHeight();
 
-    let pauseFailed = false;
-
     try {
       const res = await fetch(`/api/ghl/conversations/${encodeURIComponent(conversationId)}/send`, {
         method: "POST",
@@ -72,29 +70,27 @@ export function ReplyInput({
       });
 
       if (!res.ok) throw new Error("Send failed");
+      const sentMessage = (await res.json()) as GHLMessage;
 
-      if (shouldPauseSequence) {
+      onDraft(sentMessage);
+      onSent();
+
+      if (recipeActive) {
         const pauseRes = await fetch("/api/recipes/pause-for-contact", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contactId }),
         });
         if (!pauseRes.ok) {
-          pauseFailed = true;
+          toast.error("Message sent, but the AI sequence could not be paused. It may continue running.");
         }
       }
-
-      onDraft(null);
-      onSent();
     } catch {
       onDraft(null);
       setText(trimmed);
       toast.error("Failed to send message");
     } finally {
       setSending(false);
-      if (pauseFailed) {
-        toast.error("Message sent, but the AI sequence could not be paused. Try again from Recipes or contact support.");
-      }
     }
   };
 

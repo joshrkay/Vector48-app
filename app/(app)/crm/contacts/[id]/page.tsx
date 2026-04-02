@@ -13,6 +13,7 @@ import { ContactTimeline } from "@/components/crm/contacts/ContactTimeline";
 import { ContactConversation } from "@/components/crm/contacts/ContactConversation";
 import { ContactRecipeStatus } from "@/components/crm/contacts/ContactRecipeStatus";
 import { ContactNotes } from "@/components/crm/contacts/ContactNotes";
+import { CRMContactCacheHydrator } from "@/components/crm/CRMContactCacheHydrator";
 import { activationConfigPhoneMatchesContact } from "@/components/crm/contacts/contactUtils";
 import type { Database } from "@/lib/supabase/types";
 import type { GHLConversation, GHLMessage, GHLClientOptions, GHLContactResponse } from "@/lib/ghl/types";
@@ -45,12 +46,12 @@ async function fetchDbData(
   ]);
 
   const automationEvents =
-    eventsResult.status === "fulfilled"
+    eventsResult.status === "fulfilled" && !eventsResult.value.error
       ? ((eventsResult.value.data ?? []) as AutomationEvent[])
       : null;
 
   const allActivations =
-    activationsResult.status === "fulfilled"
+    activationsResult.status === "fulfilled" && !activationsResult.value.error
       ? (activationsResult.value.data ?? [])
       : [];
 
@@ -179,7 +180,7 @@ export default async function ContactDetailPage({
     pipelinesResult.status === "fulfilled" ? (pipelinesResult.value.pipelines ?? []) : [];
 
   const connectedProviders =
-    integrationsResult.status === "fulfilled"
+    integrationsResult.status === "fulfilled" && !integrationsResult.value.error
       ? ((integrationsResult.value.data ?? []) as { status: string; provider: string }[])
           .filter((r) => r.status === "connected")
           .map((r) => r.provider)
@@ -203,6 +204,8 @@ export default async function ContactDetailPage({
 
   return (
     <div className="space-y-4">
+      <CRMContactCacheHydrator contacts={[contact]} />
+
       {/* Back link */}
       <a
         href="/crm/contacts"

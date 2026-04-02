@@ -26,12 +26,17 @@ export default async function InboxPage({
   }
 
   const conversationId = searchParams?.conversation?.trim() || null;
+  const filter = searchParams?.filter?.trim() || null;
 
   return (
     <Suspense
       fallback={<p className="text-sm text-[var(--text-secondary)]">Loading inbox…</p>}
     >
-      <InboxClientShell initial={initial} initialConversationId={conversationId} />
+      <InboxClientShell
+        initial={initial}
+        initialConversationId={conversationId}
+        initialFilter={filter}
+      />
     </Suspense>
   );
 }

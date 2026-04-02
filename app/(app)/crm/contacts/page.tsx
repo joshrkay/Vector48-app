@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
-import { getAccountGhlCredentials } from "@/lib/ghl";
-import { getContacts } from "@/lib/ghl/contacts";
+import { cachedGHLClient } from "@/lib/ghl/cache";
+import { normalizePhone } from "@/components/crm/contacts/contactUtils";
 import { ContactsClientShell } from "@/components/crm/contacts/ContactsClientShell";
 
 const TAG_MAP: Record<string, string> = {
@@ -32,30 +32,26 @@ export default async function ContactsPage({
     .single();
   if (!account) redirect("/login");
 
-  const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
-
-  // Fetch contacts + active recipe_triggers (AI badge) in parallel
-  const [contactsResult, triggersResult] = await Promise.all([
-    getContacts(
-      {
-        locationId,
-        limit: 20,
-        tag: TAG_MAP[filter],
-        query: q,
-      },
-      { locationId, apiKey: accessToken },
-    ),
+  // Fetch contacts via cache + active recipe_activations (AI badge) in parallel
+  const [contactsResult, activationsResult] = await Promise.all([
+    cachedGHLClient(account.id).getContacts({
+      limit: 20,
+      tag: TAG_MAP[filter],
+      query: q,
+    }),
     supabase
-      .from("recipe_triggers")
-      .select("contact_id")
+      .from("recipe_activations")
+      .select("config")
       .eq("account_id", account.id)
-      .eq("fired", false),
+      .eq("status", "active"),
   ]);
 
   const contacts = contactsResult.contacts ?? [];
-  const aiContactIds = (triggersResult.data ?? [])
-    .map((r) => r.contact_id)
-    .filter((id): id is string => Boolean(id));
+  const aiPhones = (activationsResult.data ?? [])
+    .map((r) => r.config as Record<string, unknown> | null)
+    .filter((config) => config && typeof config.phone === "string")
+    .map((config) => normalizePhone(config!.phone as string))
+    .filter((phone): phone is string => phone !== null);
 
   const nextCursor =
     contacts.length === 20 ? contacts[contacts.length - 1].id : null;
@@ -65,7 +61,7 @@ export default async function ContactsPage({
       key={filter}
       initialContacts={contacts}
       initialNextCursor={nextCursor}
-      aiContactIds={aiContactIds}
+      aiPhones={aiPhones}
       filter={filter}
       accountId={account.id}
     />

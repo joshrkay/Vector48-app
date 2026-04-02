@@ -10,7 +10,7 @@ import {
   type CRMContactSearchItem,
   upsertContactsInCache,
 } from "@/lib/crm/contactCache";
-import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
+import type { CRMContactSearchResponse } from "@/lib/crm/types";
 
 const QUERY_CACHE_TTL_MS = 30_000;
 type ContactSearchKey = readonly [string, string];

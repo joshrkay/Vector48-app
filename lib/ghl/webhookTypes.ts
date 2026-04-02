@@ -7,7 +7,22 @@ export type GHLWebhookEventType =
   | "OpportunityStageUpdate"
   | "AppointmentCreate"
   | "AppointmentStatusUpdate"
-  | "ConversationUnreadUpdate";
+  | "ConversationUnreadUpdate"
+  | "ConversationUnread";
+
+export type AutomationEventType =
+  | "call_completed"
+  | "message_received"
+  | "contact_created"
+  | "contact_updated"
+  | "opportunity_created"
+  | "opportunity_moved"
+  | "appointment_created"
+  | "appointment_updated"
+  | "conversation_unread"
+  | "sequence_paused"
+  | "rebook_triggered"
+  | "alert";
 
 export interface GHLWebhookBase {
   type?: string;
@@ -19,14 +34,18 @@ export interface GHLWebhookBase {
   webhookId?: string;
   dateAdded?: string;
   dateUpdated?: string;
+  createdAt?: string;
+  updatedAt?: string;
   timestamp?: string;
   verificationToken?: string;
   token?: string;
+  webhookToken?: string;
 }
 
 export interface GHLWebhookContactRef {
   id?: string;
   name?: string;
+  contactName?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -36,9 +55,11 @@ export interface GHLWebhookContactRef {
 export interface GHLWebhookContactCreate extends GHLWebhookBase {
   type?: "ContactCreate";
   contactId?: string;
+  contact_id?: string;
   firstName?: string;
   lastName?: string;
   name?: string;
+  contactName?: string;
   email?: string;
   phone?: string;
   source?: string;
@@ -49,9 +70,11 @@ export interface GHLWebhookContactCreate extends GHLWebhookBase {
 export interface GHLWebhookContactUpdate extends GHLWebhookBase {
   type?: "ContactUpdate";
   contactId?: string;
+  contact_id?: string;
   firstName?: string;
   lastName?: string;
   name?: string;
+  contactName?: string;
   email?: string;
   phone?: string;
   source?: string;
@@ -63,12 +86,14 @@ export interface GHLWebhookCallCompleted extends GHLWebhookBase {
   type?: "CallCompleted";
   contactId?: string;
   contact_id?: string;
+  callId?: string;
   callDuration?: number;
   duration?: number;
   callDirection?: string;
   direction?: string;
   notes?: string;
   transcription?: string;
+  summary?: string;
   contact?: GHLWebhookContactRef;
 }
 
@@ -85,9 +110,13 @@ export interface GHLWebhookInboundMessage extends GHLWebhookBase {
 export interface GHLWebhookOpportunityCreate extends GHLWebhookBase {
   type?: "OpportunityCreate";
   opportunityId?: string;
+  opportunity_id?: string;
   name?: string;
+  opportunityName?: string;
   monetaryValue?: number;
   stageName?: string;
+  currentStage?: string;
+  pipelineStage?: string;
   contactId?: string;
   contact_id?: string;
   contact?: GHLWebhookContactRef;
@@ -96,7 +125,9 @@ export interface GHLWebhookOpportunityCreate extends GHLWebhookBase {
 export interface GHLWebhookOpportunityStageUpdate extends GHLWebhookBase {
   type?: "OpportunityStageUpdate";
   opportunityId?: string;
+  opportunity_id?: string;
   name?: string;
+  opportunityName?: string;
   stageName?: string;
   currentStage?: string;
   pipelineStage?: string;
@@ -108,6 +139,7 @@ export interface GHLWebhookOpportunityStageUpdate extends GHLWebhookBase {
 export interface GHLWebhookAppointmentCreate extends GHLWebhookBase {
   type?: "AppointmentCreate";
   appointmentId?: string;
+  appointment_id?: string;
   status?: string;
   appointmentStatus?: string;
   startTime?: string;
@@ -121,6 +153,7 @@ export interface GHLWebhookAppointmentCreate extends GHLWebhookBase {
 export interface GHLWebhookAppointmentStatusUpdate extends GHLWebhookBase {
   type?: "AppointmentStatusUpdate";
   appointmentId?: string;
+  appointment_id?: string;
   status?: string;
   appointmentStatus?: string;
   startTime?: string;
@@ -140,6 +173,15 @@ export interface GHLWebhookConversationUnreadUpdate extends GHLWebhookBase {
   contact?: GHLWebhookContactRef;
 }
 
+export interface GHLWebhookConversationUnread extends GHLWebhookBase {
+  type?: "ConversationUnread";
+  conversationId?: string;
+  unreadCount?: number;
+  contactId?: string;
+  contact_id?: string;
+  contact?: GHLWebhookContactRef;
+}
+
 export type GHLWebhookPayload =
   | GHLWebhookCallCompleted
   | GHLWebhookInboundMessage
@@ -149,12 +191,13 @@ export type GHLWebhookPayload =
   | GHLWebhookOpportunityStageUpdate
   | GHLWebhookAppointmentCreate
   | GHLWebhookAppointmentStatusUpdate
-  | GHLWebhookConversationUnreadUpdate;
+  | GHLWebhookConversationUnreadUpdate
+  | GHLWebhookConversationUnread;
 
 export interface AutomationEventInsert {
   account_id: string;
   recipe_slug: string | null;
-  event_type: string;
+  event_type: AutomationEventType;
   ghl_event_type: string;
   ghl_event_id: string | null;
   contact_id: string | null;
