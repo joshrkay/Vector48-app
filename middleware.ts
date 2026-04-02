@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getSupabasePublishableKey } from "@/lib/supabase/publishableKey";
+
 const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
 const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding"];
 const TRIAL_ALLOWED_ROUTES = ["/billing", "/settings"];
@@ -10,7 +12,7 @@ export async function middleware(request: NextRequest) {
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabasePublishableKey(),
     {
       cookies: {
         getAll() {
