@@ -82,8 +82,14 @@ export default function LoginPage() {
       } else {
         router.push("/dashboard");
       }
-    } catch {
-      toast.error("An unexpected error occurred. Please try again.");
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        toast.error(
+          "Unable to reach the server. The service may be temporarily unavailable — please try again in a moment.",
+        );
+      } else {
+        toast.error("An unexpected error occurred. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }

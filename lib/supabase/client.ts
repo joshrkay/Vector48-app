@@ -6,12 +6,17 @@ let client: ReturnType<typeof _createBrowserClient<Database>> | null = null;
 export function createBrowserClient() {
   if (client) return client;
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (
-    process.env.NODE_ENV === "development" &&
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("fake.supabase.co")
+    !supabaseUrl ||
+    supabaseUrl.includes("fake.supabase.co") ||
+    !supabaseUrl.includes(".supabase.co")
   ) {
-    console.warn(
-      "[Vector48] NEXT_PUBLIC_SUPABASE_URL is the E2E placeholder. Copy .env.local.example to .env.local and set your real Supabase URL and anon key (Project Settings → API).",
+    console.error(
+      "[Vector48] NEXT_PUBLIC_SUPABASE_URL is missing or invalid. " +
+        "Set it in .env.local (dev) or Vercel environment variables (production). " +
+        "Find it at: Supabase Dashboard → Project Settings → API. " +
+        "Note: free-tier projects are paused after 7 days of inactivity and their subdomain stops resolving.",
     );
   }
 
