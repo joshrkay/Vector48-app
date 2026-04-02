@@ -59,9 +59,9 @@ export async function POST(req: Request) {
     );
   }
 
-  if (account.ghl_provisioning_status === "failed") {
+  if (account.ghl_provisioning_status !== "failed") {
     return NextResponse.json(
-      { jobId: accountId, status: "failed" },
+      { error: "Provisioning is not in a retryable state" },
       { status: 409 },
     );
   }
@@ -77,15 +77,12 @@ export async function POST(req: Request) {
     .eq("id", accountId);
 
   if (updateError) {
-    return NextResponse.json(
-      { error: "Failed to initiate provisioning" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to retry provisioning" }, { status: 500 });
   }
 
   queueMicrotask(() => {
     void provisionGHL(accountId).catch((error) => {
-      console.error("[api/onboarding/provision] unhandled error", error);
+      console.error("[api/onboarding/provision/retry] unhandled error", error);
     });
   });
 
