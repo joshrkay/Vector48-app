@@ -39,11 +39,11 @@ export default function LoginPage() {
     try {
       const supabase = createBrowserClient();
 
-      const { data: signInData, error: authError } =
+      const { data: authData, error: authError } =
         await supabase.auth.signInWithPassword({
-          email: values.email,
-          password: values.password,
-        });
+        email: values.email,
+        password: values.password,
+      });
 
       if (authError) {
         const msg = authError.message.toLowerCase();
@@ -59,25 +59,44 @@ export default function LoginPage() {
         return;
       }
 
-      if (!signInData.user) {
-        toast.error("Sign-in did not return a user. Try again.");
+      const userId = authData.session?.user.id;
+
+      if (!userId) {
+        toast.error("Unable to load your account. Please try again.");
         return;
       }
 
-      router.refresh();
+      // Check onboarding status to decide redirect
+      const { data: accountUser, error: accountUserError } = await supabase
+        .from("account_users")
+        .select("account_id")
+        .eq("user_id", userId)
+        .single();
 
-      const { data: account } = await supabase
+      if (accountUserError) {
+        toast.error("Unable to load your account. Please try again.");
+        return;
+      }
+
+      if (!accountUser?.account_id) {
+        toast.error("Unable to find your account. Please contact support.");
+        return;
+      }
+
+      const { data: account, error: accountError } = await supabase
         .from("accounts")
-        .select("onboarding_done_at, onboarding_completed_at, ghl_provisioning_status")
-        .eq("owner_user_id", signInData.user.id)
-        .maybeSingle();
+        .select("onboarding_done_at")
+        .eq("id", accountUser.account_id)
+        .single();
 
-      const onboardingDone =
-        Boolean(account?.onboarding_done_at) ||
-        Boolean(account?.onboarding_completed_at) ||
-        account?.ghl_provisioning_status === "failed";
+      if (accountError) {
+        toast.error("Unable to load your account. Please try again.");
+        return;
+      }
 
-      if (!account || !onboardingDone) {
+      const onboardingDoneAt = account.onboarding_done_at;
+
+      if (!onboardingDoneAt) {
         router.push("/onboarding");
       } else {
         router.push("/dashboard");
