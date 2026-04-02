@@ -145,20 +145,72 @@ const voiceMutationSchema = z.discriminatedUnion("action", [
   crmAppointmentCreateSchema,
 ]);
 
-const voiceActionMutationVariantSchemas = voiceMutationSchema.options.map((schema) =>
-  voiceActionBaseSchema.merge(schema),
+const recipeActivateActionSchema = voiceActionBaseSchema.merge(
+  recipeActivateSchema,
+);
+const recipeDeactivateActionSchema = voiceActionBaseSchema.merge(
+  recipeDeactivateSchema,
+);
+const crmContactCreateActionSchema = voiceActionBaseSchema.merge(
+  crmContactCreateSchema,
+);
+const crmContactUpdateActionSchema = voiceActionBaseSchema.merge(
+  crmContactUpdateSchema,
+);
+const crmContactAddNoteActionSchema = voiceActionBaseSchema.merge(
+  crmContactAddNoteSchema,
+);
+const crmConversationSendMessageActionSchema = voiceActionBaseSchema.merge(
+  crmConversationSendMessageSchema,
+);
+const crmOpportunityCreateActionSchema = voiceActionBaseSchema.merge(
+  crmOpportunityCreateSchema,
+);
+const crmOpportunityUpdateActionSchema = voiceActionBaseSchema.merge(
+  crmOpportunityUpdateSchema,
+);
+const crmOpportunityUpdateStageActionSchema = voiceActionBaseSchema.merge(
+  crmOpportunityUpdateStageSchema,
+);
+const crmOpportunityUpdateStatusActionSchema = voiceActionBaseSchema.merge(
+  crmOpportunityUpdateStatusSchema,
+);
+const crmAppointmentCreateActionSchema = voiceActionBaseSchema.merge(
+  crmAppointmentCreateSchema,
 );
 
 export const voiceActionMutationSchema = z.discriminatedUnion(
   "action",
-  voiceActionMutationVariantSchemas,
+  [
+    recipeActivateActionSchema,
+    recipeDeactivateActionSchema,
+    crmContactCreateActionSchema,
+    crmContactUpdateActionSchema,
+    crmContactAddNoteActionSchema,
+    crmConversationSendMessageActionSchema,
+    crmOpportunityCreateActionSchema,
+    crmOpportunityUpdateActionSchema,
+    crmOpportunityUpdateStageActionSchema,
+    crmOpportunityUpdateStatusActionSchema,
+    crmAppointmentCreateActionSchema,
+  ],
 );
 
 export const voiceActionSchema = z.union([
   voiceNavigateActionSchema,
   voiceAnswerActionSchema,
   voiceClarifyActionSchema,
-  ...voiceActionMutationVariantSchemas,
+  recipeActivateActionSchema,
+  recipeDeactivateActionSchema,
+  crmContactCreateActionSchema,
+  crmContactUpdateActionSchema,
+  crmContactAddNoteActionSchema,
+  crmConversationSendMessageActionSchema,
+  crmOpportunityCreateActionSchema,
+  crmOpportunityUpdateActionSchema,
+  crmOpportunityUpdateStageActionSchema,
+  crmOpportunityUpdateStatusActionSchema,
+  crmAppointmentCreateActionSchema,
 ]);
 
 export const voiceQueryContextSchema = z.object({
