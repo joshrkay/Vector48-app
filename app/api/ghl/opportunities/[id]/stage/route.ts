@@ -1,10 +1,10 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+
 import { requireAccountForUser } from "@/lib/auth/account";
 import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
-import { updateOpportunity } from "@/lib/ghl/opportunities";
 import { getAccountGhlCredentials } from "@/lib/ghl";
+import { updateOpportunity } from "@/lib/ghl/opportunities";
 import { createServerClient } from "@/lib/supabase/server";
-import type { GHLUpdateOpportunityPayload } from "@/lib/ghl/types";
 
 export async function PATCH(
   request: NextRequest,
@@ -18,24 +18,29 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: GHLUpdateOpportunityPayload;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  const body = (await request.json().catch(() => null)) as
+    | { pipelineStageId?: string }
+    | null;
+
+  if (!body?.pipelineStageId?.trim()) {
+    return NextResponse.json({ error: "pipelineStageId is required" }, { status: 400 });
   }
 
   try {
     const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await updateOpportunity(id, body, { locationId, apiKey: accessToken });
+    const opportunity = await updateOpportunity(
+      id,
+      { pipelineStageId: body.pipelineStageId.trim() },
+      { locationId, apiKey: accessToken },
+    );
 
     invalidateGHLCache(session.accountId, "OpportunityStageUpdate", {
       invalidateInMemoryFallback: true,
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json({ opportunity });
   } catch (error) {
-    console.error("[ghl-opportunity-update]", error);
-    return NextResponse.json({ error: "Failed to update opportunity" }, { status: 502 });
+    console.error("[ghl-opportunity-stage-update]", error);
+    return NextResponse.json({ error: "Failed to update opportunity stage" }, { status: 502 });
   }
 }
