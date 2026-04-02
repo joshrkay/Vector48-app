@@ -2,15 +2,16 @@
 
 import { createServerClient } from "@/lib/supabase/server";
 
-// Maps step index to the DB columns that step updates
+// Maps WizardShell currentStep (0 = Welcome) to DB columns that step updates
 const STEP_COLUMN_MAP: Record<number, string[]> = {
-  0: ["business_name"],
-  1: ["phone"],
-  2: ["vertical"],
-  3: ["business_hours"],
-  4: ["voice_gender", "voice_greeting"],
-  5: ["notification_contact", "notification_sms"],
-  6: [], // activate recipe — handled separately
+  0: [], // Welcome — no account fields
+  1: ["business_name"],
+  2: ["phone"],
+  3: ["vertical"],
+  4: ["business_hours"], // JSON built in step === 4 branch below
+  5: ["voice_gender", "voice_greeting"],
+  6: ["notification_contact", "notification_sms"],
+  7: [], // Activate recipe — completeOnboarding handles finish
 };
 
 // Maps camelCase form field names to snake_case DB columns
@@ -21,6 +22,7 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   businessHours: "business_hours",
   preset: "business_hours",
   voiceGender: "voice_gender",
+  voiceGreeting: "voice_greeting",
   greetingText: "voice_greeting",
   notificationContact: "notification_contact",
   notificationContactPhone: "notification_contact",
@@ -109,13 +111,15 @@ export async function completeOnboarding(
     return { error: "Not authenticated" };
   }
 
+  const completedAt = new Date().toISOString();
+
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
       onboarding_step: 8,
       activate_recipe_1: activateRecipe,
-      onboarding_completed_at: null,
-      onboarding_done_at: null,
+      onboarding_completed_at: completedAt,
+      onboarding_done_at: completedAt,
       ghl_provisioning_status: "pending",
       ghl_provisioning_error: null,
       provisioning_status: "pending",
