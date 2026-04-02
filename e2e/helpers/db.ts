@@ -9,11 +9,10 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  */
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "../../lib/supabase/admin";
+import { type Database } from "../../lib/supabase/types";
 
-export type AccountRow = Record<string, unknown>;
-
-let _client: SupabaseClient | null = null;
+export type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
 
 export function hasDbCredentials(): boolean {
   return !!(
@@ -22,27 +21,12 @@ export function hasDbCredentials(): boolean {
   );
 }
 
-function getAdminDb(): SupabaseClient {
-  if (_client) return _client;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for DB assertion tests"
-    );
-  }
-  _client = createClient(url, key, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  return _client;
-}
-
 /**
  * Finds the auth UID for a given email by paginating through listUsers.
  * Matches the pattern used in scripts/create-test-account.mjs.
  */
 async function getUserIdByEmail(email: string): Promise<string> {
-  const db = getAdminDb();
+  const db = createAdminClient();
   const normalized = email.toLowerCase();
   let page = 1;
   for (;;) {
@@ -67,7 +51,7 @@ async function getUserIdByEmail(email: string): Promise<string> {
  * Throws if the user or account cannot be found.
  */
 export async function getAccountByEmail(email: string): Promise<AccountRow> {
-  const db = getAdminDb();
+  const db = createAdminClient();
   const userId = await getUserIdByEmail(email);
 
   const { data: account, error } = await db
@@ -80,7 +64,7 @@ export async function getAccountByEmail(email: string): Promise<AccountRow> {
       `Could not fetch account for user ${userId}: ${error?.message}`
     );
   }
-  return account as AccountRow;
+  return account;
 }
 
 /**
@@ -93,7 +77,7 @@ export async function getAccountByEmail(email: string): Promise<AccountRow> {
  * Call this in beforeAll before navigating to /onboarding.
  */
 export async function resetOnboardingState(email: string): Promise<void> {
-  const db = getAdminDb();
+  const db = createAdminClient();
   const userId = await getUserIdByEmail(email);
 
   // Get account id for recipe_activations cleanup
@@ -136,7 +120,7 @@ export async function resetOnboardingState(email: string): Promise<void> {
  * start with the same baseline state as a freshly provisioned account.
  */
 export async function markOnboardingComplete(email: string): Promise<void> {
-  const db = getAdminDb();
+  const db = createAdminClient();
   const userId = await getUserIdByEmail(email);
   const { error } = await db
     .from("accounts")

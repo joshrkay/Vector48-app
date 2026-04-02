@@ -295,11 +295,7 @@ test.describe("Onboarding wizard saves each step to database", () => {
       await page.getByRole("button", { name: "Continue" }).click();
 
       // ── Step 6: Notifications ────────────────────────────────────────
-      // Two inputs share placeholder "(555) 123-4567"; pick the second one
-      // (the notification phone field, not the phone from a previous step)
-      const notifInput = page
-        .getByPlaceholder("(555) 123-4567")
-        .last();
+      const notifInput = page.getByTestId("notification-contact");
       await notifInput.waitFor({ state: "visible" });
       await notifInput.fill("(512) 555-0200");
       await page.getByRole("button", { name: "Continue" }).click();
