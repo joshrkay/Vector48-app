@@ -68,6 +68,8 @@ function daysAgo(n: number): string {
 
 // ── Recipe Performance ────────────────────────────────────────────────────
 
+type AutomationEventSlim = { recipe_slug: string | null; created_at: string };
+
 async function getRecipePerformance(
   accountId: string,
 ): Promise<RecipePerformanceRow[]> {
@@ -84,12 +86,12 @@ async function getRecipePerformance(
 
   if (error) throw error;
 
-  const rows = data ?? [];
+  const rows: AutomationEventSlim[] = (data ?? []) as AutomationEventSlim[];
   const slugs = new Set(rows.map((r) => r.recipe_slug as string));
 
   const result: RecipePerformanceRow[] = [];
 
-  for (const slug of slugs) {
+  for (const slug of Array.from(slugs)) {
     const slugRows = rows.filter((r) => r.recipe_slug === slug);
     const total30d = slugRows.filter((r) => r.created_at >= thirtyDaysAgo).length;
     const prev30d = slugRows.filter((r) => r.created_at < thirtyDaysAgo).length;
@@ -314,9 +316,13 @@ async function getResponseTimes(accountId: string): Promise<ResponseTimeData> {
   if (createdResult.error) throw createdResult.error;
   if (outreachResult.error) throw outreachResult.error;
 
+  type ContactEventRow = { contact_id: string | null; created_at: string };
+  const createdRows = (createdResult.data ?? []) as ContactEventRow[];
+  const outreachRows = (outreachResult.data ?? []) as ContactEventRow[];
+
   // Build Map<contactId, sorted outreach timestamps>
   const outreachByContact = new Map<string, number[]>();
-  for (const row of outreachResult.data ?? []) {
+  for (const row of outreachRows) {
     const ts = new Date(row.created_at).getTime();
     const id = row.contact_id as string;
     const existing = outreachByContact.get(id) ?? [];
@@ -325,15 +331,15 @@ async function getResponseTimes(accountId: string): Promise<ResponseTimeData> {
   }
 
   // Sort each contact's outreach timestamps ascending
-  for (const [id, times] of outreachByContact) {
-    outreachByContact.set(id, times.sort((a, b) => a - b));
-  }
+  outreachByContact.forEach((times, id) => {
+    outreachByContact.set(id, times.sort((a: number, b: number) => a - b));
+  });
 
   // Count buckets
   const bucketCounts: number[] = BUCKETS.map(() => 0);
   let totalContacted = 0;
 
-  for (const row of createdResult.data ?? []) {
+  for (const row of createdRows) {
     const contactId = row.contact_id as string;
     const createdAt = new Date(row.created_at).getTime();
     const outreachTimes = outreachByContact.get(contactId) ?? [];
