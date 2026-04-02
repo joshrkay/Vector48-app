@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { seedContactsInCache } from "@/lib/crm/contactCache";
 import { Button } from "@/components/ui/button";
 import { ContactsFilterBar } from "./ContactsFilterBar";
 import { ContactsTable } from "./ContactsTable";
@@ -63,6 +64,10 @@ export function ContactsClientShell({
       isFetchingRef.current = false;
     }
   }, [nextCursor, filter, q]);
+
+  useEffect(() => {
+    seedContactsInCache(contacts);
+  }, [contacts]);
 
   useEffect(() => {
     const target = sentinelRef.current;

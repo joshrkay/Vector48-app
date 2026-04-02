@@ -3,37 +3,15 @@ import { requireAccountForUser } from "@/lib/auth/account";
 import { getContacts } from "@/lib/ghl/contacts";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
-import type { CRMContactSearchItem } from "@/lib/crm/contactCache";
-import type { CRMContactSearchResponse } from "@/lib/crm/contactSearch";
+import {
+  toCachedContact,
+  type CRMContactSearchItem,
+} from "@/lib/crm/contactCache";
+import type { CRMContactSearchResponse } from "@/lib/crm/types";
 
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_FETCH_LIMIT = 25;
 const MAX_RESULTS = 10;
-
-function normalizeContact(raw: {
-  id?: string | null;
-  name?: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}): CRMContactSearchItem | null {
-  if (!raw.id) {
-    return null;
-  }
-
-  const derivedName = `${raw.firstName ?? ""} ${raw.lastName ?? ""}`.trim();
-
-  const email = raw.email?.trim() ?? "";
-  const phone = raw.phone?.trim() ?? "";
-
-  return {
-    id: raw.id,
-    name: (raw.name ?? derivedName).trim(),
-    email: email || null,
-    phone: phone || null,
-  };
-}
 
 function scoreContact(contact: CRMContactSearchItem, query: string): number {
   const q = query.toLowerCase();
@@ -112,7 +90,7 @@ export async function GET(request: NextRequest) {
     );
 
     const normalized = (response.contacts ?? [])
-      .map(normalizeContact)
+      .map(toCachedContact)
       .filter((item): item is CRMContactSearchItem => item !== null);
 
     const sorted = sortByRelevance(normalized, q).slice(0, MAX_RESULTS);

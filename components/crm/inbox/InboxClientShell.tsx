@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "@/lib/swr";
+import { seedContactsInCache } from "@/lib/crm/contactCache";
 import { Button } from "@/components/ui/button";
 import { AIContextBanner } from "@/components/crm/inbox/AIContextBanner";
 import { ConversationList } from "@/components/crm/inbox/ConversationList";
@@ -105,6 +106,15 @@ export function InboxClientShell({ initial, initialConversationId, initialFilter
 
   const resolvedContactId = activeConversation?.contactId ?? orphanConversation?.contactId ?? null;
   const locationId = activeConversation?.locationId ?? orphanConversation?.locationId ?? "";
+
+  useEffect(() => {
+    seedContactsInCache(
+      Object.entries(contacts).map(([id, contact]) => ({
+        id,
+        ...contact,
+      })),
+    );
+  }, [contacts]);
 
   useEffect(() => {
     setRecipeBannerActive(false);
