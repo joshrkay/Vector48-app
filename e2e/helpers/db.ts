@@ -11,7 +11,19 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-function createAdminClient(): SupabaseClient {
+export type AccountRow = Record<string, unknown>;
+
+let _client: SupabaseClient | null = null;
+
+export function hasDbCredentials(): boolean {
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
+
+function getAdminDb(): SupabaseClient {
+  if (_client) return _client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
@@ -19,48 +31,55 @@ function createAdminClient(): SupabaseClient {
       "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for DB assertion tests"
     );
   }
-  return createClient(url, key, {
+  _client = createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+  return _client;
 }
 
-export type AccountRow = Record<string, unknown>;
+/**
+ * Finds the auth UID for a given email by paginating through listUsers.
+ * Matches the pattern used in scripts/create-test-account.mjs.
+ */
+async function getUserIdByEmail(email: string): Promise<string> {
+  const db = getAdminDb();
+  const normalized = email.toLowerCase();
+  let page = 1;
+  for (;;) {
+    const { data, error } = await db.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
+    if (error) throw new Error(`listUsers failed: ${error.message}`);
+    const user = data.users.find(
+      (u) => u.email?.toLowerCase() === normalized
+    );
+    if (user) return user.id;
+    if (data.users.length < 200) break;
+    page += 1;
+    if (page > 50) break;
+  }
+  throw new Error(`No auth user found for email: ${email}`);
+}
 
 /**
  * Returns the `accounts` row associated with the given auth email.
  * Throws if the user or account cannot be found.
  */
 export async function getAccountByEmail(email: string): Promise<AccountRow> {
-  const db = createAdminClient();
+  const db = getAdminDb();
+  const userId = await getUserIdByEmail(email);
 
-  const { data: userData, error: userError } =
-    await db.auth.admin.getUserByEmail(email);
-  if (userError || !userData?.user) {
-    throw new Error(`Could not find auth user for ${email}: ${userError?.message}`);
-  }
-
-  const { data: membership, error: membershipError } = await db
-    .from("account_users")
-    .select("account_id")
-    .eq("user_id", userData.user.id)
-    .single();
-  if (membershipError || !membership) {
-    throw new Error(
-      `Could not find account membership for user ${userData.user.id}: ${membershipError?.message}`
-    );
-  }
-
-  const { data: account, error: accountError } = await db
+  const { data: account, error } = await db
     .from("accounts")
     .select("*")
-    .eq("id", membership.account_id)
+    .eq("owner_user_id", userId)
     .single();
-  if (accountError || !account) {
+  if (error || !account) {
     throw new Error(
-      `Could not fetch account ${membership.account_id}: ${accountError?.message}`
+      `Could not fetch account for user ${userId}: ${error?.message}`
     );
   }
-
   return account as AccountRow;
 }
 
@@ -68,10 +87,26 @@ export async function getAccountByEmail(email: string): Promise<AccountRow> {
  * Resets the test account's onboarding state so /onboarding won't
  * immediately redirect to /dashboard.
  *
+ * Also deletes any recipe_activations rows created by completeOnboarding(),
+ * preventing unique-constraint failures on Playwright retries.
+ *
  * Call this in beforeAll before navigating to /onboarding.
  */
-export async function resetOnboardingState(accountId: string): Promise<void> {
-  const db = createAdminClient();
+export async function resetOnboardingState(email: string): Promise<void> {
+  const db = getAdminDb();
+  const userId = await getUserIdByEmail(email);
+
+  // Get account id for recipe_activations cleanup
+  const { data: acct } = await db
+    .from("accounts")
+    .select("id")
+    .eq("owner_user_id", userId)
+    .single();
+  if (!acct) throw new Error(`No account found for ${email}`);
+
+  // Remove recipe_activations created by completeOnboarding
+  await db.from("recipe_activations").delete().eq("account_id", acct.id);
+
   const { error } = await db
     .from("accounts")
     .update({
@@ -88,8 +123,9 @@ export async function resetOnboardingState(accountId: string): Promise<void> {
       voice_greeting: null,
       notification_contact: null,
       notification_sms: false,
+      activate_recipe_1: false,
     })
-    .eq("id", accountId);
+    .eq("owner_user_id", userId);
   if (error) {
     throw new Error(`Failed to reset onboarding state: ${error.message}`);
   }
@@ -99,8 +135,9 @@ export async function resetOnboardingState(accountId: string): Promise<void> {
  * Re-marks the account as onboarding-complete so subsequent test runs
  * start with the same baseline state as a freshly provisioned account.
  */
-export async function markOnboardingComplete(accountId: string): Promise<void> {
-  const db = createAdminClient();
+export async function markOnboardingComplete(email: string): Promise<void> {
+  const db = getAdminDb();
+  const userId = await getUserIdByEmail(email);
   const { error } = await db
     .from("accounts")
     .update({
@@ -108,7 +145,7 @@ export async function markOnboardingComplete(accountId: string): Promise<void> {
       onboarding_done_at: new Date().toISOString(),
       onboarding_completed_at: new Date().toISOString(),
     })
-    .eq("id", accountId);
+    .eq("owner_user_id", userId);
   if (error) {
     throw new Error(`Failed to mark onboarding complete: ${error.message}`);
   }

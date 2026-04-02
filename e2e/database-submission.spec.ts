@@ -15,6 +15,7 @@ import { test, expect } from "@playwright/test";
 import path from "node:path";
 import fs from "node:fs/promises";
 import {
+  hasDbCredentials,
   getAccountByEmail,
   resetOnboardingState,
   markOnboardingComplete,
@@ -45,16 +46,12 @@ async function signIn(page: import("@playwright/test").Page) {
 }
 
 function skipGuard() {
-  const missing = [
-    "E2E_TEST_EMAIL",
-    "E2E_TEST_PASSWORD",
-    "NEXT_PUBLIC_SUPABASE_URL",
-    "SUPABASE_SERVICE_ROLE_KEY",
-  ].filter((k) => !process.env[k]);
-
+  const missingEnv = ["E2E_TEST_EMAIL", "E2E_TEST_PASSWORD"].filter(
+    (k) => !process.env[k]
+  );
   test.skip(
-    missing.length > 0,
-    `Set ${missing.join(", ")} to run database-submission E2E tests`
+    missingEnv.length > 0 || !hasDbCredentials(),
+    `Set E2E_TEST_EMAIL, E2E_TEST_PASSWORD, NEXT_PUBLIC_SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY to run database-submission E2E tests`
   );
 }
 
@@ -119,21 +116,19 @@ test.describe("Business Profile form saves to database", () => {
 test.describe("Onboarding wizard saves each step to database", () => {
   test.describe.configure({ mode: "serial", timeout: TIMEOUT });
 
-  let accountId: string;
-
   test.beforeAll(async () => {
     skipGuard();
     const email = process.env.E2E_TEST_EMAIL!;
-    const account = await getAccountByEmail(email);
-    accountId = account.id as string;
-    // Clear onboarding so the page doesn't redirect to /dashboard
-    await resetOnboardingState(accountId);
+    // Clear onboarding so the page doesn't redirect to /dashboard.
+    // Also removes recipe_activations rows to prevent constraint failures on retries.
+    await resetOnboardingState(email);
   });
 
   test.afterAll(async () => {
-    // Restore to a completed state so other tests (and manual use) aren't broken
-    if (accountId) {
-      await markOnboardingComplete(accountId).catch(() => {
+    const email = process.env.E2E_TEST_EMAIL;
+    if (email) {
+      // Restore to completed state so manual use and other tests aren't broken
+      await markOnboardingComplete(email).catch(() => {
         // Non-fatal: best-effort cleanup
       });
     }
