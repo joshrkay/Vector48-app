@@ -28,7 +28,7 @@ export function CompletionScreen() {
           transition={{ type: "spring", stiffness: 220, damping: 16, delay: 0.1 }}
           className="mx-auto"
         >
-          <CheckCircle2 className="h-16 w-16 text-teal-500" strokeWidth={2.5} />
+          <CheckCircle2 className="h-16 w-16 text-v48-accent" strokeWidth={2.5} />
         </motion.div>
 
         <motion.h1
