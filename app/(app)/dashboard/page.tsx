@@ -3,6 +3,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { ActiveRecipesStrip } from "@/components/dashboard/ActiveRecipesStrip";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AlertBanner } from "@/components/dashboard/AlertBanner";
+import { ProvisioningBanner } from "@/components/dashboard/ProvisioningBanner";
 import { GHLSummary } from "@/components/dashboard/GHLSummary";
 import { getStatCards } from "@/lib/dashboard/statsQuery";
 import { isAlertResolved } from "@/lib/dashboard/alerts";
@@ -119,6 +120,10 @@ export default async function DashboardPage() {
         <SignOutButton />
       </div>
 
+      <ProvisioningBanner
+        initialStatus={account.ghl_provisioning_status}
+        accountId={account.id}
+      />
       <AlertBanner initialAlerts={bannerAlerts} />
       <GHLSummary />
 
