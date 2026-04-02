@@ -46,12 +46,12 @@ async function fetchDbData(
   ]);
 
   const automationEvents =
-    eventsResult.status === "fulfilled"
+    eventsResult.status === "fulfilled" && !eventsResult.value.error
       ? ((eventsResult.value.data ?? []) as AutomationEvent[])
       : null;
 
   const allActivations =
-    activationsResult.status === "fulfilled"
+    activationsResult.status === "fulfilled" && !activationsResult.value.error
       ? (activationsResult.value.data ?? [])
       : [];
 
@@ -180,7 +180,7 @@ export default async function ContactDetailPage({
     pipelinesResult.status === "fulfilled" ? (pipelinesResult.value.pipelines ?? []) : [];
 
   const connectedProviders =
-    integrationsResult.status === "fulfilled"
+    integrationsResult.status === "fulfilled" && !integrationsResult.value.error
       ? ((integrationsResult.value.data ?? []) as { status: string; provider: string }[])
           .filter((r) => r.status === "connected")
           .map((r) => r.provider)

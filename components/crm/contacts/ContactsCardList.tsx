@@ -8,15 +8,16 @@ import {
   displayName,
   getInitials,
   formatRelativeTime,
+  normalizePhone,
 } from "./contactUtils";
 import type { GHLContact } from "@/lib/ghl/types";
 
 interface ContactsCardListProps {
   contacts: GHLContact[];
-  aiContactIds: Set<string>;
+  aiPhones: Set<string>;
 }
 
-export function ContactsCardList({ contacts, aiContactIds }: ContactsCardListProps) {
+export function ContactsCardList({ contacts, aiPhones }: ContactsCardListProps) {
   const router = useRouter();
 
   return (
@@ -24,7 +25,9 @@ export function ContactsCardList({ contacts, aiContactIds }: ContactsCardListPro
       {contacts.map((contact) => {
         const stage = deriveStage(contact.tags);
         const stageConfig = stage ? STAGE_CONFIG[stage] : null;
-        const isAI = aiContactIds.has(contact.id);
+
+        const p = normalizePhone(contact.phone);
+        const isAI = p ? aiPhones.has(p) : false;
         const name = displayName(contact);
 
         return (
