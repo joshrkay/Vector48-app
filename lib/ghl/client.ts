@@ -112,7 +112,7 @@ const ENDPOINTS = {
   calendarEvents: "/calendars/events",
   calendars: "/calendars/",
   campaigns: "/campaigns/",
-  locations: "/locations",
+  locations: "/locations/",
   webhooks: "/webhooks",
   tokenExchange: "/oauth/locationToken",
 } as const;
@@ -907,7 +907,7 @@ export class GHLClient {
       const locationId = this.assertLocationScope("locations.update");
       const payload = await this.rawRequest<GHLLocationResponse>(
         "PUT",
-        `${ENDPOINTS.locations}/${locationId}`,
+        `${ENDPOINTS.locations}${locationId}`,
         { body: data },
       );
       return extractEntity<GHLLocation>(payload, ["location"]);
