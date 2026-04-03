@@ -10,10 +10,19 @@ export class SupabaseConfigError extends Error {
 }
 
 function handleInvalidEnv(name: string, reason: string): never {
-  const message = `[Vector48] Invalid ${name}: ${reason}`;
+  const reasonDetails: Record<string, string> = {
+    missing: "value is missing",
+    leading_trailing_whitespace: "remove leading/trailing spaces or newlines",
+    contains_whitespace: "value must be a single line with no whitespace",
+  };
+  const reasonMessage = reasonDetails[reason] ?? reason;
+  const message = `[Vector48] Invalid ${name}: ${reasonMessage}`;
 
   if (isProduction) {
-    console.error(`[Vector48] Invalid ${name}. Check environment variable formatting.`);
+    console.error(`[Vector48] Invalid ${name}. Check environment variable formatting.`, {
+      envVar: name,
+      reasonCode: reason,
+    });
     throw new SupabaseConfigError(`[Vector48] Missing or invalid Supabase configuration.`);
   }
 
@@ -29,17 +38,17 @@ function sanitizeSupabaseEnv(
   const rawValue = process.env[name];
 
   if (!rawValue) {
-    handleInvalidEnv(name, "value is missing");
+    handleInvalidEnv(name, "missing");
   }
 
   const trimmedValue = rawValue.trim();
 
   if (rawValue !== trimmedValue) {
-    handleInvalidEnv(name, "remove leading/trailing spaces or newlines");
+    handleInvalidEnv(name, "leading_trailing_whitespace");
   }
 
   if (/\s/.test(trimmedValue)) {
-    handleInvalidEnv(name, "value must be a single line with no whitespace");
+    handleInvalidEnv(name, "contains_whitespace");
   }
 
   return trimmedValue;
