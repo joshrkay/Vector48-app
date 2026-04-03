@@ -71,8 +71,6 @@ export async function POST(req: Request) {
     .update({
       ghl_provisioning_status: "in_progress",
       ghl_provisioning_error: null,
-      provisioning_status: "in_progress",
-      provisioning_error: null,
     })
     .eq("id", accountId);
 
