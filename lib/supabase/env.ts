@@ -1,14 +1,23 @@
 const isProduction = process.env.NODE_ENV === "production";
 
+export class SupabaseConfigError extends Error {
+  readonly code = "CONFIG_ERROR" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "SupabaseConfigError";
+  }
+}
+
 function handleInvalidEnv(name: string, reason: string): never {
   const message = `[Vector48] Invalid ${name}: ${reason}`;
 
   if (isProduction) {
     console.error(`[Vector48] Invalid ${name}. Check environment variable formatting.`);
-    throw new Error(`[Vector48] Missing or invalid Supabase configuration.`);
+    throw new SupabaseConfigError(`[Vector48] Missing or invalid Supabase configuration.`);
   }
 
-  throw new Error(`${message}.`);
+  throw new SupabaseConfigError(`${message}.`);
 }
 
 function sanitizePublicEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY") {
