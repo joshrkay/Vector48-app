@@ -287,6 +287,8 @@ export async function provisionCustomer(
     await supabase
       .from("accounts")
       .update({
+        ghl_provisioning_status: "complete",
+        ghl_provisioning_error: null,
         provisioning_status: "complete",
         provisioning_error: null,
         provisioning_completed_at: new Date().toISOString(),
@@ -316,6 +318,8 @@ async function markFailed(
   await supabase
     .from("accounts")
     .update({
+      ghl_provisioning_status: "failed",
+      ghl_provisioning_error: error.slice(0, 4000),
       provisioning_status: "error",
       provisioning_error: error.slice(0, 4000),
     })

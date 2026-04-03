@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { provisionGHL } from "@/lib/jobs/provisionGHL";
+import { inngest } from "@/lib/inngest/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -81,10 +81,9 @@ export async function POST(req: Request) {
     );
   }
 
-  queueMicrotask(() => {
-    void provisionGHL(accountId).catch((error) => {
-      console.error("[api/onboarding/provision] unhandled error", error);
-    });
+  await inngest.send({
+    name: "app/customer.onboarding.completed",
+    data: { accountId, activateRecipe: false },
   });
 
   return NextResponse.json({ jobId: accountId });
