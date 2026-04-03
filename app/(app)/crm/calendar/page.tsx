@@ -1,8 +1,98 @@
-export default function CalendarPage() {
+import { redirect } from "next/navigation";
+import { createServerClient } from "@/lib/supabase/server";
+import { getAccountGhlCredentials } from "@/lib/ghl";
+import { getAppointments, getCalendars } from "@/lib/ghl/calendars";
+import { CalendarClientShell } from "@/components/crm/calendar/CalendarClientShell";
+import {
+  getStartOfWeek,
+  getWeekRange,
+  toDateString,
+  fromDateString,
+} from "@/lib/crm/calendar-utils";
+
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams?: { weekStart?: string };
+}) {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("id, business_hours, ghl_provisioning_status")
+    .eq("owner_user_id", user.id)
+    .single();
+  if (!account) redirect("/login");
+
+  // Determine week start from URL param or default to current Monday
+  let weekStart: Date;
+  if (searchParams?.weekStart) {
+    try {
+      weekStart = fromDateString(searchParams.weekStart);
+    } catch {
+      weekStart = getStartOfWeek(new Date());
+    }
+  } else {
+    weekStart = getStartOfWeek(new Date());
+  }
+  const { startDate, endDate } = getWeekRange(weekStart);
+
+  // Extract timezone from business_hours JSONB
+  const businessHours = account.business_hours as Record<string, unknown> | null;
+  const timezone: string =
+    typeof businessHours?.timezone === "string" ? businessHours.timezone : "UTC";
+
+  let auth: { locationId: string; accessToken: string } | null = null;
+  try {
+    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
+    auth = { locationId, accessToken };
+  } catch {
+    // GHL not connected — render with empty data
+  }
+
+  const [appointmentsResult, calendarsResult, recipeResult] = await Promise.allSettled([
+    auth
+      ? getAppointments(
+          { startDate, endDate },
+          { locationId: auth.locationId, apiKey: auth.accessToken },
+        )
+      : Promise.resolve({ events: [] }),
+    auth
+      ? getCalendars({ locationId: auth.locationId, apiKey: auth.accessToken })
+      : Promise.resolve({ calendars: [] }),
+    supabase
+      .from("recipe_activations")
+      .select("status")
+      .eq("account_id", account.id)
+      .eq("recipe_slug", "appointment-reminder")
+      .maybeSingle(),
+  ]);
+
+  const appointments =
+    appointmentsResult.status === "fulfilled"
+      ? (appointmentsResult.value.events ?? [])
+      : [];
+
+  const calendars =
+    calendarsResult.status === "fulfilled"
+      ? (calendarsResult.value.calendars ?? [])
+      : [];
+
+  const reminderActive =
+    recipeResult.status === "fulfilled" &&
+    recipeResult.value.data?.status === "active";
+
   return (
-    <div>
-      <h1 className="font-heading text-2xl font-bold">Calendar</h1>
-      <p className="mt-2 text-sm text-text-secondary">Coming soon</p>
-    </div>
+    <CalendarClientShell
+      initialAppointments={appointments}
+      initialWeekStart={toDateString(weekStart)}
+      calendars={calendars}
+      timezone={timezone}
+      reminderActive={reminderActive}
+    />
   );
 }
