@@ -12,6 +12,7 @@ import {
   computeLayout,
   getMinutesFromMidnight,
   addDays,
+  formatWeekRange,
 } from "@/lib/crm/calendar-utils";
 import type { GHLAppointment } from "@/lib/ghl/types";
 import type { LayoutAppointment } from "@/lib/crm/calendar-utils";
@@ -54,10 +55,7 @@ function WeekHeader({
   onToday: () => void;
 }) {
   const days = getWeekDays(weekStart);
-  const monthYear = new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-  }).format(weekStart);
+  const weekRangeLabel = formatWeekRange(days[0], days[6]);
 
   return (
     <div className="sticky top-0 z-20 bg-bg-primary border-b">
@@ -74,7 +72,7 @@ function WeekHeader({
             Today
           </Button>
         </div>
-        <span className="text-sm font-medium">{monthYear}</span>
+        <span className="text-sm font-medium">{weekRangeLabel}</span>
       </div>
       {/* Day header row */}
       <div

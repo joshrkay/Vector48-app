@@ -17,11 +17,14 @@ import {
 } from "@dnd-kit/sortable";
 import { toast } from "sonner";
 
+import { Plus } from "lucide-react";
+
 import { AddOpportunitySheet } from "@/components/crm/pipeline/AddOpportunitySheet";
 import { MobilePipelineView } from "@/components/crm/pipeline/MobilePipelineView";
 import { OpportunityCard } from "@/components/crm/pipeline/OpportunityCard";
 import { OpportunityDetailSheet } from "@/components/crm/pipeline/OpportunityDetailSheet";
 import { PipelineColumn } from "@/components/crm/pipeline/PipelineColumn";
+import { Button } from "@/components/ui/button";
 import {
   findOpportunityBoardLocation,
   findOpportunityInBoard,
@@ -195,6 +198,34 @@ export function PipelineBoard({
     }
   }
 
+  async function handleDeleteOpportunity(opportunityId: string): Promise<boolean> {
+    const previousBoard = boardRef.current;
+    const removed = removeOpportunityFromBoard(previousBoard, opportunityId);
+
+    if (!removed.removed) {
+      return false;
+    }
+
+    setBoard(removed.next);
+
+    try {
+      const response = await fetch(`/api/ghl/opportunities/${opportunityId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete opportunity");
+      }
+
+      toast.success("Opportunity deleted");
+      return true;
+    } catch {
+      setBoard(previousBoard);
+      toast.error("Couldn't delete opportunity — try again");
+      return false;
+    }
+  }
+
   function handleDragStart(event: DragStartEvent) {
     setActiveOpportunityId(String(event.active.id));
   }
@@ -240,8 +271,26 @@ export function PipelineBoard({
     );
   }
 
+  const firstPipeline = pipelines[0];
+  const firstStage = firstPipeline?.stages[0];
+
   return (
     <>
+      <div className="flex items-center justify-end">
+        <Button
+          size="sm"
+          onClick={() =>
+            firstPipeline && firstStage
+              ? openAddOpportunity(firstPipeline.id, firstStage.id)
+              : undefined
+          }
+          disabled={!firstPipeline || !firstStage}
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          Add Opportunity
+        </Button>
+      </div>
+
       {isDesktop ? (
         <DndContext
           sensors={sensors}
@@ -391,6 +440,7 @@ export function PipelineBoard({
         onOpenChange={handleDetailOpenChange}
         onMoveStage={moveOpportunity}
         onCloseStatus={closeOpportunity}
+        onDelete={handleDeleteOpportunity}
       />
 
       <AddOpportunitySheet
