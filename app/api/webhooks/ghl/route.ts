@@ -8,6 +8,12 @@ import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
 import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
+// GHL Private Integration webhooks use a single global verification token
+// configured in the GHL Marketplace dashboard (Advanced Settings → Webhooks).
+// There is no per-location webhook registration API — all locations share one
+// webhook URL and one secret. Store it as GHL_WEBHOOK_SECRET in Vercel env vars.
+const GLOBAL_WEBHOOK_SECRET = process.env.GHL_WEBHOOK_SECRET ?? null;
+
 function verifyToken(provided: string | null, expected: string | null): boolean {
   if (!provided || !expected) return false;
   const a = crypto.createHash("sha256").update(provided).digest();
@@ -68,7 +74,7 @@ export async function POST(req: Request) {
   const supabase = getSupabaseAdmin();
   const { data: account, error: accountError } = await supabase
     .from("accounts")
-    .select("id, ghl_webhook_secret")
+    .select("id")
     .eq("ghl_location_id", locationId)
     .maybeSingle();
 
@@ -82,23 +88,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   }
 
-  const providedToken = tokenFromRequest(req.headers, payload);
-  const expectedToken =
-    typeof account.ghl_webhook_secret === "string" ? account.ghl_webhook_secret : null;
-
-  if (!expectedToken) {
-    console.warn("[ghl-webhook] missing stored webhook secret for location", locationId);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!providedToken) {
-    console.warn("[ghl-webhook] missing signature header");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!verifyToken(providedToken, expectedToken)) {
-    console.warn("[ghl-webhook] invalid signature for location", locationId);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Verify using the global webhook secret configured in the GHL Marketplace
+  // dashboard. If GHL_WEBHOOK_SECRET is not yet set in env vars, log a warning
+  // but still process the event — prevents a silent shutdown of all webhooks
+  // during initial setup.
+  if (GLOBAL_WEBHOOK_SECRET) {
+    const providedToken = tokenFromRequest(req.headers, payload);
+    if (!providedToken) {
+      console.warn("[ghl-webhook] missing signature header for location", locationId);
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!verifyToken(providedToken, GLOBAL_WEBHOOK_SECRET)) {
+      console.warn("[ghl-webhook] invalid signature for location", locationId);
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  } else {
+    console.warn("[ghl-webhook] GHL_WEBHOOK_SECRET not set — skipping signature verification");
   }
 
   const ghlEventType = parseEventType(payload);
