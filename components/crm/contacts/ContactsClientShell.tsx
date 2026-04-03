@@ -18,6 +18,7 @@ interface ContactsClientShellProps {
   aiPhones: string[];
   filter: string;
   accountId: string;
+  ghlUnavailableReason?: string | null;
 }
 
 export function ContactsClientShell({
@@ -25,6 +26,7 @@ export function ContactsClientShell({
   initialNextCursor,
   aiPhones,
   filter,
+  ghlUnavailableReason = null,
 }: ContactsClientShellProps) {
   const searchParams = useSearchParams();
   const q = searchParams.get("q") ?? undefined;
@@ -98,6 +100,11 @@ export function ContactsClientShell({
       </div>
 
       {/* Contact list */}
+      {ghlUnavailableReason && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          We couldn&apos;t load GoHighLevel contacts right now: {ghlUnavailableReason}
+        </div>
+      )}
       {contacts.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
           No contacts found.
