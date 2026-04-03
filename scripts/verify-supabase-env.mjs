@@ -48,6 +48,18 @@ function validateValue(name, value, sourceLabel) {
   return trimmed;
 }
 
+function validateSupabaseUrl(value, sourceLabel) {
+  if (/["']/.test(value)) {
+    throw new Error(`${sourceLabel}: NEXT_PUBLIC_SUPABASE_URL contains quote characters`);
+  }
+
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(value)) {
+    throw new Error(
+      `${sourceLabel}: NEXT_PUBLIC_SUPABASE_URL must exactly match https://<project-ref>.supabase.co`,
+    );
+  }
+}
+
 function parseDotEnv(content) {
   const env = {};
 
@@ -115,7 +127,11 @@ async function main() {
   const localEnvPath = path.resolve(process.cwd(), ".env.local");
 
   for (const key of REQUIRED_KEYS) {
-    validateValue(key, process.env[key], "Process env");
+    const runtimeValue = validateValue(key, process.env[key], "Process env");
+
+    if (key === "NEXT_PUBLIC_SUPABASE_URL") {
+      validateSupabaseUrl(runtimeValue, "Process env");
+    }
   }
 
   const localEnv = loadLocalEnv(localEnvPath);
@@ -123,6 +139,10 @@ async function main() {
   for (const key of REQUIRED_KEYS) {
     const runtimeValue = validateValue(key, process.env[key], "Process env");
     const localValue = validateValue(key, localEnv[key], ".env.local");
+
+    if (key === "NEXT_PUBLIC_SUPABASE_URL") {
+      validateSupabaseUrl(localValue, ".env.local");
+    }
 
     if (runtimeValue !== localValue) {
       throw new Error(`.env.local mismatch for ${key}. Keep local values in parity with deployment values.`);

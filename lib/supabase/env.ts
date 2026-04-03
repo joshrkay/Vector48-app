@@ -46,7 +46,20 @@ function sanitizeSupabaseEnv(
 }
 
 export function sanitizeSupabaseUrl() {
-  return sanitizeSupabaseEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const value = sanitizeSupabaseEnv("NEXT_PUBLIC_SUPABASE_URL");
+
+  if (/["']/.test(value)) {
+    handleInvalidEnv("NEXT_PUBLIC_SUPABASE_URL", "remove copied quote characters");
+  }
+
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(value)) {
+    handleInvalidEnv(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "must exactly match https://<project-ref>.supabase.co",
+    );
+  }
+
+  return value;
 }
 
 export function sanitizeSupabaseAnonKey() {
