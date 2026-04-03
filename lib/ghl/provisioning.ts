@@ -295,13 +295,19 @@ export async function provisionCustomer(
         "ConversationUnreadUpdate",
       ];
 
-      const webhook = await agencyClient.webhooks.create({
-        locationId,
-        url: webhookUrl,
-        events: webhookEvents,
-      });
-
-      log("step_6_complete", accountId, `webhookId=${webhook.id}`);
+      try {
+        const webhook = await agencyClient.webhooks.create({
+          locationId,
+          url: webhookUrl,
+          events: webhookEvents,
+        });
+        log("step_6_complete", accountId, `webhookId=${webhook.id}`);
+      } catch (webhookErr) {
+        logError("step_6_skipped", accountId, sanitizeError(webhookErr));
+        console.warn(
+          `[ghl-provisioning] Webhook registration skipped for ${accountId}: ${sanitizeError(webhookErr)}`,
+        );
+      }
     } else {
       console.warn(
         `[ghl-provisioning] NEXT_PUBLIC_APP_URL not set — skipping webhook registration for ${accountId}`,

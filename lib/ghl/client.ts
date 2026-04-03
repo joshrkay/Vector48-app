@@ -113,7 +113,7 @@ const ENDPOINTS = {
   calendars: "/calendars/",
   campaigns: "/campaigns/",
   locations: "/locations/",
-  webhooks: "/webhooks",
+  webhooks: "/webhooks/",
   tokenExchange: "/oauth/locationToken",
 } as const;
 
@@ -927,7 +927,7 @@ export class GHLClient {
 
     delete: async (webhookId: string): Promise<void> => {
       this.assertAgencyScope("webhooks.delete");
-      await this.rawRequest("DELETE", `${ENDPOINTS.webhooks}/${webhookId}`);
+      await this.rawRequest("DELETE", `${ENDPOINTS.webhooks}${webhookId}`);
     },
   };
 
