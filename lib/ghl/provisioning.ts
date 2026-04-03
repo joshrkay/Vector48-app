@@ -9,14 +9,12 @@
 // ---------------------------------------------------------------------------
 import "server-only";
 
-import crypto from "node:crypto";
-
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { encryptToken } from "./token";
 import { GHLClient } from "./client";
 import { GHL_DEFAULT_VOICES } from "./voiceTypes";
 import type { GHLCreateVoiceAgentPayload } from "./voiceTypes";
-import type { GHLWebhookEvent } from "./types";
+
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -274,62 +272,22 @@ export async function provisionCustomer(
       log("step_5_skipped_no_agent", accountId);
     }
 
-    // ── Step 6: Register GHL webhooks for recipe event types ───────────
+    // ── Step 6: GHL webhook note (manual setup required) ──────────────
+    //
+    // GHL Private Integration does NOT provide a REST API for registering
+    // webhooks programmatically. Webhooks must be configured once in the
+    // GHL Marketplace dashboard:
+    //   Marketplace → App Settings → Advanced Settings → Webhooks
+    //   URL: {NEXT_PUBLIC_APP_URL}/api/webhooks/ghl
+    //   Events: ContactCreate, ContactUpdate, OpportunityCreate,
+    //           AppointmentCreate, AppointmentStatusUpdate,
+    //           CallCompleted, InboundMessage, ConversationUnreadUpdate
+    //
+    // Also set the verification token in the dashboard and add it as the
+    // GHL_WEBHOOK_SECRET environment variable in Vercel. This is a one-time
+    // setup for the entire app — not per-customer.
 
-    log("step_6_register_webhooks", accountId);
-
-    const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
-    const webhookUrl = appBaseUrl
-      ? `${appBaseUrl}/api/webhooks/ghl`
-      : "";
-
-    if (webhookUrl) {
-      // Generate a random secret used to verify incoming webhook payloads.
-      // GHL echoes this back in the webhook body or headers so the receiver
-      // can reject spoofed requests. We persist it to accounts.ghl_webhook_secret
-      // so the route handler (app/api/webhooks/ghl/route.ts) can validate it.
-      const webhookSecret = crypto.randomBytes(32).toString("hex");
-
-      // Register a single webhook with all needed event types.
-      // GHL supports multiple events per webhook registration.
-      const webhookEvents: GHLWebhookEvent[] = [
-        "OpportunityCreate",
-        "AppointmentCreate",
-        "AppointmentStatusUpdate",
-        "CallCompleted",
-        "InboundMessage",
-        "ContactCreate",
-        "ContactUpdate",
-        "ConversationUnreadUpdate",
-      ];
-
-      try {
-        const webhook = await locationClient.webhooks.create({
-          locationId,
-          url: webhookUrl,
-          events: webhookEvents,
-          secret: webhookSecret,
-        });
-
-        // Persist the secret immediately after successful registration so the
-        // webhook receiver can authenticate incoming payloads.
-        await supabase
-          .from("accounts")
-          .update({ ghl_webhook_secret: webhookSecret })
-          .eq("id", accountId);
-
-        log("step_6_complete", accountId, `webhookId=${webhook.id}`);
-      } catch (webhookErr) {
-        logError("step_6_skipped", accountId, sanitizeError(webhookErr));
-        console.warn(
-          `[ghl-provisioning] Webhook registration skipped for ${accountId}: ${sanitizeError(webhookErr)}`,
-        );
-      }
-    } else {
-      console.warn(
-        `[ghl-provisioning] NEXT_PUBLIC_APP_URL not set — skipping webhook registration for ${accountId}`,
-      );
-    }
+    log("step_6_manual_setup_required", accountId);
 
     // ── Step 7: Mark provisioning complete ─────────────────────────────
 
