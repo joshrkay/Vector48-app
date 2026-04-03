@@ -192,6 +192,17 @@ export function AppointmentDetailSheet({
           {appointment.status !== "cancelled" && (
             <Button
               variant="outline"
+              onClick={() => toast.info("Reschedule coming soon")}
+              disabled={loading !== null}
+              className="w-full"
+            >
+              Reschedule
+            </Button>
+          )}
+
+          {appointment.status !== "cancelled" && (
+            <Button
+              variant="outline"
               onClick={handleCancel}
               disabled={loading !== null}
               className="w-full text-destructive hover:text-destructive"

@@ -7,6 +7,14 @@ import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -35,6 +43,7 @@ interface OpportunityDetailSheetProps {
     opportunityId: string,
     status: "won" | "lost",
   ) => Promise<boolean>;
+  onDelete: (opportunityId: string) => Promise<boolean>;
 }
 
 export function OpportunityDetailSheet({
@@ -44,12 +53,14 @@ export function OpportunityDetailSheet({
   onOpenChange,
   onMoveStage,
   onCloseStatus,
+  onDelete,
 }: OpportunityDetailSheetProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [detail, setDetail] = useState<PipelineOpportunityDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (!open || !opportunity) {
@@ -95,6 +106,7 @@ export function OpportunityDetailSheet({
       setDetail(null);
       setError(null);
       setIsMutating(false);
+      setShowDeleteConfirm(false);
     }
   }, [open]);
 
@@ -132,6 +144,19 @@ export function OpportunityDetailSheet({
     }
   }
 
+  async function handleDeleteConfirm() {
+    if (!opportunity) return;
+
+    setIsMutating(true);
+    const succeeded = await onDelete(opportunity.id);
+    setIsMutating(false);
+
+    if (succeeded) {
+      setShowDeleteConfirm(false);
+      onOpenChange(false);
+    }
+  }
+
   const resolvedDetail =
     detail && opportunity
       ? {
@@ -144,6 +169,7 @@ export function OpportunityDetailSheet({
       : detail;
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side={isDesktop ? "right" : "bottom"}
@@ -325,9 +351,51 @@ export function OpportunityDetailSheet({
                 Close Won
               </Button>
             </section>
+
+            <section className="border-t border-[var(--v48-border)] pt-4">
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full text-destructive hover:text-destructive"
+                disabled={isMutating}
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete Opportunity
+              </Button>
+            </section>
           </div>
         )}
       </SheetContent>
     </Sheet>
+
+    <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete opportunity?</DialogTitle>
+          <DialogDescription>
+            This will permanently remove the opportunity. This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isMutating}
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={isMutating}
+            onClick={() => void handleDeleteConfirm()}
+          >
+            {isMutating ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

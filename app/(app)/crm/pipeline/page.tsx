@@ -184,6 +184,13 @@ export default async function PipelinePage() {
         </p>
       </div>
 
+      <p className="text-sm text-[var(--text-secondary)]">
+        {normalizedOpportunities.length}{" "}
+        {normalizedOpportunities.length === 1 ? "open opportunity" : "open opportunities"} across{" "}
+        {(pipelinesResult.pipelines ?? []).length}{" "}
+        {(pipelinesResult.pipelines ?? []).length === 1 ? "pipeline" : "pipelines"}
+      </p>
+
       <PipelineBoard
         pipelines={pipelinesResult.pipelines ?? []}
         initialOpportunities={normalizedOpportunities}

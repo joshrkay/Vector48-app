@@ -323,3 +323,20 @@ export function getDayRange(date: Date): { startDate: string; endDate: string } 
   end.setHours(23, 59, 59, 999);
   return { startDate: start.toISOString(), endDate: end.toISOString() };
 }
+
+/**
+ * Formats a week range as "Mar 31 – Apr 6, 2026".
+ * Year is always appended to the end date.
+ */
+export function formatWeekRange(start: Date, end: Date): string {
+  const startFmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(start);
+  const endFmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(end);
+  return `${startFmt} – ${endFmt}`;
+}
