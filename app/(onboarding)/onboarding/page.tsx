@@ -48,7 +48,6 @@ export default async function OnboardingPage() {
 
   // If onboarding already done, go to dashboard
   if (
-    account?.onboarding_done_at ||
     account?.onboarding_completed_at ||
     account?.ghl_provisioning_status === "failed"
   ) {
@@ -78,9 +77,9 @@ export default async function OnboardingPage() {
             }
           : { preset: "weekday_8_5" as const },
         voiceGender: (account.voice_gender as "male" | "female") || "male",
-        voiceGreeting: account.voice_greeting || "",
-        notificationContact: account.notification_contact || "",
-        notificationSms: account.notification_sms ?? false,
+        voiceGreeting: account.greeting_text || "",
+        notificationContact: account.notification_contact_name || "",
+        notificationSms: (account.notification_preferences as Record<string, unknown>)?.sms as boolean ?? false,
         notificationPreferences: prefs,
         activateRecipe1: true,
         currentStep: account.onboarding_step || 0,

@@ -9,8 +9,8 @@ const STEP_COLUMN_MAP: Record<number, string[]> = {
   2: ["phone"],
   3: ["vertical"],
   4: ["business_hours"], // JSON built in step === 4 branch below
-  5: ["voice_gender", "voice_greeting"],
-  6: ["notification_contact", "notification_sms"],
+  5: ["voice_gender", "greeting_text"],
+  6: ["notification_contact_name", "notification_contact_phone"],
   7: [], // Activate recipe — completeOnboarding handles finish
 };
 
@@ -22,11 +22,10 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   businessHours: "business_hours",
   preset: "business_hours",
   voiceGender: "voice_gender",
-  voiceGreeting: "voice_greeting",
-  greetingText: "voice_greeting",
-  notificationContact: "notification_contact",
-  notificationContactPhone: "notification_contact",
-  notificationSms: "notification_sms",
+  voiceGreeting: "greeting_text",
+  greetingText: "greeting_text",
+  notificationContact: "notification_contact_name",
+  notificationContactPhone: "notification_contact_phone",
   activateRecipe1: "activate_recipe_1",
 };
 
@@ -113,11 +112,8 @@ export async function completeOnboarding(
       onboarding_step: 8,
       activate_recipe_1: activateRecipe,
       onboarding_completed_at: completedAt,
-      onboarding_done_at: completedAt,
       ghl_provisioning_status: "pending",
       ghl_provisioning_error: null,
-      provisioning_status: "pending",
-      provisioning_error: null,
     })
     .eq("id", accountId);
 
@@ -130,7 +126,7 @@ export async function completeOnboarding(
     const config = voiceConfig
       ? {
           voice_gender: voiceConfig.voiceGender,
-          voice_greeting: voiceConfig.voiceGreeting,
+          greeting_text: voiceConfig.voiceGreeting,
         }
       : null;
 
