@@ -116,38 +116,50 @@ export async function provisionCustomer(
 
     const agencyClient = GHLClient.forAgency();
 
-    const location = await agencyClient.locations.create({
-      companyId,
-      name: account.business_name,
-      phone: account.phone ?? undefined,
-      city: account.service_area ?? undefined,
-      country: "US",
-      timezone: "America/Phoenix",
-      email: userEmail || undefined,
-    });
+    // If sub-account was already created in a prior attempt, reuse it
+    let locationId: string;
+    if (account.ghl_sub_account_id) {
+      locationId = account.ghl_sub_account_id;
+      log("step_2_reuse_existing", accountId, `locationId=${locationId}`);
+    } else {
+      const location = await agencyClient.locations.create({
+        companyId,
+        name: account.business_name,
+        phone: account.phone ?? undefined,
+        city: account.service_area ?? undefined,
+        country: "US",
+        timezone: "America/Phoenix",
+        email: userEmail || undefined,
+      });
 
-    const locationId = location.id;
+      locationId = location.id;
 
-    // Store sub-account ID immediately so we can recover on retry
-    await supabase
-      .from("accounts")
-      .update({
-        ghl_sub_account_id: locationId,
-        ghl_location_id: locationId,
-      })
-      .eq("id", accountId);
+      // Store sub-account ID immediately so we can recover on retry
+      await supabase
+        .from("accounts")
+        .update({
+          ghl_sub_account_id: locationId,
+          ghl_location_id: locationId,
+        })
+        .eq("id", accountId);
+    }
 
     log("step_2_complete", accountId, `locationId=${locationId}`);
 
-    // ── Step 3: Exchange agency token for sub-account token ────────────
+    // ── Step 3: Store agency key as location token ─────────────────────
 
     log("step_3_token_exchange", accountId);
 
-    const tokenRes = await GHLClient.exchangeSubAccountToken(
-      companyId,
-      locationId,
-    );
-    const subAccountToken = tokenRes.access_token;
+    // GHL private integration agency keys work directly for all location-scoped
+    // operations. POST /oauth/locationToken is an OAuth2-only endpoint and
+    // returns 401 when called with a private integration key — skip it entirely.
+    const agencyApiKey = process.env.GHL_AGENCY_API_KEY;
+    if (!agencyApiKey) {
+      const msg = "GHL_AGENCY_API_KEY is not configured";
+      await markFailed(supabase, accountId, msg);
+      return { success: false, error: msg };
+    }
+    const subAccountToken = agencyApiKey;
 
     // Store encrypted token on the account (used by getGHLClient)
     const encryptedToken = encryptToken(subAccountToken);
@@ -167,9 +179,9 @@ export async function provisionCustomer(
           credentials_encrypted: {
             access_token_encrypted: encryptedToken,
             location_id: locationId,
-            token_type: tokenRes.token_type,
-            expires_in: tokenRes.expires_in,
-            scope: tokenRes.scope,
+            token_type: "private_integration",
+            expires_in: null,
+            scope: "agency",
           },
         },
         { onConflict: "account_id,provider" },
