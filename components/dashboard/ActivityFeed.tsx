@@ -22,6 +22,9 @@ export function ActivityFeed({
   accountId,
   showWarmupEmptyState,
 }: ActivityFeedProps) {
+  const isValidAccountId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    accountId.trim(),
+  );
   const [items, setItems] = useState<AutomationEvent[]>(initialItems);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const [loading, setLoading] = useState(false);
@@ -116,7 +119,12 @@ export function ActivityFeed({
     [dedupeMerge],
   );
 
-  useRealtimeInserts("automation_events", `account_id=eq.${accountId}`, handleRealtimeInsert);
+  const { realtimeAvailable } = useRealtimeInserts(
+    "automation_events",
+    `account_id=eq.${accountId}`,
+    handleRealtimeInsert,
+    { enabled: isValidAccountId },
+  );
 
   if (items.length === 0) {
     return (
@@ -164,12 +172,22 @@ export function ActivityFeed({
             </>
           )}
         </div>
+        {!realtimeAvailable ? (
+          <p className="pt-3 text-center text-xs text-amber-600">
+            Live updates are temporarily unavailable.
+          </p>
+        ) : null}
       </section>
     );
   }
 
   return (
     <section className="rounded-2xl border border-[#E2E8F0] bg-white px-4 py-1">
+      {!realtimeAvailable ? (
+        <p className="pt-3 text-center text-xs text-amber-600">
+          Live updates are temporarily unavailable. New activity may take a moment to appear.
+        </p>
+      ) : null}
       <ul className="space-y-2">
         <AnimatePresence initial={false}>
           {items.map((event) => (
