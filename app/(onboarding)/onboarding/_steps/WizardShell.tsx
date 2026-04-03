@@ -206,8 +206,6 @@ function StepRenderer({
       return <BusinessNameStep {...props} />;
     case 2:
       return <PhoneStep {...props} />;
-    case 2:
-      return <VerticalStep {...props} />;
     case 3:
       return <VerticalStep {...props} />;
     case 4:

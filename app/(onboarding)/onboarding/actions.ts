@@ -3,14 +3,23 @@
 import { createServerClient } from "@/lib/supabase/server";
 
 // Maps step index to the DB columns that step updates
+// Step 0: WelcomeStep      — no data
+// Step 1: BusinessNameStep — business_name
+// Step 2: PhoneStep        — phone
+// Step 3: VerticalStep     — vertical
+// Step 4: BusinessHoursStep— business_hours
+// Step 5: VoiceAIStep      — voice_gender, greeting_text
+// Step 6: NotificationsStep— notification_contact_name, notification_contact_phone
+// Step 7: ActivateRecipeStep — handled in completeOnboarding
 const STEP_COLUMN_MAP: Record<number, string[]> = {
-  0: ["business_name"],
-  1: ["phone"],
-  2: ["vertical"],
-  3: ["business_hours"],
-  4: ["voice_gender", "voice_greeting"],
-  5: ["notification_contact", "notification_sms"],
-  6: [], // activate recipe — handled separately
+  0: [],
+  1: ["business_name"],
+  2: ["phone"],
+  3: ["vertical"],
+  4: ["business_hours"],
+  5: ["voice_gender", "greeting_text"],
+  6: ["notification_contact_name", "notification_contact_phone"],
+  7: [],
 };
 
 // Maps camelCase form field names to snake_case DB columns
@@ -21,9 +30,9 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   businessHours: "business_hours",
   preset: "business_hours",
   voiceGender: "voice_gender",
-  greetingText: "voice_greeting",
-  notificationContact: "notification_contact",
-  notificationContactPhone: "notification_contact",
+  greetingText: "greeting_text",
+  notificationContact: "notification_contact_name",
+  notificationContactPhone: "notification_contact_phone",
   activateRecipe1: "activate_recipe_1",
 };
 
@@ -72,14 +81,6 @@ export async function saveOnboardingStep(
         update[column] = value;
       }
     }
-
-    // Notifications step: enforce SMS opt-in on onboarding
-    if (step === 6) {
-      update.notification_sms = true;
-      if (!update.notification_contact && data.notificationContactName) {
-        update.notification_contact = data.notificationContactName;
-      }
-    }
   }
 
   const { error } = await supabase
@@ -88,6 +89,7 @@ export async function saveOnboardingStep(
     .eq("id", accountId);
 
   if (error) {
+    console.error("[onboarding] failed to persist step", error.message);
     return { error: error.message };
   }
 
@@ -112,7 +114,7 @@ export async function completeOnboarding(
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
-      onboarding_done_at: new Date().toISOString(),
+      onboarding_completed_at: new Date().toISOString(),
       onboarding_step: 8,
       activate_recipe_1: activateRecipe,
     })
@@ -127,7 +129,7 @@ export async function completeOnboarding(
     const config = voiceConfig
       ? {
           voice_gender: voiceConfig.voiceGender,
-          voice_greeting: voiceConfig.voiceGreeting,
+          greeting_text: voiceConfig.voiceGreeting,
         }
       : null;
 
