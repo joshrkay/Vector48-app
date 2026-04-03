@@ -42,7 +42,7 @@ export default async function PipelinePage() {
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id")
+    .select("id, ghl_provisioning_status, ghl_provisioning_error")
     .eq("owner_user_id", user.id)
     .single();
 
@@ -50,9 +50,45 @@ export default async function PipelinePage() {
     redirect("/login");
   }
 
-  const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
+  let auth:
+    | {
+        locationId: string;
+        apiKey: string;
+      }
+    | null = null;
+  let ghlUnavailableReason: string | null = null;
+
+  try {
+    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
+    auth = { locationId, apiKey: accessToken };
+  } catch (error) {
+    const reasonFromProvisioning =
+      account.ghl_provisioning_status === "failed"
+        ? (account.ghl_provisioning_error ?? "GHL provisioning failed.")
+        : null;
+    ghlUnavailableReason =
+      reasonFromProvisioning ??
+      (error instanceof Error ? error.message : "Unable to load GHL credentials.");
+  }
+
+  if (!auth) {
+    return (
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <h1 className="font-heading text-2xl font-bold md:text-[28px]">Pipeline</h1>
+          <p className="text-sm text-[var(--text-secondary)]">
+            Track open opportunities by stage and move them without leaving CRM.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          GoHighLevel is currently unavailable for this account.
+          {ghlUnavailableReason ? ` ${ghlUnavailableReason}` : ""}
+        </div>
+      </div>
+    );
+  }
+
   const client = cachedGHLClient(account.id);
-  const auth = { locationId, apiKey: accessToken };
 
   const [pipelinesResult, opportunities, activationsResult] = await Promise.all([
     client.getPipelines(auth),

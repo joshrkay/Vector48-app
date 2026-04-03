@@ -109,14 +109,43 @@ export default async function ContactDetailPage({
   const { data: account } = await supabase
     .from("accounts")
     .select(
-      "id, business_name, vertical, plan_slug, phone, voice_gender, greeting_text, business_hours",
+      "id, business_name, vertical, plan_slug, phone, voice_gender, greeting_text, business_hours, ghl_provisioning_status, ghl_provisioning_error",
     )
     .eq("owner_user_id", user.id)
     .single();
   if (!account) redirect("/login");
 
-  const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
-  const ghlOpts: GHLClientOptions = { locationId, apiKey: accessToken };
+  let ghlOpts: GHLClientOptions | null = null;
+  let ghlUnavailableReason: string | null = null;
+  try {
+    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
+    ghlOpts = { locationId, apiKey: accessToken };
+  } catch (error) {
+    const reasonFromProvisioning =
+      account.ghl_provisioning_status === "failed"
+        ? (account.ghl_provisioning_error ?? "GHL provisioning failed.")
+        : null;
+    ghlUnavailableReason =
+      reasonFromProvisioning ??
+      (error instanceof Error ? error.message : "Unable to load GHL credentials.");
+  }
+
+  if (!ghlOpts) {
+    return (
+      <div className="space-y-4">
+        <a
+          href="/crm/contacts"
+          className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        >
+          ← Back to Contacts
+        </a>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          GoHighLevel is currently unavailable for this account.
+          {ghlUnavailableReason ? ` ${ghlUnavailableReason}` : ""}
+        </div>
+      </div>
+    );
+  }
 
   // Fire all fetches in parallel. One failure must not break the page.
   const [contactResult, dbResult, convResult, apptResult, notesResult, oppsResult, pipelinesResult, integrationsResult] =

@@ -379,16 +379,28 @@ async function getResponseTimes(accountId: string): Promise<ResponseTimeData> {
 
 export const getReportData = unstable_cache(
   async (accountId: string): Promise<ReportData> => {
-    const { locationId, accessToken } = await getAccountGhlCredentials(accountId);
     const client = cachedGHLClient(accountId);
-    const auth: GHLClientOptions = { locationId, apiKey: accessToken };
+    let auth: GHLClientOptions | null = null;
+
+    try {
+      const { locationId, accessToken } = await getAccountGhlCredentials(accountId);
+      auth = { locationId, apiKey: accessToken };
+    } catch {
+      auth = null;
+    }
 
     const [recipePerformance, leadSources, pipelineFunnel, contactGrowth, responseTimes] =
       await Promise.all([
         getRecipePerformance(accountId).catch((): RecipePerformanceRow[] => []),
-        getLeadSources(client, auth).catch((): LeadSourceRow[] => []),
-        getPipelineConversion(client, auth).catch((): PipelineFunnelRow[] => []),
-        getContactGrowth(client, auth).catch((): ContactGrowthRow[] => []),
+        auth
+          ? getLeadSources(client, auth).catch((): LeadSourceRow[] => [])
+          : Promise.resolve([] as LeadSourceRow[]),
+        auth
+          ? getPipelineConversion(client, auth).catch((): PipelineFunnelRow[] => [])
+          : Promise.resolve([] as PipelineFunnelRow[]),
+        auth
+          ? getContactGrowth(client, auth).catch((): ContactGrowthRow[] => [])
+          : Promise.resolve([] as ContactGrowthRow[]),
         getResponseTimes(accountId).catch(
           (): ResponseTimeData => ({
             buckets: BUCKETS.map((b) => ({ label: b.label, count: 0 })),
