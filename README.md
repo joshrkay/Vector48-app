@@ -32,6 +32,8 @@ If dependencies change, run `npm install` and commit `package-lock.json`.
 1. In Vercel (or your deployment platform), set these values from Supabase Dashboard → Project Settings → API:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SUPABASE_URL` must be exactly `https://<project-ref>.supabase.co` (no quotes, spaces, or line breaks).
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be a single-line value with no whitespace.
 2. Redeploy after updating env vars.
 3. Copy `.env.local.example` to `.env.local` and mirror the exact same values locally.
 4. Run:
