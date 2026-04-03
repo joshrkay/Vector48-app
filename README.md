@@ -43,3 +43,14 @@ npm run verify:supabase-env -- --base-url 'https://<your-deployment>.vercel.app'
 ```
 
 This command enforces the same rules as `lib/supabase/env.ts` (required, no leading/trailing whitespace, no whitespace anywhere), verifies `.env.local` parity, and re-checks `/api/onboarding/provision/status`.
+
+## Login debugging: extension noise triage
+
+If you see console errors/warnings on the login page that do not map to repository code:
+
+1. Open the login page in a Chrome Incognito window with extensions disabled, or temporarily disable extensions in a normal profile.
+2. Retry login and compare console output.
+3. If the suspect message disappears while app errors remain unchanged, classify it as external extension noise and exclude it from app debugging.
+4. If the message still appears with all extensions disabled, inspect app-injected scripts for custom `chrome.runtime` / `browser.runtime` usage.
+
+Repository note: current scans have not found custom `chrome.runtime` or `browser.runtime` usage in this codebase.
