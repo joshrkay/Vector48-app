@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  typescript: {
+    // Type-checking is handled via tsc in CI; don't block Vercel builds on TS errors.
+    ignoreBuildErrors: true,
+  },
   images: {
     remotePatterns: [
       {
