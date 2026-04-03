@@ -30,19 +30,76 @@ export function CompletionScreen() {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    async function fetchStatus() {
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    type ProvisionStatusPayload = {
+      status?: "pending" | "in_progress" | "complete" | "failed" | "degraded";
+      error?: string | { code?: string };
+    };
+
+    async function safeParseJson(response: Response): Promise<ProvisionStatusPayload | null> {
+      try {
+        return (await response.json()) as ProvisionStatusPayload;
+      } catch {
+        return null;
+      }
+    }
+
+    function isConfigError(error: ProvisionStatusPayload["error"]) {
+      return typeof error === "object" && error !== null && error.code === "CONFIG_ERROR";
+    }
+
+    function isDegraded(payload: ProvisionStatusPayload | null) {
+      return payload?.status === "degraded" || isConfigError(payload?.error);
+    }
+
+    async function fetchStatus(): Promise<{
+      status: "pending" | "in_progress" | "complete" | "failed";
+      error?: string;
+    }> {
       const response = await fetch(
         `/api/onboarding/provision/status?accountId=${encodeURIComponent(accountId)}`,
         { cache: "no-store" },
       );
 
-      if (!response.ok) {
-        throw new Error(`Status request failed: ${response.status}`);
+      const payload = await safeParseJson(response);
+
+      if (isDegraded(payload)) {
+        stopPolling();
+        setStatus("failed");
+        setError("Provisioning status is temporarily unavailable.");
+        return { status: "failed", error: "Provisioning status is temporarily unavailable." };
       }
 
-      return (await response.json()) as {
-        status: "pending" | "in_progress" | "complete" | "failed";
-        error?: string;
+      if (!response.ok) {
+        throw new Error(
+          payload && typeof payload.error === "string"
+            ? payload.error
+            : `Status request failed: ${response.status}`,
+        );
+      }
+
+      if (!payload) {
+        throw new Error("Status response was not valid JSON.");
+      }
+
+      if (
+        payload.status !== "pending" &&
+        payload.status !== "in_progress" &&
+        payload.status !== "complete" &&
+        payload.status !== "failed"
+      ) {
+        throw new Error("Status response contained an unknown provisioning state.");
+      }
+
+      return {
+        status: payload.status,
+        error: typeof payload.error === "string" ? payload.error : undefined,
       };
     }
 
@@ -76,6 +133,7 @@ export function CompletionScreen() {
               setStatus(payload.status);
               setError(payload.error ?? null);
               if (payload.status === "complete") {
+                stopPolling();
                 router.replace("/dashboard");
               }
             })
@@ -84,6 +142,7 @@ export function CompletionScreen() {
               console.error("[onboarding] status polling failed", requestError);
               setStatus("failed");
               setError("Unable to check provisioning status.");
+              stopPolling();
             });
         }, 2000);
       } catch (requestError) {

@@ -26,3 +26,20 @@ If dependencies change, run `npm install` and commit `package-lock.json`.
   `lib/inngest/functions.ts`.
 - Do not add a high-frequency Vercel cron for recipe triggers unless the deployment
   plan supports it and the handler matches the current `recipe_triggers` schema.
+
+## Supabase env parity + provisioning status check
+
+1. In Vercel (or your deployment platform), set these values from Supabase Dashboard → Project Settings → API:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+2. Redeploy after updating env vars.
+3. Copy `.env.local.example` to `.env.local` and mirror the exact same values locally.
+4. Run:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL='https://<project-ref>.supabase.co' \
+NEXT_PUBLIC_SUPABASE_ANON_KEY='<anon-key>' \
+npm run verify:supabase-env -- --base-url 'https://<your-deployment>.vercel.app' --account-id '<account-id>'
+```
+
+This command enforces the same rules as `lib/supabase/env.ts` (required, no leading/trailing whitespace, no whitespace anywhere), verifies `.env.local` parity, and re-checks `/api/onboarding/provision/status`.

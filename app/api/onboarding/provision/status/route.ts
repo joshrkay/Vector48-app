@@ -6,6 +6,21 @@ import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+function isSupabaseConfigError(error: unknown): error is SupabaseConfigError {
+  if (error instanceof SupabaseConfigError) {
+    return true;
+  }
+
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : undefined;
+  const name = "name" in error ? error.name : undefined;
+
+  return code === "CONFIG_ERROR" || name === "SupabaseConfigError";
+}
+
 export async function GET(req: Request) {
   try {
     const supabase = await createServerClient();
