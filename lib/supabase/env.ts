@@ -29,13 +29,27 @@ function handleInvalidEnv(name: string, reason: string): never {
   throw new SupabaseConfigError(`${message}.`);
 }
 
+function getEnvValue(
+  name:
+    | "NEXT_PUBLIC_SUPABASE_URL"
+    | "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    | "SUPABASE_SERVICE_ROLE_KEY",
+): string | undefined {
+  // Use static property access so Next.js/webpack's DefinePlugin can inline
+  // NEXT_PUBLIC_* values into the client bundle at build time.
+  // Dynamic access (process.env[name]) is not replaced when the key is a variable.
+  if (name === "NEXT_PUBLIC_SUPABASE_URL") return process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (name === "NEXT_PUBLIC_SUPABASE_ANON_KEY") return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return process.env.SUPABASE_SERVICE_ROLE_KEY;
+}
+
 function sanitizeSupabaseEnv(
   name:
     | "NEXT_PUBLIC_SUPABASE_URL"
     | "NEXT_PUBLIC_SUPABASE_ANON_KEY"
     | "SUPABASE_SERVICE_ROLE_KEY",
 ) {
-  const rawValue = process.env[name];
+  const rawValue = getEnvValue(name);
 
   if (!rawValue) {
     handleInvalidEnv(name, "missing");
