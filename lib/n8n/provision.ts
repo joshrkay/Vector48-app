@@ -10,6 +10,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getAccountGhlCredentials } from "@/lib/ghl";
+import { getPauseWebhookUrl, getResumeWebhookUrl } from "@/lib/recipes/eventMapping";
 import { computeExecutionToken } from "@/lib/recipes/executionAuth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
@@ -160,6 +161,13 @@ export async function provisionRecipe(
         n8n_workflow_id: workflowId,
         status: "active",
         error_message: null,
+        // Store pause/resume webhook URLs so pause-for-contact and
+        // resume-for-contact can signal N8N to abort in-flight executions.
+        config: {
+          ...(config ?? {}),
+          pause_webhook_url: getPauseWebhookUrl(recipeSlug, accountId),
+          resume_webhook_url: getResumeWebhookUrl(recipeSlug, accountId),
+        },
       })
       .eq("id", activationId);
 

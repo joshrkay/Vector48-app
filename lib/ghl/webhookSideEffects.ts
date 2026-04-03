@@ -1,3 +1,9 @@
+import {
+  GHL_EVENT_TO_RECIPES,
+  INBOUND_RECIPES,
+  SCHEDULED_RECIPE_OFFSETS,
+  getN8nWebhookUrl,
+} from "@/lib/recipes/eventMapping";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import type { AutomationEventInsert } from "./webhookTypes";
@@ -236,6 +242,103 @@ async function flagNegativeCalls(
   }
 }
 
+async function triggerRecipesFromGhlEvent(
+  accountId: string,
+  event: AutomationEventInsert,
+  rawPayload: Record<string, unknown>,
+  activeRecipes: ActiveRecipe[],
+): Promise<void> {
+  const eventType = event.ghl_event_type ?? "";
+  const slugs = GHL_EVENT_TO_RECIPES[eventType];
+  if (!slugs?.length) return;
+
+  const contactId = contactIdFrom(event, rawPayload);
+  const supabase = getSupabaseAdmin();
+
+  for (const slug of slugs) {
+    if (!activeRecipes.some((r) => r.recipe_slug === slug)) continue;
+
+    if (INBOUND_RECIPES.has(slug)) {
+      // Pattern A — fire immediately to N8N webhook
+      const url = getN8nWebhookUrl(slug, accountId);
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contactId,
+            contactName: event.contact_name ?? null,
+            contactPhone: event.contact_phone ?? null,
+            accountId,
+            ghlEventType: eventType,
+            ghlEventId: event.ghl_event_id ?? null,
+          }),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) {
+          console.warn(`[ghl-webhook] n8n inbound webhook ${slug} responded ${res.status}`);
+        }
+      } catch (err) {
+        console.error(`[ghl-webhook] n8n inbound webhook ${slug} failed`, err);
+      }
+
+      await supabase.from("automation_events").insert({
+        account_id: accountId,
+        recipe_slug: slug,
+        event_type: "recipe_triggered",
+        ghl_event_type: eventType,
+        ghl_event_id: `${event.ghl_event_id ?? ""}:recipe-trigger:${slug}`,
+        contact_id: contactId,
+        contact_phone: event.contact_phone ?? null,
+        contact_name: event.contact_name ?? null,
+        summary: `Recipe "${slug}" triggered by ${eventType} for ${event.contact_name ?? event.contact_phone ?? "contact"}`,
+        detail: { recipe_slug: slug, triggered_by: "ghl_event" },
+      });
+    } else {
+      // Pattern B — scheduled: insert recipe_triggers rows with future fire_at
+      const offsets = SCHEDULED_RECIPE_OFFSETS[slug] ?? [];
+      if (offsets.length === 0) continue;
+
+      // Appointment reminders fire relative to the appointment's startTime (supports
+      // negative offsets = "N minutes before appointment"). All other scheduled recipes
+      // fire relative to the current moment (event receipt time).
+      let baseMs = Date.now();
+      if (slug === "appointment-reminder") {
+        const raw =
+          rawPayload.startTime ?? rawPayload.appointmentStartTime ?? rawPayload.start_time;
+        if (typeof raw === "string") {
+          const t = new Date(raw).getTime();
+          if (!isNaN(t)) baseMs = t;
+        }
+      }
+
+      for (const { offsetMinutes, label } of offsets) {
+        const fireAt = new Date(baseMs + offsetMinutes * 60 * 1_000);
+        // Skip triggers that would fire in the past (e.g. reminder for an
+        // appointment that already started, or a 48h follow-up for an old lead).
+        if (fireAt.getTime() <= Date.now()) continue;
+
+        await supabase.from("recipe_triggers").insert({
+          account_id: accountId,
+          recipe_slug: slug,
+          ghl_event_type: eventType,
+          contact_id: contactId,
+          fire_at: fireAt.toISOString(),
+          payload: {
+            contactId,
+            contactName: event.contact_name ?? null,
+            contactPhone: event.contact_phone ?? null,
+            accountId,
+            ghlEventType: eventType,
+            ghlEventId: event.ghl_event_id ?? null,
+            label,
+          },
+        });
+      }
+    }
+  }
+}
+
 async function runSideEffect(
   label: string,
   task: () => Promise<void>,
@@ -270,6 +373,9 @@ export async function processSideEffects(
     ),
     runSideEffect("negative call alert", () =>
       flagNegativeCalls(accountId, event, rawPayload),
+    ),
+    runSideEffect("recipe event triggers", () =>
+      triggerRecipesFromGhlEvent(accountId, event, rawPayload, activeRecipes),
     ),
   ]);
 }
