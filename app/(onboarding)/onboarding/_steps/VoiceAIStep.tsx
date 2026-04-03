@@ -99,8 +99,8 @@ export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
             className={cn(
               "flex h-12 flex-1 items-center justify-center rounded-xl border-2 text-sm font-semibold capitalize transition-all",
               watchedGender === g
-                ? "border-accent bg-accent-light text-accent ring-2 ring-accent/20"
-                : "border-border text-text-secondary hover:border-accent/40"
+                ? "border-v48-accent bg-v48-accent-light text-v48-accent ring-2 ring-v48-accent/20"
+                : "border-border text-text-secondary hover:border-v48-accent/40"
             )}
           >
             {g}
@@ -126,7 +126,7 @@ export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
               "rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-primary transition-colors",
               isPreviewLoading
                 ? "cursor-not-allowed opacity-60"
-                : "hover:border-accent/40 hover:bg-accent-light"
+                : "hover:border-v48-accent/40 hover:bg-v48-accent-light"
             )}
           >
             {isPreviewLoading ? "Loading..." : "Play preview"}
@@ -141,7 +141,7 @@ export function VoiceAIStep({ onNext, onValidityChange }: StepProps) {
       <textarea
         {...register("voiceGreeting")}
         rows={4}
-        className="mt-4 w-full resize-none rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="mt-4 w-full resize-none rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-v48-accent focus:outline-none focus:ring-2 focus:ring-v48-accent/20"
         placeholder="Enter your greeting message..."
       />
       {errors.voiceGreeting && (

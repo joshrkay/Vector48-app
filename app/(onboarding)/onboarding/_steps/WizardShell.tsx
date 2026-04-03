@@ -134,7 +134,7 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
         {/* Progress bar */}
         <div className="h-1 w-full bg-white/10">
           <motion.div
-            className="h-full bg-accent"
+            className="h-full bg-v48-accent"
             initial={false}
             animate={{ width: `${progress}%` }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
@@ -180,8 +180,8 @@ export function WizardShell({ accountId, initialData }: WizardShellProps) {
                 className={cn(
                   "flex h-12 flex-1 items-center justify-center rounded-xl text-sm font-semibold text-white transition-colors",
                   isStepValid && !isSaving
-                    ? "bg-accent hover:bg-accent/90"
-                    : "cursor-not-allowed bg-accent/40"
+                    ? "bg-v48-accent hover:bg-v48-accent/90"
+                    : "cursor-not-allowed bg-v48-accent/40"
                 )}
               >
                 {isSaving
