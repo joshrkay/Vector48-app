@@ -915,8 +915,9 @@ export class GHLClient {
   };
 
   readonly webhooks = {
+    // Webhooks can be managed by either an agency-scoped or location-scoped
+    // client — GHL accepts both token types for these endpoints.
     create: async (data: GHLCreateWebhookPayload): Promise<GHLWebhook> => {
-      this.assertAgencyScope("webhooks.create");
       const payload = await this.rawRequest<GHLWebhookResponse>(
         "POST",
         ENDPOINTS.webhooks,
@@ -926,7 +927,6 @@ export class GHLClient {
     },
 
     delete: async (webhookId: string): Promise<void> => {
-      this.assertAgencyScope("webhooks.delete");
       await this.rawRequest("DELETE", `${ENDPOINTS.webhooks}${webhookId}`);
     },
   };

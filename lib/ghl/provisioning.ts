@@ -9,6 +9,8 @@
 // ---------------------------------------------------------------------------
 import "server-only";
 
+import crypto from "node:crypto";
+
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { encryptToken } from "./token";
 import { GHLClient } from "./client";
@@ -282,6 +284,12 @@ export async function provisionCustomer(
       : "";
 
     if (webhookUrl) {
+      // Generate a random secret used to verify incoming webhook payloads.
+      // GHL echoes this back in the webhook body or headers so the receiver
+      // can reject spoofed requests. We persist it to accounts.ghl_webhook_secret
+      // so the route handler (app/api/webhooks/ghl/route.ts) can validate it.
+      const webhookSecret = crypto.randomBytes(32).toString("hex");
+
       // Register a single webhook with all needed event types.
       // GHL supports multiple events per webhook registration.
       const webhookEvents: GHLWebhookEvent[] = [
@@ -296,11 +304,20 @@ export async function provisionCustomer(
       ];
 
       try {
-        const webhook = await agencyClient.webhooks.create({
+        const webhook = await locationClient.webhooks.create({
           locationId,
           url: webhookUrl,
           events: webhookEvents,
+          secret: webhookSecret,
         });
+
+        // Persist the secret immediately after successful registration so the
+        // webhook receiver can authenticate incoming payloads.
+        await supabase
+          .from("accounts")
+          .update({ ghl_webhook_secret: webhookSecret })
+          .eq("id", accountId);
+
         log("step_6_complete", accountId, `webhookId=${webhook.id}`);
       } catch (webhookErr) {
         logError("step_6_skipped", accountId, sanitizeError(webhookErr));
