@@ -20,7 +20,12 @@ function handleInvalidEnv(name: string, reason: string): never {
   throw new SupabaseConfigError(`${message}.`);
 }
 
-function sanitizePublicEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY") {
+function sanitizeSupabaseEnv(
+  name:
+    | "NEXT_PUBLIC_SUPABASE_URL"
+    | "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    | "SUPABASE_SERVICE_ROLE_KEY",
+) {
   const rawValue = process.env[name];
 
   if (!rawValue) {
@@ -40,9 +45,21 @@ function sanitizePublicEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPAB
   return trimmedValue;
 }
 
+export function sanitizeSupabaseUrl() {
+  return sanitizeSupabaseEnv("NEXT_PUBLIC_SUPABASE_URL");
+}
+
+export function sanitizeSupabaseAnonKey() {
+  return sanitizeSupabaseEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+}
+
+export function sanitizeSupabaseServiceRoleKey() {
+  return sanitizeSupabaseEnv("SUPABASE_SERVICE_ROLE_KEY");
+}
+
 export function getSupabasePublicEnv() {
   return {
-    url: sanitizePublicEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    anonKey: sanitizePublicEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    url: sanitizeSupabaseUrl(),
+    anonKey: sanitizeSupabaseAnonKey(),
   };
 }
