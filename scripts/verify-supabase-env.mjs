@@ -151,7 +151,11 @@ async function main() {
   const localEnvPath = path.resolve(process.cwd(), ".env.local");
 
   for (const key of REQUIRED_KEYS) {
-    validateValue(key, process.env[key], "Process env");
+    const runtimeValue = validateValue(key, process.env[key], "Process env");
+
+    if (key === "NEXT_PUBLIC_SUPABASE_URL") {
+      validateSupabaseUrl(runtimeValue, "Process env");
+    }
   }
 
   const localEnv = loadLocalEnv(localEnvPath);
