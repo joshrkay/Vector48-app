@@ -29,10 +29,16 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refresh session — if the Supabase network call fails (e.g. ECONNRESET),
+  // fall back to passing the request through rather than crashing the page.
+  let user: { id: string } | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (err) {
+    console.error("[middleware] supabase.auth.getUser failed:", err);
+    return supabaseResponse; // let the request through; page-level auth will catch it
+  }
 
   const pathname = request.nextUrl.pathname;
 
@@ -61,13 +67,26 @@ export async function middleware(request: NextRequest) {
 
   // Consolidated account checks for authenticated users on app routes
   if (user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
-    const { data: account } = await supabase
-      .from("accounts")
-      .select(
-        "trial_ends_at, plan_slug, onboarding_completed_at, ghl_provisioning_status",
-      )
-      .eq("owner_user_id", user.id)
-      .maybeSingle();
+    let account: {
+      trial_ends_at: string | null;
+      plan_slug: string | null;
+      onboarding_completed_at: string | null;
+      ghl_provisioning_status: string | null;
+    } | null = null;
+
+    try {
+      const { data } = await supabase
+        .from("accounts")
+        .select(
+          "trial_ends_at, plan_slug, onboarding_completed_at, ghl_provisioning_status",
+        )
+        .eq("owner_user_id", user.id)
+        .maybeSingle();
+      account = data;
+    } catch (err) {
+      console.error("[middleware] accounts fetch failed:", err);
+      return supabaseResponse; // let the request through on DB errors
+    }
 
     const onboardingComplete =
       Boolean(account?.onboarding_completed_at) ||
