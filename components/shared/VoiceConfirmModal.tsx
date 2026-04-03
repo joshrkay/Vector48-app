@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -59,7 +60,8 @@ export function VoiceConfirmModal({
     <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onCancel() : undefined)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Confirm voice action</DialogTitle>
+          <AlertCircle className="mx-auto mb-2 text-amber-500" size={32} />
+          <DialogTitle>Confirm Action</DialogTitle>
           <DialogDescription>
             {action
               ? formatActionLabel(action)
@@ -70,7 +72,11 @@ export function VoiceConfirmModal({
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="button" onClick={onConfirm}>
+          <Button
+            type="button"
+            onClick={onConfirm}
+            className="bg-[#00B4A6] text-white hover:bg-[#009e92]"
+          >
             Confirm
           </Button>
         </DialogFooter>
@@ -78,4 +84,3 @@ export function VoiceConfirmModal({
     </Dialog>
   );
 }
-

@@ -6,6 +6,7 @@ import type { VoiceAction, VoiceMutationAction } from "@/lib/voice/types";
 export interface VoiceToastPayload {
   message: string;
   openRoute?: string;
+  type?: "answer" | "clarify" | "navigate" | "action";
 }
 
 interface MutationRequest {
@@ -140,7 +141,7 @@ export async function executeVoiceAction(
   if (action.type === "navigate") {
     deps.router.push(buildRoute(action.route, action.params));
     if (action.message) {
-      deps.showToast({ message: action.message });
+      deps.showToast({ message: action.message, type: "navigate" });
     }
     return;
   }
@@ -149,6 +150,7 @@ export async function executeVoiceAction(
     deps.showToast({
       message: action.message,
       openRoute: action.openRoute,
+      type: action.type,
     });
     return;
   }

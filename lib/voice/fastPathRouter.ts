@@ -1,4 +1,4 @@
-import { RECIPE_CATALOG } from "../recipes/catalog.ts";
+import { RECIPE_CATALOG } from "../recipes/catalog";
 import type { VoiceAction } from "@/lib/voice/types";
 
 export interface VoiceLiveSummary {
