@@ -70,3 +70,29 @@ export function getN8nWebhookUrl(
   const base = (process.env.N8N_WEBHOOK_BASE_URL ?? "").replace(/\/+$/, "");
   return `${base}/recipe-${recipeSlug}/${accountId}`;
 }
+
+/**
+ * n8n pause webhook URL — called by pause-for-contact to signal N8N to
+ * abort in-flight executions for a specific contact.
+ * Pattern: {N8N_WEBHOOK_BASE_URL}/recipe-{slug}-pause/{accountId}
+ */
+export function getPauseWebhookUrl(
+  recipeSlug: string,
+  accountId: string,
+): string {
+  const base = (process.env.N8N_WEBHOOK_BASE_URL ?? "").replace(/\/+$/, "");
+  return `${base}/recipe-${recipeSlug}-pause/${accountId}`;
+}
+
+/**
+ * n8n resume webhook URL — called by resume-for-contact to signal N8N that
+ * the contact's pause has been lifted.
+ * Pattern: {N8N_WEBHOOK_BASE_URL}/recipe-{slug}-resume/{accountId}
+ */
+export function getResumeWebhookUrl(
+  recipeSlug: string,
+  accountId: string,
+): string {
+  const base = (process.env.N8N_WEBHOOK_BASE_URL ?? "").replace(/\/+$/, "");
+  return `${base}/recipe-${recipeSlug}-resume/${accountId}`;
+}
