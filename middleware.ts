@@ -64,14 +64,13 @@ export async function middleware(request: NextRequest) {
     const { data: account } = await supabase
       .from("accounts")
       .select(
-        "trial_ends_at, plan_slug, onboarding_completed_at, onboarding_done_at, ghl_provisioning_status",
+        "trial_ends_at, plan_slug, onboarding_completed_at, ghl_provisioning_status",
       )
       .eq("owner_user_id", user.id)
       .maybeSingle();
 
     const onboardingComplete =
       Boolean(account?.onboarding_completed_at) ||
-      Boolean(account?.onboarding_done_at) ||
       account?.ghl_provisioning_status === "failed";
 
     if (!onboardingComplete && !pathname.startsWith("/onboarding")) {
