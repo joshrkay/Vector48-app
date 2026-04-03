@@ -4,6 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 const REQUIRED_KEYS = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"];
+const SUPABASE_PROJECT_DOMAIN_PATTERN = /^[a-z0-9-]+\.supabase\.co$/;
+
+const SUPABASE_URL_REASON_CODES = {
+  INVALID_URL: "SUPABASE_URL_INVALID_FORMAT",
+  INVALID_PROTOCOL: "SUPABASE_URL_INVALID_PROTOCOL",
+  INVALID_HOSTNAME: "SUPABASE_URL_INVALID_HOSTNAME",
+  QUOTED_VALUE: "SUPABASE_URL_SURROUNDING_QUOTES",
+};
 
 function parseArgs(argv) {
   const options = {
@@ -46,6 +54,34 @@ function validateValue(name, value, sourceLabel) {
   }
 
   return trimmed;
+}
+
+function validateSupabaseUrlFormat(urlValue) {
+  if (
+    (urlValue.startsWith('"') && urlValue.endsWith('"')) ||
+    (urlValue.startsWith("'") && urlValue.endsWith("'")) ||
+    (urlValue.startsWith("`") && urlValue.endsWith("`"))
+  ) {
+    return SUPABASE_URL_REASON_CODES.QUOTED_VALUE;
+  }
+
+  let parsedUrl;
+
+  try {
+    parsedUrl = new URL(urlValue);
+  } catch {
+    return SUPABASE_URL_REASON_CODES.INVALID_URL;
+  }
+
+  if (parsedUrl.protocol !== "https:") {
+    return SUPABASE_URL_REASON_CODES.INVALID_PROTOCOL;
+  }
+
+  if (!SUPABASE_PROJECT_DOMAIN_PATTERN.test(parsedUrl.hostname)) {
+    return SUPABASE_URL_REASON_CODES.INVALID_HOSTNAME;
+  }
+
+  return null;
 }
 
 function parseDotEnv(content) {
@@ -123,6 +159,19 @@ async function main() {
   for (const key of REQUIRED_KEYS) {
     const runtimeValue = validateValue(key, process.env[key], "Process env");
     const localValue = validateValue(key, localEnv[key], ".env.local");
+
+    if (key === "NEXT_PUBLIC_SUPABASE_URL") {
+      const runtimeReasonCode = validateSupabaseUrlFormat(runtimeValue);
+      const localReasonCode = validateSupabaseUrlFormat(localValue);
+
+      if (runtimeReasonCode) {
+        throw new Error(`Process env: ${key} invalid (${runtimeReasonCode})`);
+      }
+
+      if (localReasonCode) {
+        throw new Error(`.env.local: ${key} invalid (${localReasonCode})`);
+      }
+    }
 
     if (runtimeValue !== localValue) {
       throw new Error(`.env.local mismatch for ${key}. Keep local values in parity with deployment values.`);
