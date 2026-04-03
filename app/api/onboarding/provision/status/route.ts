@@ -48,14 +48,18 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     if (error instanceof SupabaseConfigError) {
-      return NextResponse.json({
-        status: "degraded",
-        degraded: true,
-        error: {
-          code: error.code,
-          message: "Provisioning status is temporarily unavailable due to server configuration.",
+      return NextResponse.json(
+        {
+          status: "degraded",
+          degraded: true,
+          error: {
+            code: error.code,
+            message:
+              "Provisioning status is temporarily unavailable due to server configuration.",
+          },
         },
-      });
+        { status: 503 },
+      );
     }
 
     console.error("[onboarding/provision/status] operational failure", error);
