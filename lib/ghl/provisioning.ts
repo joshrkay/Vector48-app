@@ -315,6 +315,36 @@ export async function provisionCustomer(
   }
 }
 
+// ── Public adapters ────────────────────────────────────────────────────────
+
+/**
+ * On-demand provisioning entry point used by the REST API endpoint
+ * (`/api/onboarding/provision-ghl`). Unlike `provisionCustomer`, this
+ * throws on failure so callers can catch and surface the error as an HTTP
+ * response without inspecting a success flag.
+ *
+ * `ownerEmail` is accepted for forward-compat but is not needed: the
+ * provisioning orchestrator reads the owner email from Supabase auth data
+ * directly via `account.owner_user_id`.
+ */
+export async function provisionGhlSubAccountForAccount(input: {
+  accountId: string;
+  ownerEmail?: string;
+}): Promise<{ locationId: string; usedAgencyKeyFallback: boolean }> {
+  const result = await provisionCustomer(input.accountId);
+
+  if (!result.success || !result.ghl_sub_account_id) {
+    throw new Error(result.error ?? "GHL sub-account provisioning failed");
+  }
+
+  return {
+    locationId: result.ghl_sub_account_id,
+    // Private integrations always use the agency key as the location token —
+    // there is no per-location OAuth exchange for this integration type.
+    usedAgencyKeyFallback: true,
+  };
+}
+
 // ── Internal Helpers ───────────────────────────────────────────────────────
 
 async function markFailed(
