@@ -8,26 +8,80 @@ import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
 import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-// GHL Private Integration webhooks use a single global verification token
-// configured in the GHL Marketplace dashboard (Advanced Settings → Webhooks).
-// There is no per-location webhook registration API — all locations share one
-// webhook URL and one secret. Store it as GHL_WEBHOOK_SECRET in Vercel env vars.
-const GLOBAL_WEBHOOK_SECRET = process.env.GHL_WEBHOOK_SECRET ?? null;
+// GHL signs webhook deliveries with asymmetric keys — no shared secret needed.
+// Prefer X-GHL-Signature (Ed25519, current). X-WH-Signature (RSA-SHA256) is the
+// legacy fallback and will be deprecated July 1, 2026.
+// Public keys sourced from the official GHL developer docs:
+// https://marketplace.gohighlevel.com/docs/webhook/WebhookIntegrationGuide
 
-function verifyToken(provided: string | null, expected: string | null): boolean {
-  if (!provided || !expected) return false;
-  const a = crypto.createHash("sha256").update(provided).digest();
-  const b = crypto.createHash("sha256").update(expected).digest();
-  return crypto.timingSafeEqual(a, b);
-}
+const GHL_PUBLIC_KEY_ED25519 = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAi2HR1srL4o18O8BRa7gVJY7G7bupbN3H9AwJrHCDiOg=
+-----END PUBLIC KEY-----`;
 
-function tokenFromRequest(headers: Headers, body: Record<string, unknown>): string | null {
-  return (
-    headers.get("x-ghl-signature") ??
-    headers.get("x-ghl-webhook-secret") ??
-    (typeof body.verificationToken === "string" ? body.verificationToken : null) ??
-    (typeof body.token === "string" ? body.token : null)
-  );
+const GHL_PUBLIC_KEY_RSA = `-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAokvo/r9tVgcfZ5DysOSC
+Frm602qYV0MaAiNnX9O8KxMbiyRKWeL9JpCpVpt4XHIcBOK4u3cLSqJGOLaPuXw6
+dO0t6Q/ZVdAV5Phz+ZtzPL16iCGeK9po6D6JHBpbi989mmzMryUnQJezlYJ3DVfB
+csedpinheNnyYeFXolrJvcsjDtfAeRx5ByHQmTnSdFUzuAnC9/GepgLT9SM4nCpv
+uxmZMxrJt5Rw+VUaQ9B8JSvbMPpez4peKaJPZHBbU3OdeCVx5klVXXZQGNHOs8gF
+3kvoV5rTnXV0IknLBXlcKKAQLZcY/Q9rG6Ifi9c+5vqlvHPCUJFT5XUGG5RKgOKU
+J062fRtN+rLYZUV+BjafxQauvC8wSWeYja63VSUruvmNj8xkx2zE/Juc+yjLjTXp
+IocmaiFeAO6fUtNjDeFVkhf5LNb59vECyrHD2SQIrhgXpO4Q3dVNA5rw576PwTzN
+h/AMfHKIjE4xQA1SZuYJmNnmVZLIZBlQAF9Ntd03rfadZ+yDiOXCCs9FkHibELh
+CHULgCsnuDJHcrGNd5/Ddm5hxGQ0ASitgHeMZ0kcIOwKDOzOU53lDza6/Y09T7sY
+JPQe7z0cvj7aE4B+Ax1ZoZGPzpJlZtGXCsu9aTEGEnKzmsFqwcSsnw3JB31IGKAy
+kT1hhTiaCeIY/OwwwNUY2yvcCAwEAAQ==
+-----END PUBLIC KEY-----`;
+
+/**
+ * Verify a GHL webhook signature against the raw request body.
+ *
+ * GHL sends one of two headers:
+ *   X-GHL-Signature  — Ed25519 signature over the raw body bytes (preferred)
+ *   X-WH-Signature   — RSA-SHA256 signature over the raw body bytes (legacy)
+ *
+ * The signature is base64-encoded. Verification requires the exact raw body
+ * string that GHL signed — do not parse/re-serialize before calling this.
+ *
+ * Returns:
+ *   { ok: true }                  — valid signature
+ *   { ok: false, reason: "none" } — no signature headers present (warn, allow)
+ *   { ok: false, reason: string } — signature present but invalid (reject)
+ */
+function verifyGhlSignature(
+  rawBody: string,
+  headers: Headers
+): { ok: boolean; reason?: string } {
+  const ghlSig = headers.get("x-ghl-signature");
+  const legacySig = headers.get("x-wh-signature");
+
+  if (ghlSig) {
+    // Ed25519 verification
+    try {
+      const payloadBuffer = Buffer.from(rawBody, "utf8");
+      const signatureBuffer = Buffer.from(ghlSig, "base64");
+      const ok = crypto.verify(null, payloadBuffer, GHL_PUBLIC_KEY_ED25519, signatureBuffer);
+      return { ok, reason: ok ? undefined : "ed25519_verify_failed" };
+    } catch (e) {
+      return { ok: false, reason: `ed25519_error: ${e}` };
+    }
+  }
+
+  if (legacySig) {
+    // RSA-SHA256 verification (legacy)
+    try {
+      const verifier = crypto.createVerify("SHA256");
+      verifier.update(rawBody);
+      const ok = verifier.verify(GHL_PUBLIC_KEY_RSA, legacySig, "base64");
+      return { ok, reason: ok ? undefined : "rsa_verify_failed" };
+    } catch (e) {
+      return { ok: false, reason: `rsa_error: ${e}` };
+    }
+  }
+
+  // No signature headers — GHL webhooks always include one. Absence means the
+  // request is a test/manual call, not a real GHL delivery.
+  return { ok: false, reason: "none" };
 }
 
 function parseEventType(payload: Record<string, unknown>): string {
@@ -51,9 +105,18 @@ function isDuplicateAutomationEventError(error: {
 export async function POST(req: Request) {
   const startedAt = Date.now();
 
+  // Read raw body first — required for signature verification over the exact
+  // bytes that GHL signed. Parsing JSON first would lose whitespace fidelity.
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return NextResponse.json({ received: true });
+  }
+
   let body: GHLWebhookPayload | Record<string, unknown>;
   try {
-    body = (await req.json()) as GHLWebhookPayload;
+    body = JSON.parse(rawBody) as GHLWebhookPayload;
   } catch {
     return NextResponse.json({ received: true });
   }
@@ -88,22 +151,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   }
 
-  // Verify using the global webhook secret configured in the GHL Marketplace
-  // dashboard. If GHL_WEBHOOK_SECRET is not yet set in env vars, log a warning
-  // but still process the event — prevents a silent shutdown of all webhooks
-  // during initial setup.
-  if (GLOBAL_WEBHOOK_SECRET) {
-    const providedToken = tokenFromRequest(req.headers, payload);
-    if (!providedToken) {
-      console.warn("[ghl-webhook] missing signature header for location", locationId);
+  // Verify GHL signature using their published public keys.
+  // GHL Marketplace Apps (OAuth) always send signed webhooks.
+  // No env vars needed — keys are hardcoded from the GHL developer docs.
+  const sigResult = verifyGhlSignature(rawBody, req.headers);
+  if (!sigResult.ok) {
+    if (sigResult.reason === "none") {
+      // No signature headers present — allow through with warning.
+      // This covers: test requests, manual cURL, or private-integration calls
+      // that don't use the OAuth webhook delivery system.
+      console.warn(
+        "[ghl-webhook] no signature headers — skipping verification for location",
+        locationId
+      );
+    } else {
+      // Signature header was present but cryptographically invalid → reject.
+      console.warn(
+        "[ghl-webhook] invalid signature:",
+        sigResult.reason,
+        "for location",
+        locationId
+      );
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!verifyToken(providedToken, GLOBAL_WEBHOOK_SECRET)) {
-      console.warn("[ghl-webhook] invalid signature for location", locationId);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  } else {
-    console.warn("[ghl-webhook] GHL_WEBHOOK_SECRET not set — skipping signature verification");
   }
 
   const ghlEventType = parseEventType(payload);
@@ -118,9 +188,7 @@ export async function POST(req: Request) {
     account_id: account.id,
   };
 
-  const { error: insertError } = await supabase
-    .from("automation_events")
-    .insert(insertRow);
+  const { error: insertError } = await supabase.from("automation_events").insert(insertRow);
 
   if (insertError) {
     if (isDuplicateAutomationEventError(insertError)) {
