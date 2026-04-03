@@ -20,7 +20,10 @@ export async function POST(req: Request) {
   const accountId = body.accountId as string | undefined;
 
   if (!accountId) {
-    return NextResponse.json({ error: "accountId is required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "accountId is required" },
+      { status: 400 },
+    );
   }
 
   const { data: membership } = await supabase
@@ -81,10 +84,27 @@ export async function POST(req: Request) {
     );
   }
 
-  await inngest.send({
-    name: "app/customer.onboarding.completed",
-    data: { accountId, activateRecipe: false },
-  });
+  try {
+    await inngest.send({
+      name: "app/customer.onboarding.completed",
+      data: { accountId, activateRecipe: false },
+    });
+  } catch (error) {
+    console.error("Failed to enqueue provisioning job", { accountId, error });
+
+    await admin
+      .from("accounts")
+      .update({
+        ghl_provisioning_status: "failed",
+        ghl_provisioning_error: "Failed to enqueue provisioning job",
+      })
+      .eq("id", accountId);
+
+    return NextResponse.json(
+      { error: "Failed to enqueue provisioning job" },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ jobId: accountId });
 }
