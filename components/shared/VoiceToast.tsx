@@ -7,6 +7,7 @@ export interface VoiceToastState {
   id: number;
   message: string;
   openRoute?: string;
+  type?: "answer" | "clarify" | "navigate" | "action";
 }
 
 interface VoiceToastProps {
@@ -29,8 +30,13 @@ export function VoiceToast({ toast, onDismiss }: VoiceToastProps) {
 
   return (
     <div className="pointer-events-none fixed bottom-24 left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 md:bottom-8">
-      <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-xl bg-[var(--v48-accent)] px-4 py-3 text-sm text-white shadow-lg">
-        <p className="line-clamp-2">{toast.message}</p>
+      <div className="pointer-events-auto flex items-start justify-between gap-3 rounded-xl bg-[#0F1E35] px-4 py-3 text-sm text-white shadow-lg">
+        <div className="min-w-0">
+          <p className="line-clamp-2">{toast.message}</p>
+          {toast.type === "clarify" ? (
+            <p className="mt-1 text-xs text-white/60">Tap mic to answer</p>
+          ) : null}
+        </div>
         {toast.openRoute ? (
           <Link
             href={toast.openRoute}
@@ -43,4 +49,3 @@ export function VoiceToast({ toast, onDismiss }: VoiceToastProps) {
     </div>
   );
 }
-

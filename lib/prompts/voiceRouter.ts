@@ -1,3 +1,4 @@
+import { RECIPE_CATALOG } from "@/lib/recipes/catalog";
 import type { VoiceMutationOperation } from "@/lib/voice/types";
 
 const ROUTE_MAP = {
@@ -40,7 +41,11 @@ const ALLOWED_OPERATIONS: VoiceMutationOperation[] = [
 ];
 
 export function buildVoiceRouterSystemPrompt() {
-  return `You are the voice intent router for Vector 48, a CRM + automation app for home-service businesses.
+  const recipeList = RECIPE_CATALOG
+    .map((r) => `- ${r.slug} ("${r.name}"): ${r.description}`)
+    .join("\n");
+
+  return `You are the voice intent router for Vector 48, a CRM + automation app for home-service businesses (HVAC, plumbing, electrical, roofing, landscaping).
 
 Primary objective:
 - Convert the user's spoken transcript into exactly one JSON action object.
@@ -102,6 +107,11 @@ ${JSON.stringify(CONTACT_FILTER_MAP, null, 2)}
 Allowed action operations:
 ${JSON.stringify(ALLOWED_OPERATIONS, null, 2)}
 
+Known recipes (slug → name → description):
+${recipeList}
+
+When the user refers to a recipe by name or rough description, match it to the closest slug above.
+
 Output policy:
 - "navigate" when user intent is to open a page or filtered page.
 - "answer" when user asks for information and you can answer from the request context.
@@ -109,4 +119,3 @@ Output policy:
 - "clarify" for all uncertain cases.
 `;
 }
-

@@ -7,6 +7,7 @@ import {
   Loader2,
   MessageSquare,
   Mic,
+  MicOff,
 } from "lucide-react";
 import { VoiceConfirmModal } from "@/components/shared/VoiceConfirmModal";
 import { VoiceToast, type VoiceToastState } from "@/components/shared/VoiceToast";
@@ -74,6 +75,7 @@ export function VoiceButton({
   const [transcriptPreview, setTranscriptPreview] = React.useState("");
   const [toast, setToast] = React.useState<VoiceToastState | null>(null);
   const [pendingAction, setPendingAction] = React.useState<VoiceMutationAction | null>(null);
+  const [browserSupported, setBrowserSupported] = React.useState(true);
 
   const statusRef = React.useRef<VoiceButtonStatus>("idle");
   const listenAbortRef = React.useRef<AbortController | null>(null);
@@ -85,11 +87,21 @@ export function VoiceButton({
     statusRef.current = status;
   }, [status]);
 
+  React.useEffect(() => {
+    const hasSpeech =
+      "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
+    const hasRecorder = "MediaRecorder" in window;
+    if (!hasSpeech && !hasRecorder) {
+      setBrowserSupported(false);
+    }
+  }, []);
+
   const showToast = React.useCallback((payload: VoiceToastPayload) => {
     setToast({
       id: Date.now(),
       message: payload.message,
       openRoute: payload.openRoute,
+      type: payload.type,
     });
   }, []);
 
@@ -282,7 +294,9 @@ export function VoiceButton({
           type="button"
           aria-label="Start voice navigation"
           aria-pressed={status === "listening"}
-          className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[var(--v48-accent)] text-white shadow-lg transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--v48-accent)] focus-visible:ring-offset-2"
+          disabled={!browserSupported}
+          title={!browserSupported ? "Voice not supported in this browser" : undefined}
+          className={`relative flex h-14 w-14 items-center justify-center rounded-full bg-[var(--v48-accent)] text-white shadow-lg transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--v48-accent)] focus-visible:ring-offset-2${!browserSupported ? " cursor-not-allowed opacity-50" : ""}`}
           onClick={() => {
             if (status === "listening" || status === "processing") {
               cancelVoiceSession();
@@ -294,7 +308,7 @@ export function VoiceButton({
           {status === "listening" ? (
             <>
               <span className="absolute inset-0 animate-ping rounded-full bg-[var(--v48-accent)]/45" />
-              <Mic className="relative h-6 w-6" />
+              <MicOff className="relative h-6 w-6" />
             </>
           ) : null}
           {status === "processing" ? (
