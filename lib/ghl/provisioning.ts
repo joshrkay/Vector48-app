@@ -118,15 +118,15 @@ export async function provisionCustomer(
 
     // If sub-account was already created in a prior attempt, reuse it
     let locationId: string;
-    if (account.ghl_sub_account_id) {
-      locationId = account.ghl_sub_account_id;
+    if (account.ghl_location_id) {
+      locationId = account.ghl_location_id;
       log("step_2_reuse_existing", accountId, `locationId=${locationId}`);
     } else {
       const location = await agencyClient.locations.create({
         companyId,
         name: account.business_name,
         phone: account.phone ?? undefined,
-        city: account.service_area ?? undefined,
+        city: account.address_city ?? undefined,
         country: "US",
         timezone: "America/Phoenix",
         email: userEmail || undefined,
@@ -137,10 +137,7 @@ export async function provisionCustomer(
       // Store sub-account ID immediately so we can recover on retry
       await supabase
         .from("accounts")
-        .update({
-          ghl_sub_account_id: locationId,
-          ghl_location_id: locationId,
-        })
+        .update({ ghl_location_id: locationId })
         .eq("id", accountId);
     }
 
@@ -199,7 +196,7 @@ export async function provisionCustomer(
       account.voice_gender === "male" ? "male" : "female";
 
     const greeting =
-      account.voice_greeting ||
+      account.greeting_text ||
       `Hi, thanks for calling ${account.business_name}. How can I help you today?`;
 
     const agentPayload: GHLCreateVoiceAgentPayload = {
@@ -301,8 +298,6 @@ export async function provisionCustomer(
       .update({
         ghl_provisioning_status: "complete",
         ghl_provisioning_error: null,
-        provisioning_status: "complete",
-        provisioning_error: null,
         provisioning_completed_at: new Date().toISOString(),
       })
       .eq("id", accountId);
@@ -332,8 +327,6 @@ async function markFailed(
     .update({
       ghl_provisioning_status: "failed",
       ghl_provisioning_error: error.slice(0, 4000),
-      provisioning_status: "error",
-      provisioning_error: error.slice(0, 4000),
     })
     .eq("id", accountId);
 }
