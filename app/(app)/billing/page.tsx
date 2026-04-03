@@ -35,6 +35,15 @@ export default async function BillingPage({
   const currentPlan: PricingConfig | null =
     pricingConfig.find((p: PricingConfig) => p.plan_slug === account.plan_slug) ?? null;
 
+  // Determine the next plan to upgrade to (next higher sort_order, excluding trial + custom).
+  const upgradeablePlans = pricingConfig.filter(
+    (p: PricingConfig) => p.plan_slug !== "trial" && p.plan_slug !== "custom",
+  );
+  const currentSortOrder = currentPlan?.sort_order ?? -1;
+  const nextPlan =
+    upgradeablePlans.find((p: PricingConfig) => p.sort_order > currentSortOrder) ?? null;
+  const upgradePlanSlug = nextPlan?.plan_slug ?? null;
+
   // Stripe subscription — fails gracefully when key is stubbed
   let subscription: Stripe.Subscription | null = null;
   if (account.stripe_subscription_id) {
@@ -101,6 +110,7 @@ export default async function BillingPage({
         trialEndsAt={account.trial_ends_at}
         daysRemaining={daysRemaining}
         renewsAt={subscription?.current_period_end ?? null}
+        upgradePlanSlug={upgradePlanSlug}
       />
 
       <PaymentMethodCard

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LockKeyhole } from "lucide-react";
 
@@ -20,12 +21,17 @@ export function TrialGate({
 }: TrialGateProps) {
   const pathname = usePathname();
   const router = useRouter();
+  // Defer the date comparison to client-side only to avoid SSR/hydration mismatch.
+  // `new Date()` differs between server render and client hydration timestamps.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const isExempt = EXEMPT_PREFIXES.some((prefix) =>
     pathname.startsWith(prefix),
   );
 
   const trialExpired =
+    mounted &&
     !isExempt &&
     planSlug === "trial" &&
     !stripeSubscriptionId &&

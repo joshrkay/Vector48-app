@@ -42,11 +42,11 @@ export async function POST() {
     );
   }
 
-  // Mark as cancelling in our DB — plan_slug stays until subscription.deleted webhook fires
-  await supabase
-    .from("accounts")
-    .update({ subscription_status: "canceled" })
-    .eq("id", account.id);
+  // Do NOT update subscription_status here. With cancel_at_period_end = true,
+  // Stripe keeps the subscription "active" until the period ends. Updating to
+  // "canceled" now would conflict with the customer.subscription.updated webhook,
+  // which fires immediately and would write "active" back, overwriting our update.
+  // The customer.subscription.deleted webhook handles the final state transition.
 
   return NextResponse.json({ success: true });
 }

@@ -11,6 +11,8 @@ interface CurrentPlanCardProps {
   trialEndsAt: string | null;
   daysRemaining: number;
   renewsAt: number | null;
+  /** Slug of the next tier to upgrade to. Null if already on the top plan. */
+  upgradePlanSlug: string | null;
 }
 
 const MS_PER_DAY = 86_400_000;
@@ -23,6 +25,7 @@ export function CurrentPlanCard({
   trialEndsAt,
   daysRemaining,
   renewsAt,
+  upgradePlanSlug,
 }: CurrentPlanCardProps) {
   const [loading, setLoading] = useState(false);
 
@@ -54,7 +57,7 @@ export function CurrentPlanCard({
       const res = await fetch("/api/billing/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planSlug: "starter" }),
+        body: JSON.stringify({ planSlug: upgradePlanSlug }),
       });
       const json = await res.json() as { url?: string; error?: string };
       if (!res.ok) {
@@ -142,7 +145,7 @@ export function CurrentPlanCard({
         </ul>
       )}
 
-      {(isTrial || planSlug === "starter") && (
+      {upgradePlanSlug && (
         <div className="mt-6">
           <button
             onClick={handleUpgrade}
