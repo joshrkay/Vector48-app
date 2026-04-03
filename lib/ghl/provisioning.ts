@@ -186,71 +186,90 @@ export async function provisionCustomer(
 
     log("step_3_complete", accountId);
 
-    // ── Step 4: Create Voice AI agent ──────────────────────────────────
+    // ── Step 4: Create Voice AI agent (best-effort) ────────────────────
+    // Non-fatal: Voice AI may not be available for all plans or newly
+    // created sub-accounts. Phone number assignment is always manual.
 
     log("step_4_create_voice_agent", accountId);
 
     const locationClient = GHLClient.forLocation(locationId, subAccountToken);
+    let voiceAgentId: string | null = null;
 
-    const voiceGender: "male" | "female" =
-      account.voice_gender === "male" ? "male" : "female";
+    try {
+      const voiceGender: "male" | "female" =
+        account.voice_gender === "male" ? "male" : "female";
 
-    const greeting =
-      account.greeting_text ||
-      `Hi, thanks for calling ${account.business_name}. How can I help you today?`;
+      const greeting =
+        account.greeting_text ||
+        `Hi, thanks for calling ${account.business_name}. How can I help you today?`;
 
-    const agentPayload: GHLCreateVoiceAgentPayload = {
-      locationId,
-      name: `${account.business_name} AI Assistant`,
-      businessName: account.business_name,
-      greeting,
-      prompt: buildVoicePrompt(account.business_name, account.vertical),
-      voiceId: GHL_DEFAULT_VOICES[voiceGender],
-      gender: voiceGender,
-      language: "en-US",
-      timezone: "America/Phoenix",
-      goals: [
-        { field: "caller_name", label: "Caller Name", required: true },
-        { field: "phone_number", label: "Phone Number", required: true },
-        { field: "reason_for_call", label: "Reason for Call", required: true },
-      ],
-    };
+      const agentPayload: GHLCreateVoiceAgentPayload = {
+        locationId,
+        name: `${account.business_name} AI Assistant`,
+        businessName: account.business_name,
+        greeting,
+        prompt: buildVoicePrompt(account.business_name, account.vertical),
+        voiceId: GHL_DEFAULT_VOICES[voiceGender],
+        gender: voiceGender,
+        language: "en-US",
+        timezone: "America/Phoenix",
+        goals: [
+          { field: "caller_name", label: "Caller Name", required: true },
+          { field: "phone_number", label: "Phone Number", required: true },
+          { field: "reason_for_call", label: "Reason for Call", required: true },
+        ],
+      };
 
-    const agentRes = await locationClient.voiceAgent.create(agentPayload);
-    const voiceAgentId = agentRes.agent.id;
+      const agentRes = await locationClient.voiceAgent.create(agentPayload);
+      voiceAgentId = agentRes.agent.id;
 
-    await supabase
-      .from("accounts")
-      .update({ ghl_voice_agent_id: voiceAgentId })
-      .eq("id", accountId);
+      await supabase
+        .from("accounts")
+        .update({ ghl_voice_agent_id: voiceAgentId })
+        .eq("id", accountId);
 
-    log("step_4_complete", accountId, `agentId=${voiceAgentId}`);
+      log("step_4_complete", accountId, `agentId=${voiceAgentId}`);
 
-    // [MANUAL STEP] Assign phone number to Voice AI agent for account.
-    // The GHL API may not support programmatic phone number assignment
-    // to Voice AI agents. Check the GHL admin panel to assign a number.
-    console.warn(
-      `[MANUAL STEP] Assign phone number to Voice AI agent for account ${accountId} (agent ${voiceAgentId})`,
-    );
+      // [MANUAL STEP] Assign phone number to Voice AI agent.
+      // The GHL API does not support programmatic phone number assignment
+      // to Voice AI agents. Use the GHL admin panel to assign a number.
+      console.warn(
+        `[MANUAL STEP] Assign phone number to Voice AI agent for account ${accountId} (agent ${voiceAgentId})`,
+      );
+    } catch (voiceErr) {
+      logError("step_4_skipped", accountId, sanitizeError(voiceErr));
+      console.warn(
+        `[ghl-provisioning] Voice AI agent creation skipped for ${accountId}: ${sanitizeError(voiceErr)}`,
+      );
+    }
 
     // ── Step 5: Create Voice AI custom action (webhook to n8n) ─────────
+    // Non-fatal: only attempted if step 4 succeeded.
 
     log("step_5_create_webhook_action", accountId);
 
-    const n8nBase = (process.env.N8N_WEBHOOK_BASE_URL ?? process.env.N8N_BASE_URL ?? "").replace(/\/+$/, "");
+    if (voiceAgentId) {
+      const n8nBase = (process.env.N8N_WEBHOOK_BASE_URL ?? process.env.N8N_BASE_URL ?? "").replace(/\/+$/, "");
 
-    if (n8nBase) {
-      await locationClient.voiceAgent.createAction(voiceAgentId, {
-        type: "webhook",
-        url: `${n8nBase}/recipe-ai-phone-answering/${accountId}`,
-        method: "POST",
-        description: "Post-call data to n8n for processing (summary, SMS notification)",
-      });
-      log("step_5_complete", accountId);
+      if (n8nBase) {
+        try {
+          await locationClient.voiceAgent.createAction(voiceAgentId, {
+            type: "webhook",
+            url: `${n8nBase}/recipe-ai-phone-answering/${accountId}`,
+            method: "POST",
+            description: "Post-call data to n8n for processing (summary, SMS notification)",
+          });
+          log("step_5_complete", accountId);
+        } catch (actionErr) {
+          logError("step_5_skipped", accountId, sanitizeError(actionErr));
+        }
+      } else {
+        console.warn(
+          `[ghl-provisioning] N8N_WEBHOOK_BASE_URL not set — skipping Voice AI action creation for ${accountId}`,
+        );
+      }
     } else {
-      console.warn(
-        `[ghl-provisioning] N8N_WEBHOOK_BASE_URL not set — skipping Voice AI action creation for ${accountId}`,
-      );
+      log("step_5_skipped_no_agent", accountId);
     }
 
     // ── Step 6: Register GHL webhooks for recipe event types ───────────
@@ -305,7 +324,7 @@ export async function provisionCustomer(
     return {
       success: true,
       ghl_sub_account_id: locationId,
-      ghl_voice_agent_id: voiceAgentId,
+      ghl_voice_agent_id: voiceAgentId ?? undefined,
     };
   } catch (err) {
     const msg = sanitizeError(err);
