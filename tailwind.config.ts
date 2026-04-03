@@ -58,6 +58,7 @@ const config: Config = {
         success: "var(--success)",
         warning: "var(--warning)",
         error: "var(--error)",
+        "accent-light": "var(--v48-accent-light)",
       },
       fontFamily: {
         sans: ["var(--font-dm-sans)", "sans-serif"],

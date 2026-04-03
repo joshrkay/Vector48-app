@@ -206,7 +206,7 @@ export function CompletionScreen() {
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
-          className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-accent"
+          className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-v48-accent"
         >
           <Check className="h-10 w-10 text-white" strokeWidth={3} />
         </motion.div>
@@ -236,7 +236,7 @@ export function CompletionScreen() {
             </span>
             .
           </p>
-          <p className={status === "failed" ? "text-[#B45309]" : "text-accent"}>
+          <p className={status === "failed" ? "text-[#B45309]" : "text-v48-accent"}>
             {statusCopy}
           </p>
         </motion.div>
@@ -252,7 +252,7 @@ export function CompletionScreen() {
                 type="button"
                 onClick={() => void retryProvisioning()}
                 disabled={isRetrying}
-                className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-accent text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-v48-accent text-sm font-semibold text-white transition-colors hover:bg-v48-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isRetrying ? "Retrying..." : "Retry setup"}
               </button>

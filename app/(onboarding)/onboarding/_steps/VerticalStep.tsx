@@ -70,8 +70,8 @@ export function VerticalStep({ onNext, onValidityChange }: StepProps) {
               className={cn(
                 "flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-xl border-2 p-4 text-sm font-medium transition-all",
                 isSelected
-                  ? "border-accent bg-accent-light text-accent ring-2 ring-accent/20"
-                  : "border-border text-text-secondary hover:border-accent/40"
+                  ? "border-v48-accent bg-v48-accent-light text-v48-accent ring-2 ring-v48-accent/20"
+                  : "border-border text-text-secondary hover:border-v48-accent/40"
               )}
             >
               <Icon className="h-6 w-6" />

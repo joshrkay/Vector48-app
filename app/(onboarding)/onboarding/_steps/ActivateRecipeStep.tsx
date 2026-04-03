@@ -52,14 +52,14 @@ export function ActivateRecipeStep({ onNext, onValidityChange }: StepProps) {
         className={cn(
           "mt-6 flex w-full items-start gap-4 rounded-2xl border-2 p-5 text-left transition-all",
           isActive
-            ? "border-accent bg-accent-light ring-2 ring-accent/20"
-            : "border-border hover:border-accent/40"
+            ? "border-v48-accent bg-v48-accent-light ring-2 ring-v48-accent/20"
+            : "border-border hover:border-v48-accent/40"
         )}
       >
         <div
           className={cn(
             "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
-            isActive ? "bg-accent text-white" : "bg-bg text-text-secondary"
+            isActive ? "bg-v48-accent text-white" : "bg-bg text-text-secondary"
           )}
         >
           <Phone className="h-6 w-6" />
@@ -70,7 +70,7 @@ export function ActivateRecipeStep({ onNext, onValidityChange }: StepProps) {
               AI Phone Answering
             </span>
             {isActive && (
-              <CheckCircle2 className="h-5 w-5 text-accent" />
+              <CheckCircle2 className="h-5 w-5 text-v48-accent" />
             )}
           </div>
           <p className="mt-1 text-sm text-text-secondary">
@@ -81,7 +81,7 @@ export function ActivateRecipeStep({ onNext, onValidityChange }: StepProps) {
             className={cn(
               "mt-3 inline-block rounded-full px-3 py-1 text-xs font-semibold",
               isActive
-                ? "bg-accent/10 text-accent"
+                ? "bg-v48-accent/10 text-v48-accent"
                 : "bg-bg text-text-secondary"
             )}
           >

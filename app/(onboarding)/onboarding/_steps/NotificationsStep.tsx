@@ -56,7 +56,7 @@ export function NotificationsStep({ onNext, onValidityChange }: StepProps) {
         type="tel"
         placeholder="(555) 123-4567"
         data-testid="notification-contact"
-        className="mt-6 w-full rounded-xl border border-border bg-white px-4 py-3 text-lg text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="mt-6 w-full rounded-xl border border-border bg-white px-4 py-3 text-lg text-text-primary placeholder:text-text-secondary/50 focus:border-v48-accent focus:outline-none focus:ring-2 focus:ring-v48-accent/20"
       />
       {errors.notificationContact && (
         <p className="mt-2 text-sm text-error">
@@ -68,7 +68,7 @@ export function NotificationsStep({ onNext, onValidityChange }: StepProps) {
         <input
           {...register("notificationSms")}
           type="checkbox"
-          className="h-4 w-4 rounded border-border text-accent focus:ring-accent"
+          className="h-4 w-4 rounded border-border text-v48-accent focus:ring-v48-accent"
         />
         Enable SMS notifications
       </label>
