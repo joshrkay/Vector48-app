@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     const admin = createAdminClient();
     const { data: account, error: fetchError } = await admin
       .from("accounts")
-      .select("ghl_provisioning_status")
+      .select("ghl_provisioning_status, activate_recipe_1, voice_gender, greeting_text")
       .eq("id", accountId)
       .maybeSingle();
 
@@ -64,6 +64,23 @@ export async function POST(req: Request) {
 
     if (account.ghl_provisioning_status === "failed") {
       return respond({ jobId: accountId, status: "failed" }, 409);
+    }
+
+    // If the user opted into Recipe 1 during onboarding, look up the
+    // activation row that completeOnboarding() already created so we can
+    // hand its ID to the Inngest function for n8n workflow creation.
+    let activationId: string | undefined;
+    if (account.activate_recipe_1) {
+      const { data: activation } = await admin
+        .from("recipe_activations")
+        .select("id")
+        .eq("account_id", accountId)
+        .eq("recipe_slug", "ai-phone-answering")
+        .is("n8n_workflow_id", null)
+        .order("activated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      activationId = activation?.id;
     }
 
     const { error: updateError } = await admin
@@ -87,7 +104,17 @@ export async function POST(req: Request) {
     try {
       await inngest.send({
         name: "app/customer.onboarding.completed",
-        data: { accountId, activateRecipe: false },
+        data: {
+          accountId,
+          activateRecipe: account.activate_recipe_1 === true && !!activationId,
+          activationId,
+          voiceConfig: account.voice_gender || account.greeting_text
+            ? {
+                voiceGender: account.voice_gender ?? "male",
+                voiceGreeting: account.greeting_text ?? "",
+              }
+            : undefined,
+        },
       });
     } catch (error) {
       console.error("[api/onboarding/provision] failed to enqueue provisioning job", {
