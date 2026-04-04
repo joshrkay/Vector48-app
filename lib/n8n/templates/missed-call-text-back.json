@@ -1,0 +1,562 @@
+{
+  "name": "Recipe 2 - Missed Call Text-Back - {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recipe-2-missed-call-text-back-{{TENANT_ID}}",
+        "responseMode": "responseNode"
+      },
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "account_id",
+              "value": "={{ $json.body.account_id || $json.account_id }}"
+            },
+            {
+              "name": "contact_id",
+              "value": "={{ $json.body.contact_id || $json.body.trigger_data?.contact_id || $json.contact_id || $json.trigger_data?.contact_id || '' }}"
+            },
+            {
+              "name": "call_id",
+              "value": "={{ $json.body.call_id || $json.call_id || '' }}"
+            },
+            {
+              "name": "call_status",
+              "value": "={{ ($json.body.call_status || $json.call_status || 'missed').toLowerCase() }}"
+            },
+            {
+              "name": "owner_contact_id",
+              "value": "={{ $json.body.owner_contact_id || $json.body.trigger_data?.owner_contact_id || $json.owner_contact_id || '' }}"
+            }
+          ]
+        }
+      },
+      "id": "2",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        460,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/recipe_activations?account_id=eq.{{$json.account_id}}&recipe_id=eq.missed-call-text-back&select=config",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "Fetch Recipe Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.first().json;\nconst activation = Array.isArray(rows) ? rows[0] : rows;\nconst config = activation?.config || {};\nconst norm = $node['Normalize Input'].json;\nif (!norm.account_id) throw new Error('Missing account_id');\nif (!norm.contact_id) throw new Error('Missing contact_id');\nconst delay = Math.max(0, Math.min(600, Number(config.textBackDelaySec) || 0));\nconst ownerId = String(norm.owner_contact_id || config.ownerContactId || '').trim();\nconst template = typeof config.textBackMessage === 'string' && config.textBackMessage.trim() ? config.textBackMessage.trim() : 'Hey {{contact_name}}, sorry we missed your call! We will get back to you shortly. — {{business_name}}';\nreturn [{ json: { account_id: norm.account_id, contact_id: norm.contact_id, call_id: norm.call_id, call_status: norm.call_status, owner_contact_id: ownerId, textBackDelaySec: delay, text_template: template } }];"
+      },
+      "id": "4",
+      "name": "Merge Recipe Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/integrations?account_id=eq.{{$json.account_id}}&provider=eq.ghl&status=eq.connected&select=credentials_encrypted",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "5",
+      "name": "Fetch GHL Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const creds = $json[0]?.credentials_encrypted || {};\nconst token = creds.access_token || creds.token || creds.api_key;\nconst locationId = creds.location_id;\nif (!token || !locationId) throw new Error('Missing GHL credentials');\nreturn [{ json: { token, locationId } }];"
+      },
+      "id": "6",
+      "name": "Extract Credential Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/accounts?id=eq.{{$node[\"Merge Recipe Context\"].json.account_id}}&select=business_name,phone",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "7",
+      "name": "Fetch Account",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/contacts/{{$node[\"Merge Recipe Context\"].json.contact_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$node['Extract Credential Fields'].json.token}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        }
+      },
+      "id": "8",
+      "name": "Get Contact Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const contact = $json.contact || $json;\nconst first = contact.firstName || contact.name || 'there';\nconst biz = $node['Fetch Account'].json[0]?.business_name || 'our team';\nconst ctx = $node['Merge Recipe Context'].json;\nconst user = 'Follow this template (substitute naturally for SMS, max 300 chars):\\n' + ctx.text_template + '\\n\\ncontact_first_name: ' + first + '\\nbusiness_name: ' + biz + '\\nContext: missed inbound call. Output only the SMS body.';\nreturn [{ json: { ...ctx, _openai_user: user } }];"
+      },
+      "id": "9",
+      "name": "Build OpenAI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: 'You write concise SMS for home service businesses. Output only the message body, max 300 characters, no quotation marks.' }, { role: 'user', content: $json._openai_user }] }) }}"
+      },
+      "id": "10",
+      "name": "Generate Text-Back (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = $json.choices?.[0]?.message?.content?.trim() || 'Sorry we missed your call — we will get back to you shortly.';\nconst ctx = $node['Build OpenAI Prompt'].json;\nreturn [{ json: { ...ctx, sms_to_caller: t } }];"
+      },
+      "id": "11",
+      "name": "Extract SMS Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$node['Extract Credential Fields'].json.token}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'SMS', message: $json.sms_to_caller, contactId: $json.contact_id, locationId: $node['Extract Credential Fields'].json.locationId }) }}"
+      },
+      "id": "12",
+      "name": "SMS Caller",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2660,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node[\"Extract SMS Text\"].json.owner_contact_id}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "13",
+      "name": "IF Owner Contact",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$node['Extract Credential Fields'].json.token}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'SMS', message: 'Missed call: auto text-back sent to contact ' + $node['Merge Recipe Context'].json.contact_id + ($node['Merge Recipe Context'].json.call_id ? ' (call ' + $node['Merge Recipe Context'].json.call_id + ')' : '') + '.', contactId: $node['Extract SMS Text'].json.owner_contact_id, locationId: $node['Extract Credential Fields'].json.locationId }) }}"
+      },
+      "id": "14",
+      "name": "SMS Owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3100,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/event_log",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ account_id: $node['Merge Recipe Context'].json.account_id, recipe_slug: 'missed-call-text-back', event_type: 'missed_call_text_back_sent', summary: 'Missed-call text-back SMS sent to caller', detail: { contact_id: $node['Merge Recipe Context'].json.contact_id, call_id: $node['Merge Recipe Context'].json.call_id, owner_notified: Boolean($node['Extract SMS Text'].json.owner_contact_id), textBackDelaySec: $node['Extract SMS Text'].json.textBackDelaySec } }) }}"
+      },
+      "id": "15",
+      "name": "Write event_log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3320,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true, \"recipe\": \"missed-call-text-back\"}"
+      },
+      "id": "16",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        3540,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Recipe Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recipe Config": {
+      "main": [
+        [
+          {
+            "node": "Merge Recipe Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Recipe Context": {
+      "main": [
+        [
+          {
+            "node": "Fetch GHL Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GHL Credentials": {
+      "main": [
+        [
+          {
+            "node": "Extract Credential Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Credential Fields": {
+      "main": [
+        [
+          {
+            "node": "Fetch Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Account": {
+      "main": [
+        [
+          {
+            "node": "Get Contact Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contact Details": {
+      "main": [
+        [
+          {
+            "node": "Build OpenAI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OpenAI Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Text-Back (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Text-Back (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Extract SMS Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract SMS Text": {
+      "main": [
+        [
+          {
+            "node": "SMS Caller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Caller": {
+      "main": [
+        [
+          {
+            "node": "IF Owner Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Owner Contact": {
+      "main": [
+        [
+          {
+            "node": "SMS Owner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write event_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Owner": {
+      "main": [
+        [
+          {
+            "node": "Write event_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write event_log": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "recipe-2-v1"
+}

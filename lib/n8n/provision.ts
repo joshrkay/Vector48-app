@@ -16,6 +16,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 
 import { createN8nClientFromEnv, type N8nClient } from "./client";
+import { RECIPE_WEBHOOK_PATH_PREFIX } from "./recipeTemplateRegistry";
 import { loadTemplate } from "./templates";
 import { injectVariables } from "./variableInjector";
 
@@ -120,7 +121,8 @@ export async function provisionRecipe(
     }
 
     const baseUrl = normalizeBaseUrl(process.env.N8N_BASE_URL ?? "");
-    const webhookPath = `ai-phone-${accountId}`;
+    const pathPrefix = RECIPE_WEBHOOK_PATH_PREFIX[recipeSlug] ?? recipeSlug;
+    const webhookPath = `${pathPrefix}-${accountId}`;
     const webhookUrl = `${baseUrl}/webhook/${webhookPath}`;
 
     const notificationPhone =

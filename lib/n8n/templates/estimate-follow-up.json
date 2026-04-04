@@ -1,0 +1,398 @@
+{
+  "name": "Recipe 4 - Estimate Follow-Up - {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recipe-4-estimate-follow-up-{{TENANT_ID}}",
+        "responseMode": "responseNode"
+      },
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "account_id",
+              "value": "={{ $json.body.account_id || $json.account_id }}"
+            },
+            {
+              "name": "opportunity_id",
+              "value": "={{ $json.body.opportunity_id || $json.body.trigger_data?.opportunity_id || $json.opportunity_id || $json.trigger_data?.opportunity_id }}"
+            },
+            {
+              "name": "follow_up_attempt",
+              "value": "={{ String($json.body.follow_up_attempt ?? $json.body.trigger_data?.follow_up_attempt ?? $json.follow_up_attempt ?? 1) }}"
+            }
+          ]
+        }
+      },
+      "id": "2",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/recipe_activations?account_id=eq.{{$json.account_id}}&recipe_id=eq.estimate-follow-up&select=config",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "Fetch Recipe Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/integrations?account_id=eq.{{$node[\"Normalize Input\"].json.account_id}}&provider=eq.ghl&status=eq.connected&select=credentials_encrypted",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "4",
+      "name": "Fetch GHL Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const creds = $json[0]?.credentials_encrypted || {};\nconst token = creds.access_token || creds.token || creds.api_key;\nconst locationId = creds.location_id;\nif (!token || !locationId) throw new Error('Missing GHL credentials');\nreturn [{ json: { token, locationId } }];"
+      },
+      "id": "5",
+      "name": "Extract Credential Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/opportunities/{{$node[\"Normalize Input\"].json.opportunity_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$json.token}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        }
+      },
+      "id": "6",
+      "name": "Get Opportunity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ ($json.status || '').toLowerCase() }}",
+              "operation": "equals",
+              "value2": "open"
+            }
+          ]
+        }
+      },
+      "id": "7",
+      "name": "IF Opportunity Open",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const norm = $node['Normalize Input'].json;\nconst attempt = Math.min(2, Math.max(1, parseInt(String(norm.follow_up_attempt || '1'), 10) || 1));\nconst cfgRows = $node['Fetch Recipe Config'].json;\nconst config = Array.isArray(cfgRows) && cfgRows[0]?.config ? cfgRows[0].config : {};\nconst template = typeof config.followUpMessage === 'string' && config.followUpMessage.trim().length > 0 ? config.followUpMessage : 'Hey {{contact_name}}, checking in on the estimate we sent — any questions? — {{business_name}}';\nconst businessName = typeof config.business_name === 'string' && config.business_name.trim() ? config.business_name : 'us';\nconst opp = $json;\nconst contact = opp.contact || {};\nconst rawName = contact.name || 'there';\nconst firstName = String(rawName).trim().split(/\\s+/)[0] || 'there';\nlet message = template.replace(/\\{\\{contact_name\\}\\}/gi, firstName).replace(/\\{\\{business_name\\}\\}/gi, businessName);\nif (attempt >= 2) { const stripped = message.replace(/^\\s*Hey\\s+[^,]+,\\s*/i, '').replace(/^\\s*Hi\\s+[^,]+,\\s*/i, ''); message = `Hi ${firstName}, one more friendly check-in — ${stripped}`; }\nconst contactId = opp.contactId || norm.contact_id;\nif (!contactId) throw new Error('Missing contactId on opportunity');\nreturn [{ json: { ...opp, follow_up_sms: message, follow_up_attempt: attempt, contact_id: contactId } }];"
+      },
+      "id": "8",
+      "name": "Generate Follow-Up Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$node['Extract Credential Fields'].json.token}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"SMS\",\n  \"message\": {{$json.follow_up_sms}},\n  \"contactId\": {{$json.contact_id}},\n  \"locationId\": {{$node['Extract Credential Fields'].json.locationId}}\n}"
+      },
+      "id": "9",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/event_log",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"account_id\": {{$node['Normalize Input'].json.account_id}},\n  \"recipe_slug\": \"estimate-follow-up\",\n  \"event_type\": \"estimate_follow_up_sent\",\n  \"summary\": \"Estimate follow-up SMS sent\",\n  \"detail\": {\n    \"opportunity_id\": {{$node['Normalize Input'].json.opportunity_id}},\n    \"follow_up_attempt\": {{$node['Generate Follow-Up Message'].json.follow_up_attempt}}\n  }\n}"
+      },
+      "id": "10",
+      "name": "Write event_log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"recipe\": \"estimate-follow-up\",\n  \"opportunity_id\": {{$node['Normalize Input'].json.opportunity_id}},\n  \"follow_up_attempt\": {{$node['Generate Follow-Up Message'].json.follow_up_attempt}}\n}"
+      },
+      "id": "11",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"skipped\": true,\n  \"reason\": \"opportunity_not_open\",\n  \"opportunity_id\": {{$node['Normalize Input'].json.opportunity_id}},\n  \"status\": {{$json.status}}\n}"
+      },
+      "id": "12",
+      "name": "Respond Skipped Closed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Recipe Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recipe Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch GHL Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GHL Credentials": {
+      "main": [
+        [
+          {
+            "node": "Extract Credential Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Credential Fields": {
+      "main": [
+        [
+          {
+            "node": "Get Opportunity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Opportunity": {
+      "main": [
+        [
+          {
+            "node": "IF Opportunity Open",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Opportunity Open": {
+      "main": [
+        [
+          {
+            "node": "Generate Follow-Up Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Skipped Closed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Follow-Up Message": {
+      "main": [
+        [
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Write event_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write event_log": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "recipe-4-v1"
+}

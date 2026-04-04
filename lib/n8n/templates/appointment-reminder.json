@@ -1,0 +1,405 @@
+{
+  "name": "Recipe 5 - Appointment Reminder - {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recipe-5-appointment-reminder-{{TENANT_ID}}",
+        "responseMode": "responseNode"
+      },
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "account_id",
+              "value": "={{ $json.body.account_id || $json.account_id }}"
+            },
+            {
+              "name": "appointment_id",
+              "value": "={{ $json.body.appointment_id || $json.appointment_id }}"
+            },
+            {
+              "name": "reminder_offset",
+              "value": "={{ $json.body.reminder_offset || $json.reminder_offset || \"T-24h\" }}"
+            }
+          ]
+        }
+      },
+      "id": "2",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        460,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/recipe_activations?account_id=eq.{{$json.account_id}}&recipe_id=eq.appointment-reminder&select=config",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "Fetch Recipe Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/integrations?account_id=eq.{{$node[\"Normalize Input\"].json.account_id}}&provider=eq.ghl&status=eq.connected&select=credentials_encrypted",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4",
+      "name": "Fetch GHL Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const creds = $json[0]?.credentials_encrypted || {};\nconst token = creds.access_token || creds.token || creds.api_key;\nconst locationId = creds.location_id;\nif (!token || !locationId) { throw new Error('Missing GHL credentials/token/location_id'); }\nreturn [{ json: { token, locationId } }];"
+      },
+      "id": "5",
+      "name": "Extract Credential Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/calendars/events/{{$node[\"Normalize Input\"].json.appointment_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$json.token}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6",
+      "name": "Get Appointment Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1420,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{($json.status || $json.appointment?.status || '').toLowerCase()}}",
+              "operation": "contains",
+              "value2": "cancel"
+            }
+          ]
+        }
+      },
+      "id": "7",
+      "name": "IF Cancelled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json.appointment || $json;\nconst startsAt = event.startTime || event.start_time || 'your scheduled time';\nconst contactName = event.contactName || event.contact?.name || 'there';\nconst reminderOffset = $node['Normalize Input'].json.reminder_offset;\nconst message = `Hi ${contactName}, reminder: you have an appointment ${reminderOffset} (${startsAt}). Reply C to confirm or R to reschedule.`;\nreturn [{ json: { ...$json, reminder_message: message } }];"
+      },
+      "id": "8",
+      "name": "Generate Reminder Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$node[\"Extract Credential Fields\"].json.token}}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"SMS\",\n  \"message\": {{$json.reminder_message}},\n  \"contactId\": {{$json.contactId || $json.contact?.id}},\n  \"locationId\": {{$node['Extract Credential Fields'].json.locationId}}\n}",
+        "options": {}
+      },
+      "id": "9",
+      "name": "Send SMS Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2140,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.NEXT_PUBLIC_SUPABASE_URL}}/rest/v1/event_log",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"account_id\": {{$node['Normalize Input'].json.account_id}},\n  \"recipe_slug\": \"appointment-reminder\",\n  \"event_type\": \"appointment_reminder_sent\",\n  \"summary\": \"Appointment reminder SMS sent\",\n  \"detail\": {\n    \"appointment_id\": {{$node['Normalize Input'].json.appointment_id}},\n    \"reminder_offset\": {{$node['Normalize Input'].json.reminder_offset}}\n  }\n}",
+        "options": {}
+      },
+      "id": "10",
+      "name": "Write event_log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2380,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"appointment_id\": {{$node['Normalize Input'].json.appointment_id}},\n  \"reminder_offset\": {{$node['Normalize Input'].json.reminder_offset}}\n}",
+        "options": {}
+      },
+      "id": "11",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2620,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"skipped\": true,\n  \"reason\": \"appointment_cancelled\"\n}",
+        "options": {}
+      },
+      "id": "12",
+      "name": "Respond Cancelled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        180
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Recipe Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recipe Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch GHL Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GHL Credentials": {
+      "main": [
+        [
+          {
+            "node": "Extract Credential Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Credential Fields": {
+      "main": [
+        [
+          {
+            "node": "Get Appointment Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Appointment Details": {
+      "main": [
+        [
+          {
+            "node": "IF Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Cancelled": {
+      "main": [
+        [
+          {
+            "node": "Respond Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Reminder Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Reminder Message": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Reminder": {
+      "main": [
+        [
+          {
+            "node": "Write event_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write event_log": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "recipe-5-v1"
+}
