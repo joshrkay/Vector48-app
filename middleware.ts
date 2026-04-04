@@ -10,6 +10,17 @@ const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
 const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding", "/reset-password"];
 const TRIAL_ALLOWED_ROUTES = ["/billing", "/settings"];
 
+// Auth callback params should never be forwarded through middleware redirects.
+// @supabase/ssr calls getUser() on every request and will try to re-exchange
+// a ?code= param it finds in the URL — but codes are single-use, so carrying
+// them through redirects causes a failed exchange → 503 on subsequent requests.
+const AUTH_PARAMS_TO_STRIP = ["code", "error", "error_description", "error_code"];
+
+function cleanRedirectUrl(url: URL): URL {
+  AUTH_PARAMS_TO_STRIP.forEach((p) => url.searchParams.delete(p));
+  return url;
+}
+
 export async function middleware(request: NextRequest) {
   const requestId = getOrCreateRequestId(request.headers);
   let supabaseResponse = NextResponse.next({ request });
@@ -63,7 +74,7 @@ export async function middleware(request: NextRequest) {
     !PUBLIC_ROUTES.some((r) => pathname.startsWith(r)) &&
     !pathname.startsWith("/onboarding")
   ) {
-    const url = request.nextUrl.clone();
+    const url = cleanRedirectUrl(request.nextUrl.clone());
     url.pathname = "/login";
     const response = NextResponse.redirect(url);
     return attachRequestIdHeader(response, requestId);
@@ -71,7 +82,7 @@ export async function middleware(request: NextRequest) {
 
   // Authenticated — redirect away from auth routes
   if (user && AUTH_ROUTES.some((r) => pathname.startsWith(r))) {
-    const url = request.nextUrl.clone();
+    const url = cleanRedirectUrl(request.nextUrl.clone());
     url.pathname = "/dashboard";
     const response = NextResponse.redirect(url);
     return attachRequestIdHeader(response, requestId);
@@ -109,7 +120,7 @@ export async function middleware(request: NextRequest) {
       account?.ghl_provisioning_status === "failed";
 
     if (!onboardingComplete && !pathname.startsWith("/onboarding")) {
-      const url = request.nextUrl.clone();
+      const url = cleanRedirectUrl(request.nextUrl.clone());
       url.pathname = "/onboarding";
       const response = NextResponse.redirect(url);
       console.info("[onboarding] route-check", {
@@ -137,7 +148,7 @@ export async function middleware(request: NextRequest) {
         !isAllowedRoute &&
         !pathname.startsWith("/onboarding")
       ) {
-        const url = request.nextUrl.clone();
+        const url = cleanRedirectUrl(request.nextUrl.clone());
         url.pathname = "/billing";
         url.searchParams.set("reason", "trial_expired");
         const response = NextResponse.redirect(url);
