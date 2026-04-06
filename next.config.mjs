@@ -9,9 +9,7 @@ const nextConfig = {
     ],
   },
   // pdf-parse is optional for the extract-pdf route; keep it out of the RSC bundle.
-  experimental: {
-    serverComponentsExternalPackages: ["pdf-parse"],
-  },
+  serverExternalPackages: ["pdf-parse"],
   async redirects() {
     return [
       {
