@@ -4,6 +4,7 @@ import { PipelineBoard } from "@/components/crm/pipeline/PipelineBoard";
 import { cachedGHLClient } from "@/lib/ghl/cache";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { normalizePipelineOpportunity, normalizeUsPhone } from "@/lib/crm/pipeline";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import type { GHLOpportunity } from "@/lib/ghl/types";
@@ -39,12 +40,16 @@ export default async function PipelinePage() {
   if (!user) {
     redirect("/login");
   }
+  const session = await requireAccountForUser(supabase);
+  if (!session) {
+    redirect("/login");
+  }
 
   const { data: account } = await supabase
     .from("accounts")
     .select("id, ghl_provisioning_status, ghl_provisioning_error")
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) {
     redirect("/login");
