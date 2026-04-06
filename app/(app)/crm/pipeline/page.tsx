@@ -185,6 +185,20 @@ export default async function PipelinePage() {
     </div>
   );
   } catch (err) {
-    throw err;
+    console.error("[pipeline] GHL API error:", (err as Error).message);
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="space-y-1">
+          <h1 className="font-heading text-2xl font-bold md:text-[28px]">Pipeline</h1>
+          <p className="text-sm text-[var(--text-secondary)]">
+            Track open opportunities by stage and move them without leaving CRM.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          Unable to connect to GoHighLevel. Your credentials may have expired &mdash; please reconnect in Settings.
+        </div>
+        <PipelineBoard pipelines={[]} initialOpportunities={[]} />
+      </div>
+    );
   }
 }
