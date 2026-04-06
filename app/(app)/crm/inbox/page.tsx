@@ -8,8 +8,9 @@ import { createServerClient } from "@/lib/supabase/server";
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams?: { conversation?: string; filter?: string };
+  searchParams?: Promise<{ conversation?: string; filter?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -29,8 +30,8 @@ export default async function InboxPage({
     initial = { conversations: [], contacts: {} };
   }
 
-  const conversationId = searchParams?.conversation?.trim() || null;
-  const filter = searchParams?.filter?.trim() || null;
+  const conversationId = resolvedSearchParams?.conversation?.trim() || null;
+  const filter = resolvedSearchParams?.filter?.trim() || null;
 
   return (
     <Suspense

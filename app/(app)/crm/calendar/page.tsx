@@ -14,15 +14,16 @@ import {
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams?: { weekStart?: string };
+  searchParams?: Promise<{ weekStart?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const session = await requireAccountForUser(supabase, { searchParams });
+  const session = await requireAccountForUser(supabase);
   if (!session) redirect("/login");
 
   const { data: account } = await supabase
@@ -34,9 +35,9 @@ export default async function CalendarPage({
 
   // Determine week start from URL param or default to current Monday
   let weekStart: Date;
-  if (searchParams?.weekStart) {
+  if (resolvedSearchParams?.weekStart) {
     try {
-      weekStart = fromDateString(searchParams.weekStart);
+      weekStart = fromDateString(resolvedSearchParams.weekStart);
     } catch {
       weekStart = getStartOfWeek(new Date());
     }

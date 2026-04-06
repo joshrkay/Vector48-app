@@ -16,10 +16,11 @@ const TAG_MAP: Record<string, string> = {
 export default async function ContactsPage({
   searchParams,
 }: {
-  searchParams?: { filter?: string; q?: string };
+  searchParams?: Promise<{ filter?: string; q?: string }>;
 }) {
-  const filter = searchParams?.filter ?? "all";
-  const q = searchParams?.q;
+  const resolvedSearchParams = await searchParams;
+  const filter = resolvedSearchParams?.filter ?? "all";
+  const q = resolvedSearchParams?.q;
 
   const supabase = await createServerClient();
   const {

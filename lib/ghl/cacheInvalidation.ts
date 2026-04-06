@@ -25,7 +25,7 @@ export function invalidateGHLCache(
     const tagPrefix = `ghl:${accountId}:${resource}`;
 
     // Primary path: Next.js fetch/data cache tag invalidation.
-    revalidateTag(tagPrefix);
+    revalidateTag(tagPrefix, "default");
 
     // Optional fallback: clear this process's in-memory cache wrapper entries.
     // This only affects custom non-fetch caches (Map-based), not Next.js data cache.
