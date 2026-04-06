@@ -6,8 +6,17 @@ export interface AccountSession {
   accountId: string;
 }
 
+export interface RequireAccountForUserOptions {
+  searchParams?:
+    | URLSearchParams
+    | Record<string, string | string[] | undefined>
+    | null
+    | undefined;
+}
+
 export async function requireAccountForUser(
   supabase: SupabaseClient<Database>,
+  _options?: RequireAccountForUserOptions,
 ): Promise<AccountSession | null> {
   const {
     data: { user },
