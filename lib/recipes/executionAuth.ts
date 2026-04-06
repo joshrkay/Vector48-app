@@ -16,8 +16,12 @@ import crypto from "node:crypto";
 export const EXECUTION_AUTH_CONFIG_ERROR =
   "RECIPE_EXECUTION_SECRET is required for recipe execution authentication";
 
+function readExecutionSecret(): string {
+  return process.env.RECIPE_EXECUTION_SECRET?.trim() ?? "";
+}
+
 function getExecutionSecret(): string {
-  const secret = process.env.RECIPE_EXECUTION_SECRET?.trim() ?? "";
+  const secret = readExecutionSecret();
   if (!secret) {
     throw new Error(EXECUTION_AUTH_CONFIG_ERROR);
   }
@@ -25,15 +29,11 @@ function getExecutionSecret(): string {
 }
 
 export function getExecutionAuthConfigError(): string | null {
-  try {
-    getExecutionSecret();
-    return null;
-  } catch (error) {
-    if (error instanceof Error) {
-      return error.message;
-    }
-    return EXECUTION_AUTH_CONFIG_ERROR;
-  }
+  return readExecutionSecret() ? null : EXECUTION_AUTH_CONFIG_ERROR;
+}
+
+function computeExecutionTokenWithSecret(accountId: string, secret: string): string {
+  return crypto.createHmac("sha256", secret).update(accountId).digest("hex");
 }
 
 /**
@@ -43,7 +43,7 @@ export function getExecutionAuthConfigError(): string | null {
  */
 export function computeExecutionToken(accountId: string): string {
   const secret = getExecutionSecret();
-  return crypto.createHmac("sha256", secret).update(accountId).digest("hex");
+  return computeExecutionTokenWithSecret(accountId, secret);
 }
 
 /**
@@ -61,7 +61,7 @@ export function validateExecutionAuth(request: Request, accountId: string): bool
   const header = request.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   if (!token) return false;
-  const expected = computeExecutionToken(accountId);
+  const expected = computeExecutionTokenWithSecret(accountId, getExecutionSecret());
   try {
     return crypto.timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(expected, "hex"));
   } catch {

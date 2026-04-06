@@ -22,6 +22,14 @@ describe("execution auth", () => {
     delete process.env.RECIPE_EXECUTION_SECRET;
 
     expect(() => computeExecutionToken("acct-1")).toThrowError(EXECUTION_AUTH_CONFIG_ERROR);
+    expect(() =>
+      validateExecutionAuth(
+        new Request("https://example.com/api/recipes/execution/send-sms", {
+          headers: { Authorization: "Bearer abc123" },
+        }),
+        "acct-1",
+      ),
+    ).toThrowError(EXECUTION_AUTH_CONFIG_ERROR);
     expect(getExecutionAuthConfigError()).toBe(EXECUTION_AUTH_CONFIG_ERROR);
 
     const { GET } = await import("@/app/api/recipes/execution/contact/route");
