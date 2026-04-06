@@ -140,7 +140,7 @@ export function decryptToken(encryptedToken: string): string {
 async function loadCredentials(accountId: string): Promise<{
   locationId: string;
   token: string;
-}> {
+} | null> {
   const cached = readCache(accountId);
   if (cached) {
     return { locationId: cached.locationId, token: cached.token };
@@ -158,7 +158,8 @@ async function loadCredentials(accountId: string): Promise<{
   }
 
   if (!data.ghl_location_id || !data.ghl_token_encrypted) {
-    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
+    // Account exists but hasn't connected GHL yet — return null instead of throwing
+    return null;
   }
 
   const token = decryptToken(data.ghl_token_encrypted);
@@ -172,6 +173,9 @@ async function loadCredentials(accountId: string): Promise<{
 
 export async function getDecryptedToken(accountId: string): Promise<string> {
   const credentials = await loadCredentials(accountId);
+  if (!credentials) {
+    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
+  }
   return credentials.token;
 }
 
@@ -181,6 +185,29 @@ export async function getAccountGhlCredentials(accountId: string): Promise<{
   accessToken: string;
 }> {
   const credentials = await loadCredentials(accountId);
+  if (!credentials) {
+    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
+  }
+
+  return {
+    locationId: credentials.locationId,
+    token: credentials.token,
+    accessToken: credentials.token,
+  };
+}
+
+/**
+ * Like getAccountGhlCredentials but returns null when the account has no GHL
+ * connection yet, instead of throwing. Use this in CRM pages so they render
+ * empty rather than crashing for users who haven't set up GoHighLevel.
+ */
+export async function tryGetAccountGhlCredentials(accountId: string): Promise<{
+  locationId: string;
+  token: string;
+  accessToken: string;
+} | null> {
+  const credentials = await loadCredentials(accountId);
+  if (!credentials) return null;
 
   return {
     locationId: credentials.locationId,
@@ -191,6 +218,9 @@ export async function getAccountGhlCredentials(accountId: string): Promise<{
 
 export async function getGHLClient(accountId: string): Promise<GHLClient> {
   const credentials = await loadCredentials(accountId);
+  if (!credentials) {
+    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
+  }
   return GHLClient.forLocation(credentials.locationId, credentials.token);
 }
 

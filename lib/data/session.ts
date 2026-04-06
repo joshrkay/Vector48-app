@@ -1,14 +1,12 @@
 import { cache } from "react";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const getSessionData = cache(async () => {
   const supabase = await createServerClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const session = await requireAccountForUser(supabase);
+  if (!session) {
     return { user: null, account: null };
   }
 
@@ -17,8 +15,12 @@ export const getSessionData = cache(async () => {
     .select(
       "id, business_name, plan_slug, trial_ends_at, onboarding_done_at, onboarding_completed_at, ghl_provisioning_status",
     )
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
-  return { user, account };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return { user: user ?? null, account: account ?? null };
 });

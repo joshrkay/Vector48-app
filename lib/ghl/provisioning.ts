@@ -1,12 +1,3 @@
-// ---------------------------------------------------------------------------
-// GHL Sub-Account + Voice AI Provisioning Orchestrator
-// Server-only: creates a GHL sub-account, exchanges tokens, configures
-// Voice AI, registers webhooks, and stores all credentials in Supabase.
-//
-// This is DISTINCT from n8n provisioning (lib/n8n/provision.ts) which handles
-// recipe workflow deployment. This module sets up the GHL infrastructure that
-// n8n workflows later interact with.
-// ---------------------------------------------------------------------------
 import "server-only";
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -17,8 +8,14 @@ import type { GHLCreateVoiceAgentPayload } from "./voiceTypes";
 import type { GHLWebhookEvent } from "./types";
 import { createWebhook, listWebhooks } from "./webhooks";
 
-
-// ── Types ──────────────────────────────────────────────────────────────────
+/**
+ * @deprecated Canonical provisioning orchestration lives in
+ * `lib/jobs/provisionGHL.ts`.
+ *
+ * This module is intentionally kept as a compatibility layer so older
+ * imports (e.g. Inngest functions) can continue using the previous API
+ * without duplicating provisioning logic.
+ */
 
 export interface ProvisionResult {
   success: boolean;
@@ -40,13 +37,20 @@ const WEBHOOK_EVENTS: GHLWebhookEvent[] = [
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+async function getAccountProvisioningSnapshot(accountId: string): Promise<{
+  ghl_location_id: string | null;
+  ghl_voice_agent_id: string | null;
+}> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("ghl_location_id, ghl_voice_agent_id")
+    .eq("id", accountId)
+    .maybeSingle();
 
-function sanitizeError(err: unknown): string {
-  if (err instanceof Error) {
-    return err.message.slice(0, 4000);
+  if (error) {
+    throw new Error(`Failed to read provisioning snapshot: ${error.message}`);
   }
-  return "Provisioning failed";
-}
 
 function hasRequiredWebhook(events: string[] | null | undefined): boolean {
   const normalized = new Set(events ?? []);
@@ -64,19 +68,15 @@ function log(step: string, accountId: string, detail?: string) {
       ts: new Date().toISOString(),
     }),
   );
+  return {
+    ghl_location_id: data?.ghl_location_id ?? null,
+    ghl_voice_agent_id: data?.ghl_voice_agent_id ?? null,
+  };
 }
 
-function logError(step: string, accountId: string, error: string) {
-  console.error(
-    JSON.stringify({
-      level: "error",
-      service: "ghl-provisioning",
-      step,
-      accountId,
-      error,
-      ts: new Date().toISOString(),
-    }),
-  );
+function formatCompatError(step: string | undefined, message: string): string {
+  if (!step) return message;
+  return `${step}: ${message}`;
 }
 
 // ── Main Orchestrator ──────────────────────────────────────────────────────
@@ -358,31 +358,33 @@ export async function provisionCustomer(
         provisioning_completed_at: new Date().toISOString(),
       })
       .eq("id", accountId);
+export async function provisionCustomer(accountId: string): Promise<ProvisionResult> {
+  const result = await provisionGHL(accountId);
 
+  const snapshot = await getAccountProvisioningSnapshot(accountId);
+
+  if (!result.success) {
     return {
-      success: true,
-      ghl_sub_account_id: locationId,
-      ghl_voice_agent_id: voiceAgentId ?? undefined,
+      success: false,
+      error: formatCompatError(result.failedStep, result.error),
+      ghl_sub_account_id: snapshot.ghl_location_id ?? undefined,
+      ghl_voice_agent_id: snapshot.ghl_voice_agent_id ?? undefined,
     };
-  } catch (err) {
-    const msg = sanitizeError(err);
-    logError("unhandled", accountId, msg);
-    await markFailed(supabase, accountId, msg);
-    return { success: false, error: msg };
   }
+
+  return {
+    success: true,
+    ghl_sub_account_id: snapshot.ghl_location_id ?? undefined,
+    ghl_voice_agent_id: snapshot.ghl_voice_agent_id ?? undefined,
+  };
 }
 
-// ── Public adapters ────────────────────────────────────────────────────────
-
 /**
- * On-demand provisioning entry point used by the REST API endpoint
- * (`/api/onboarding/provision-ghl`). Unlike `provisionCustomer`, this
- * throws on failure so callers can catch and surface the error as an HTTP
- * response without inspecting a success flag.
+ * On-demand provisioning entry point used by `/api/onboarding/provision-ghl`.
  *
- * `ownerEmail` is accepted for forward-compat but is not needed: the
- * provisioning orchestrator reads the owner email from Supabase auth data
- * directly via `account.owner_user_id`.
+ * This is now a thin wrapper over the canonical orchestrator to keep the
+ * historical return shape stable for callers that still import from this
+ * module.
  */
 export async function provisionGhlSubAccountForAccount(input: {
   accountId: string;
@@ -396,46 +398,7 @@ export async function provisionGhlSubAccountForAccount(input: {
 
   return {
     locationId: result.ghl_sub_account_id,
-    // Private integrations always use the agency key as the location token —
-    // there is no per-location OAuth exchange for this integration type.
-    usedAgencyKeyFallback: true,
+    // Compatibility contract from the legacy endpoint response.
+    usedAgencyKeyFallback: false,
   };
-}
-
-// ── Internal Helpers ───────────────────────────────────────────────────────
-
-async function markFailed(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  accountId: string,
-  error: string,
-): Promise<void> {
-  await supabase
-    .from("accounts")
-    .update({
-      ghl_provisioning_status: "failed",
-      ghl_provisioning_error: error.slice(0, 4000),
-    })
-    .eq("id", accountId);
-}
-
-function buildVoicePrompt(businessName: string, vertical: string): string {
-  const verticalContext: Record<string, string> = {
-    hvac: "heating, ventilation, and air conditioning",
-    plumbing: "plumbing",
-    electrical: "electrical",
-    roofing: "roofing",
-    landscaping: "landscaping",
-  };
-
-  const trade = verticalContext[vertical] ?? "home services";
-
-  return [
-    `You are the AI phone assistant for ${businessName}, a ${trade} company.`,
-    "Your job is to answer incoming calls professionally, collect the caller's information, and understand their needs.",
-    "",
-    "Always collect: 1) Caller's full name, 2) Phone number (confirm it), 3) Reason for calling.",
-    "If the caller describes an emergency, let them know a team member will call back urgently.",
-    "Be friendly, professional, and concise. Do not make promises about pricing or scheduling.",
-    `End the call by thanking them for calling ${businessName}.`,
-  ].join("\n");
 }
