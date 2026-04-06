@@ -14,6 +14,8 @@ import { encryptToken } from "./token";
 import { GHLClient } from "./client";
 import { GHL_DEFAULT_VOICES } from "./voiceTypes";
 import type { GHLCreateVoiceAgentPayload } from "./voiceTypes";
+import type { GHLWebhookEvent } from "./types";
+import { createWebhook, listWebhooks } from "./webhooks";
 
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -25,6 +27,18 @@ export interface ProvisionResult {
   ghl_voice_agent_id?: string;
 }
 
+const WEBHOOK_EVENTS: GHLWebhookEvent[] = [
+  "ContactCreate",
+  "ContactUpdate",
+  "ConversationUnreadUpdate",
+  "OpportunityCreate",
+  "OpportunityStageUpdate",
+  "AppointmentCreate",
+  "AppointmentStatusUpdate",
+  "InboundMessage",
+  "CallCompleted",
+];
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function sanitizeError(err: unknown): string {
@@ -32,6 +46,11 @@ function sanitizeError(err: unknown): string {
     return err.message.slice(0, 4000);
   }
   return "Provisioning failed";
+}
+
+function hasRequiredWebhook(events: string[] | null | undefined): boolean {
+  const normalized = new Set(events ?? []);
+  return WEBHOOK_EVENTS.every((event) => normalized.has(event));
 }
 
 function log(step: string, accountId: string, detail?: string) {
@@ -118,6 +137,7 @@ export async function provisionCustomer(
 
     // If sub-account was already created in a prior attempt, reuse it
     let locationId: string;
+    let locationApiKeyFromCreate: string | null = null;
     if (account.ghl_location_id) {
       locationId = account.ghl_location_id;
       log("step_2_reuse_existing", accountId, `locationId=${locationId}`);
@@ -133,6 +153,7 @@ export async function provisionCustomer(
       });
 
       locationId = location.id;
+      locationApiKeyFromCreate = location.apiKey ?? null;
 
       // Store sub-account ID immediately so we can recover on retry
       await supabase
@@ -143,20 +164,39 @@ export async function provisionCustomer(
 
     log("step_2_complete", accountId, `locationId=${locationId}`);
 
-    // ── Step 3: Store agency key as location token ─────────────────────
+    // ── Step 3: Resolve + store location token ─────────────────────────
 
     log("step_3_token_exchange", accountId);
 
-    // GHL private integration agency keys work directly for all location-scoped
-    // operations. POST /oauth/locationToken is an OAuth2-only endpoint and
-    // returns 401 when called with a private integration key — skip it entirely.
-    const agencyApiKey = process.env.GHL_AGENCY_API_KEY;
-    if (!agencyApiKey) {
-      const msg = "GHL_AGENCY_API_KEY is not configured";
+    let subAccountToken = locationApiKeyFromCreate;
+    let tokenSource: "location_api_key" | "oauth_exchange" | "agency_fallback" =
+      locationApiKeyFromCreate ? "location_api_key" : "agency_fallback";
+
+    if (!subAccountToken) {
+      try {
+        const tokenExchange = await GHLClient.exchangeSubAccountToken(companyId, locationId);
+        subAccountToken = tokenExchange.access_token;
+        tokenSource = "oauth_exchange";
+      } catch (tokenExchangeErr) {
+        // Private integrations can return 401 for this OAuth-only endpoint.
+        const agencyApiKey = process.env.GHL_AGENCY_API_KEY;
+        if (!agencyApiKey) {
+          const msg = `Failed to resolve sub-account token: ${sanitizeError(tokenExchangeErr)}`;
+          await markFailed(supabase, accountId, msg);
+          return { success: false, error: msg };
+        }
+
+        subAccountToken = agencyApiKey;
+        tokenSource = "agency_fallback";
+        logError("step_3_token_exchange_failed_fallback", accountId, sanitizeError(tokenExchangeErr));
+      }
+    }
+
+    if (!subAccountToken) {
+      const msg = "Failed to resolve sub-account token";
       await markFailed(supabase, accountId, msg);
       return { success: false, error: msg };
     }
-    const subAccountToken = agencyApiKey;
 
     // Store encrypted token on the account (used by getGHLClient)
     const encryptedToken = encryptToken(subAccountToken);
@@ -176,15 +216,15 @@ export async function provisionCustomer(
           credentials_encrypted: {
             access_token_encrypted: encryptedToken,
             location_id: locationId,
-            token_type: "private_integration",
+            token_type: tokenSource,
             expires_in: null,
-            scope: "agency",
+            scope: tokenSource === "agency_fallback" ? "agency" : "location",
           },
         },
         { onConflict: "account_id,provider" },
       );
 
-    log("step_3_complete", accountId);
+    log("step_3_complete", accountId, `source=${tokenSource}`);
 
     // ── Step 4: Create Voice AI agent (best-effort) ────────────────────
     // Non-fatal: Voice AI may not be available for all plans or newly
@@ -272,22 +312,39 @@ export async function provisionCustomer(
       log("step_5_skipped_no_agent", accountId);
     }
 
-    // ── Step 6: GHL webhook note (manual setup required) ──────────────
-    //
-    // GHL Private Integration does NOT provide a REST API for registering
-    // webhooks programmatically. Webhooks must be configured once in the
-    // GHL Marketplace dashboard:
-    //   Marketplace → App Settings → Advanced Settings → Webhooks
-    //   URL: {NEXT_PUBLIC_APP_URL}/api/webhooks/ghl
-    //   Events: ContactCreate, ContactUpdate, OpportunityCreate,
-    //           AppointmentCreate, AppointmentStatusUpdate,
-    //           CallCompleted, InboundMessage, ConversationUnreadUpdate
-    //
-    // Also set the verification token in the dashboard and add it as the
-    // GHL_WEBHOOK_SECRET environment variable in Vercel. This is a one-time
-    // setup for the entire app — not per-customer.
+    // ── Step 6: Register location webhook idempotently ─────────────────
+    log("step_6_register_webhooks", accountId);
+    try {
+      const webhookUrl = `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "")}/api/webhooks/ghl`;
+      if (!webhookUrl.startsWith("http")) {
+        throw new Error("NEXT_PUBLIC_APP_URL is not configured");
+      }
 
-    log("step_6_manual_setup_required", accountId);
+      const existing = await listWebhooks(locationId, {
+        locationId,
+        apiKey: subAccountToken,
+      });
+      const alreadyRegistered = (existing.webhooks ?? []).some(
+        (webhook) => webhook.url === webhookUrl && hasRequiredWebhook(webhook.events),
+      );
+
+      if (!alreadyRegistered) {
+        await createWebhook(
+          {
+            locationId,
+            url: webhookUrl,
+            events: WEBHOOK_EVENTS,
+            secret: account.ghl_webhook_secret ?? undefined,
+          },
+          { locationId, apiKey: subAccountToken },
+        );
+      }
+      log("step_6_complete", accountId);
+    } catch (webhookErr) {
+      const msg = `Webhook registration failed: ${sanitizeError(webhookErr)}`;
+      await markFailed(supabase, accountId, msg);
+      return { success: false, error: msg };
+    }
 
     // ── Step 7: Mark provisioning complete ─────────────────────────────
 
