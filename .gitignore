@@ -6,6 +6,10 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/e2e/.auth/user.json
 
 # next.js
 /.next/
@@ -36,3 +40,5 @@ next-env.d.ts
 # Auto-push watcher
 watch-and-push.sh
 watch-push.log
+Vector48-app-1/
+Vector48-app/

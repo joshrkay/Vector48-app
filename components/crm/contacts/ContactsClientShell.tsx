@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { seedContactsInCache } from "@/lib/crm/contactCache";
 import { Button } from "@/components/ui/button";
 import { ContactsFilterBar } from "./ContactsFilterBar";
 import { ContactsTable } from "./ContactsTable";
@@ -14,16 +15,18 @@ import type { GHLContact } from "@/lib/ghl/types";
 interface ContactsClientShellProps {
   initialContacts: GHLContact[];
   initialNextCursor: string | null;
-  aiContactIds: string[];
+  aiPhones: string[];
   filter: string;
   accountId: string;
+  ghlUnavailableReason?: string | null;
 }
 
 export function ContactsClientShell({
   initialContacts,
   initialNextCursor,
-  aiContactIds,
+  aiPhones,
   filter,
+  ghlUnavailableReason = null,
 }: ContactsClientShellProps) {
   const searchParams = useSearchParams();
   const q = searchParams.get("q") ?? undefined;
@@ -33,7 +36,7 @@ export function ContactsClientShell({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
-  const aiSet = new Set(aiContactIds);
+  const aiSet = new Set(aiPhones);
   const isFetchingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -65,6 +68,10 @@ export function ContactsClientShell({
   }, [nextCursor, filter, q]);
 
   useEffect(() => {
+    seedContactsInCache(contacts);
+  }, [contacts]);
+
+  useEffect(() => {
     const target = sentinelRef.current;
     if (!target) return;
     const observer = new IntersectionObserver(
@@ -93,14 +100,19 @@ export function ContactsClientShell({
       </div>
 
       {/* Contact list */}
+      {ghlUnavailableReason && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          We couldn&apos;t load GoHighLevel contacts right now: {ghlUnavailableReason}
+        </div>
+      )}
       {contacts.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
           No contacts found.
         </p>
       ) : isDesktop ? (
-        <ContactsTable contacts={contacts} aiContactIds={aiSet} />
+        <ContactsTable contacts={contacts} aiPhones={aiSet} />
       ) : (
-        <ContactsCardList contacts={contacts} aiContactIds={aiSet} />
+        <ContactsCardList contacts={contacts} aiPhones={aiSet} />
       )}
 
       {/* Infinite scroll sentinel */}

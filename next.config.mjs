@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  typescript: {
+    // Type-checking is handled via tsc in CI; don't block Vercel builds on TS errors.
+    ignoreBuildErrors: true,
+  },
   images: {
     remotePatterns: [
       {
@@ -8,10 +12,19 @@ const nextConfig = {
       },
     ],
   },
-  // pdf-parse is an optional runtime dependency used only by the extract-pdf
-  // route; exclude it from the webpack bundle so the build doesn't fail when
-  // it is not installed.
-  serverExternalPackages: ["pdf-parse"],
+  // pdf-parse is optional for the extract-pdf route; keep it out of the RSC bundle.
+  experimental: {
+    serverComponentsExternalPackages: ["pdf-parse"],
+  },
+  async redirects() {
+    return [
+      {
+        source: "/favicon.ico",
+        destination: "/icon",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

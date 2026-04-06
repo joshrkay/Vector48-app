@@ -40,6 +40,18 @@ function detailMaybeNoteId(detail: AutomationEvent["detail"]): string | null {
   return id;
 }
 
+function detailMaybeMessageId(detail: AutomationEvent["detail"]): string | null {
+  if (!detail || typeof detail !== "object") return null;
+  const o = detail as Record<string, unknown>;
+  return typeof o.messageId === "string"
+    ? o.messageId
+    : typeof o.message_id === "string"
+      ? o.message_id
+      : typeof o.ghl_message_id === "string"
+        ? o.ghl_message_id
+        : null;
+}
+
 function mergeTimeline(
   automationEvents: AutomationEvent[],
   ghlMessages: GHLMessage[] | null,
@@ -47,6 +59,7 @@ function mergeTimeline(
 ): TimelineItem[] {
   const items = new Map<string, TimelineItem>();
   const noteIdsInAutomation = new Set<string>();
+  const messageIdsInAutomation = new Set<string>();
 
   for (const event of automationEvents) {
     const key = event.ghl_event_id ?? `local-${event.id}`;
@@ -58,10 +71,13 @@ function mergeTimeline(
     });
     const nid = detailMaybeNoteId(event.detail);
     if (nid) noteIdsInAutomation.add(nid);
+    const mid = detailMaybeMessageId(event.detail);
+    if (mid) messageIdsInAutomation.add(mid);
   }
 
   const messages = ghlMessages ?? [];
   for (const msg of messages) {
+    if (messageIdsInAutomation.has(msg.id)) continue;
     if (!items.has(msg.id)) {
       items.set(msg.id, {
         id: msg.id,

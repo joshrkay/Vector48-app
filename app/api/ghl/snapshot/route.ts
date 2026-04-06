@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireAccountForUser } from "@/lib/auth/account";
 import { cachedGHLClient } from "@/lib/ghl/cache";
-import { cacheStore } from "@/lib/ghl/cacheStore";
+import { inferGhlCachedAtIso } from "@/lib/ghl/cacheMeta";
 import { getTierConfig } from "@/lib/ghl/tierConfig";
 import type { GHLAppointment, GHLContact } from "@/lib/ghl/types";
 import { createServerClient } from "@/lib/supabase/server";
@@ -20,25 +20,6 @@ function toIsoDay(date: Date): string {
 
 function dateAtUtcStart(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function inferLastSyncedIso(accountId: string, cacheTtlSeconds: number): string {
-  const prefix = `ghl:${accountId}:`;
-  const now = Date.now();
-  const inferredAges: number[] = [];
-
-  for (const [key, entry] of Array.from(cacheStore.entries())) {
-    if (!key.startsWith(prefix)) continue;
-
-    const inferredWrittenAt = entry.expiresAt - cacheTtlSeconds * 1_000;
-    inferredAges.push(Math.min(inferredWrittenAt, now));
-  }
-
-  if (inferredAges.length === 0) {
-    return new Date(now).toISOString();
-  }
-
-  return new Date(Math.max(...inferredAges)).toISOString();
 }
 
 function sortNewestFirst<T>(items: T[], getDate: (item: T) => string): T[] {
@@ -237,7 +218,7 @@ export async function GET() {
     unreadConversations,
     recentContacts,
     upcomingAppointments,
-    lastSynced: inferLastSyncedIso(accountId, tierConfig.cacheTTL),
+    lastSynced: inferGhlCachedAtIso(accountId, tierConfig.cacheTTL),
   };
 
   return NextResponse.json(payload, { status: 200 });

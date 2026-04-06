@@ -1,26 +1,12 @@
-import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+
 import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
 import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
-import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
+import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-function verifyToken(provided: string | null, expected: string | null): boolean {
-  if (!provided || !expected) return false;
-  const a = crypto.createHash("sha256").update(provided).digest();
-  const b = crypto.createHash("sha256").update(expected).digest();
-  return crypto.timingSafeEqual(a, b);
-}
-
-function tokenFromRequest(headers: Headers, body: Record<string, unknown>): string | null {
-  return (
-    headers.get("x-ghl-signature") ??
-    headers.get("x-ghl-webhook-secret") ??
-    (typeof body.verificationToken === "string" ? body.verificationToken : null) ??
-    (typeof body.token === "string" ? body.token : null)
-  );
-}
+import { authenticateGhlWebhook } from "./signatureVerification";
 
 function parseEventType(payload: Record<string, unknown>): string {
   if (typeof payload.type === "string") return payload.type;
@@ -28,12 +14,33 @@ function parseEventType(payload: Record<string, unknown>): string {
   return "unknown";
 }
 
+function isDuplicateAutomationEventError(error: {
+  code?: string | null;
+  message?: string | null;
+  details?: string | null;
+}): boolean {
+  if (error.code === "23505") return true;
+  return (
+    error.message?.includes("duplicate key value violates unique constraint") === true ||
+    error.details?.includes("idx_automation_events_ghl_dedup") === true
+  );
+}
+
 export async function POST(req: Request) {
   const startedAt = Date.now();
 
+  // Read raw body first — required for signature verification over the exact
+  // bytes that GHL signed. Parsing JSON first would lose whitespace fidelity.
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return NextResponse.json({ received: true });
+  }
+
   let body: GHLWebhookPayload | Record<string, unknown>;
   try {
-    body = (await req.json()) as GHLWebhookPayload;
+    body = JSON.parse(rawBody) as GHLWebhookPayload;
   } catch {
     return NextResponse.json({ received: true });
   }
@@ -54,7 +61,7 @@ export async function POST(req: Request) {
   const supabase = getSupabaseAdmin();
   const { data: account, error: accountError } = await supabase
     .from("accounts")
-    .select("id, ghl_webhook_secret")
+    .select("id")
     .eq("ghl_location_id", locationId)
     .maybeSingle();
 
@@ -68,42 +75,42 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   }
 
-  const providedToken = tokenFromRequest(req.headers, payload);
-  const expectedToken =
-    typeof (account as { ghl_webhook_secret?: unknown }).ghl_webhook_secret === "string"
-      ? ((account as { ghl_webhook_secret: string }).ghl_webhook_secret)
-      : null;
-
-  if (!verifyToken(providedToken, expectedToken)) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const authResult = authenticateGhlWebhook(rawBody, req.headers);
+  if (!authResult.ok) {
+    console.warn("[ghl-webhook] webhook authentication failed", {
+      reason: authResult.reason,
+      locationId,
+    });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const ghlEventType = parseEventType(payload);
   const normalized = parseGHLWebhook(payload, ghlEventType);
+
+  if (!normalized) {
+    return NextResponse.json({ received: true });
+  }
 
   const insertRow = {
     ...normalized,
     account_id: account.id,
   };
 
-  const { error: insertError } = await supabase
-    .from("automation_events")
-    // @ts-ignore – insertRow type is structurally compatible with Insert
-    .upsert(insertRow, {
-      onConflict: "account_id,ghl_event_id",
-      ignoreDuplicates: true,
-    });
+  const { error: insertError } = await supabase.from("automation_events").insert(insertRow);
 
   if (insertError) {
+    if (isDuplicateAutomationEventError(insertError)) {
+      return NextResponse.json({ received: true });
+    }
+
     console.error("[ghl-webhook] failed to write automation event", insertError.message);
   } else {
     invalidateGHLCache(account.id, ghlEventType, { invalidateInMemoryFallback: true });
-  }
 
-  // Fire-and-forget side effects. Do not await so webhook returns quickly.
-  queueMicrotask(() => {
-    void processSideEffects(account.id, { ...normalized, account_id: account.id }, payload);
-  });
+    queueMicrotask(() => {
+      void processSideEffects(account.id, { ...normalized, account_id: account.id }, payload);
+    });
+  }
 
   const elapsedMs = Date.now() - startedAt;
   if (elapsedMs > 4500) {

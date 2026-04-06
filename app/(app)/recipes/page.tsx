@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClipboardList } from "lucide-react";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import { RECIPE_CATALOG } from "@/lib/recipes/catalog";
 import { mergeRecipesWithActivations } from "@/lib/recipes/merge";
@@ -16,14 +17,18 @@ export default async function RecipesPage() {
   if (!user) {
     redirect("/login");
   }
+  const session = await requireAccountForUser(supabase);
+  if (!session) {
+    redirect("/login");
+  }
 
   const { data: account } = await supabase
     .from("accounts")
     .select(
       "id, vertical, plan_slug, phone, voice_gender, greeting_text, business_hours",
     )
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) {
     redirect("/login");

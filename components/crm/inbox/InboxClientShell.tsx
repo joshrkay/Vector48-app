@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "@/lib/swr";
+import { seedContactsInCache } from "@/lib/crm/contactCache";
 import { Button } from "@/components/ui/button";
 import { AIContextBanner } from "@/components/crm/inbox/AIContextBanner";
 import { ConversationList } from "@/components/crm/inbox/ConversationList";
@@ -32,13 +33,14 @@ function backToListHref(filter: InboxFilterTab): string {
 interface Props {
   initial: EnrichedInboxConversations;
   initialConversationId: string | null;
+  initialFilter: string | null;
 }
 
-export function InboxClientShell({ initial, initialConversationId }: Props) {
+export function InboxClientShell({ initial, initialConversationId, initialFilter }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const conversationId = searchParams.get("conversation") ?? initialConversationId;
-  const filter = parseInboxFilterTab(searchParams.get("filter") ?? undefined);
+  const filter = parseInboxFilterTab(searchParams.get("filter") ?? initialFilter ?? undefined);
 
   const { data } = useSWR<EnrichedInboxConversations>(["/api/ghl/conversations"], fetchInboxList, {
     dedupingInterval: 25_000,
@@ -104,6 +106,15 @@ export function InboxClientShell({ initial, initialConversationId }: Props) {
 
   const resolvedContactId = activeConversation?.contactId ?? orphanConversation?.contactId ?? null;
   const locationId = activeConversation?.locationId ?? orphanConversation?.locationId ?? "";
+
+  useEffect(() => {
+    seedContactsInCache(
+      Object.entries(contacts).map(([id, contact]) => ({
+        id,
+        ...contact,
+      })),
+    );
+  }, [contacts]);
 
   useEffect(() => {
     setRecipeBannerActive(false);
@@ -173,7 +184,7 @@ export function InboxClientShell({ initial, initialConversationId }: Props) {
                 conversationId={conversationId}
                 contactId={resolvedContactId}
                 locationId={locationId}
-                shouldPauseSequence={recipeBannerActive}
+                recipeActive={recipeBannerActive}
                 onDraft={setDraftMessage}
                 onSent={() => setThreadBump((b) => b + 1)}
               />

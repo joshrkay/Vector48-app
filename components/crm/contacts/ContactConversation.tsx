@@ -15,7 +15,7 @@ interface Props {
   contactId: string;
 }
 
-function typeLabel(type: GHLMessageType): string {
+function typeLabel(type: string): string {
   const map: Record<string, string> = {
     TYPE_SMS: "SMS",
     TYPE_EMAIL: "Email",
@@ -57,7 +57,7 @@ function Thread({ conversation, messages: initialMsgs, contactId }: ThreadProps)
       locationId: conversation.locationId,
       contactId,
       body: text,
-      type: "TYPE_SMS",
+      type: (conversation.type as GHLMessageType) || "TYPE_SMS",
       direction: "outbound",
       status: "pending",
       contentType: "text/plain",
@@ -69,14 +69,16 @@ function Thread({ conversation, messages: initialMsgs, contactId }: ThreadProps)
     setSending(true);
 
     try {
+      const payload: { type: GHLMessageType; message: string; contactId: string } = {
+        type: (conversation.type as GHLMessageType) || "TYPE_SMS",
+        message: text,
+        contactId,
+      };
+
       const res = await fetch(`/api/ghl/conversations/${conversation.id}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "TYPE_SMS" as GHLMessageType,
-          message: text,
-          contactId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error("Send failed");
@@ -86,8 +88,11 @@ function Thread({ conversation, messages: initialMsgs, contactId }: ThreadProps)
         prev.map((m) => (m.id === optimisticId ? real : m)),
       );
     } catch {
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      setReplyText(text);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === optimisticId ? { ...m, status: "failed" as any } : m
+        )
+      );
       toast.error("Failed to send message");
     } finally {
       setSending(false);
@@ -111,7 +116,8 @@ function Thread({ conversation, messages: initialMsgs, contactId }: ThreadProps)
         ) : (
           messages.map((msg) => {
             const isOutbound = msg.direction === "outbound";
-            const isPending = msg.id.startsWith("opt-");
+            const isFailed = msg.status === "failed";
+            const isPending = msg.id.startsWith("opt-") && !isFailed;
             return (
               <div
                 key={msg.id}
@@ -121,19 +127,28 @@ function Thread({ conversation, messages: initialMsgs, contactId }: ThreadProps)
                   className={cn(
                     "max-w-[72%] rounded-2xl px-3.5 py-2 text-sm",
                     isOutbound
-                      ? "rounded-br-sm bg-teal-600 text-white"
+                      ? isFailed
+                        ? "rounded-br-sm bg-red-600 text-white"
+                        : "rounded-br-sm bg-teal-600 text-white"
                       : "rounded-bl-sm bg-slate-100 text-slate-800",
                     isPending && "opacity-60",
                   )}
                 >
                   <p className="whitespace-pre-wrap break-words">{msg.body}</p>
                   <p
+                    onClick={() => {
+                      if (isFailed) setReplyText(msg.body);
+                    }}
                     className={cn(
                       "mt-1 text-[10px]",
-                      isOutbound ? "text-teal-100" : "text-slate-400",
+                      isOutbound
+                        ? isFailed
+                          ? "cursor-pointer text-red-100 hover:underline"
+                          : "text-teal-100"
+                        : "text-slate-400",
                     )}
                   >
-                    {isPending ? "Sending…" : formatRelativeTime(msg.dateAdded)}
+                    {isFailed ? "Failed to send - Click to edit" : isPending ? "Sending…" : formatRelativeTime(msg.dateAdded)}
                   </p>
                 </div>
               </div>
@@ -184,9 +199,12 @@ export function ContactConversation({ conversations, initialMessages, contactId 
   // Group messages by conversationId
   const msgsByConv = new Map<string, GHLMessage[]>();
   for (const msg of initialMessages) {
-    const list = msgsByConv.get(msg.conversationId) ?? [];
+    const conversationId = msg.conversationId;
+    if (!conversationId) continue;
+
+    const list = msgsByConv.get(conversationId) ?? [];
     list.push(msg);
-    msgsByConv.set(msg.conversationId, list);
+    msgsByConv.set(conversationId, list);
   }
 
   return (

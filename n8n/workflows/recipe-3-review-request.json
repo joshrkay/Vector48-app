@@ -1,0 +1,308 @@
+{
+  "name": "Vector 48 — Recipe 3: Review Request — {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recipe-review-request-{{TENANT_ID}}",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook — Review Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Receives trigger from Vercel Cron with { account_id, recipe_id, trigger_data: { contact_id, job_id } }"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/accounts?id=eq.{{TENANT_ID}}&select=id,business_name,vertical,notification_contact_phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-customer-config",
+      "name": "Fetch Customer Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/integrations?account_id=eq.{{TENANT_ID}}&provider=eq.ghl&select=credentials_encrypted",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-ghl-credentials",
+      "name": "Fetch GHL Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://services.leadconnectorhq.com/contacts/{{ $('Webhook — Review Trigger').item.json.body.trigger_data.contact_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Fetch GHL Credentials').item.json[0].credentials_encrypted.access_token }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-contact",
+      "name": "Fetch Contact from GHL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ],
+      "notes": "Gets contact details (name, phone) for the review request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"max_tokens\": 200,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You write friendly review request SMS messages for {{ $('Fetch Customer Config').item.json[0].business_name }}, a {{ $('Fetch Customer Config').item.json[0].vertical }} company. Keep messages under 300 characters. Be warm and grateful. Include a placeholder [REVIEW_LINK] where the review link should go. Do not use emojis. Return ONLY the SMS text.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a review request for {{ $('Fetch Contact from GHL').item.json.contact?.firstName || 'our valued customer' }} who just had their job completed.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "gpt4o-review-msg",
+      "name": "GPT-4o — Generate Review Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Fetch GHL Credentials').item.json[0].credentials_encrypted.access_token }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"SMS\",\n  \"contactId\": \"{{ $('Webhook — Review Trigger').item.json.body.trigger_data.contact_id }}\",\n  \"message\": \"{{ $('GPT-4o — Generate Review Request').item.json.choices[0].message.content.replace('[REVIEW_LINK]', 'https://g.page/r/' + ($('Fetch Customer Config').item.json[0].business_name || 'business').replace(/\\\\s/g, '') + '/review') }}\"\n}",
+        "options": {}
+      },
+      "id": "send-review-sms",
+      "name": "Send Review Request SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        300
+      ],
+      "notes": "TODO: Replace the review link with the actual Google Business Profile review URL stored in customer config"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/event_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"account_id\": \"{{ $('Fetch Customer Config').item.json[0].id }}\",\n  \"recipe_id\": \"review-request\",\n  \"event_type\": \"review_requested\",\n  \"status\": \"success\",\n  \"metadata\": {\n    \"contact_name\": \"{{ $('Fetch Contact from GHL').item.json.contact?.firstName || 'Unknown' }} {{ $('Fetch Contact from GHL').item.json.contact?.lastName || '' }}\",\n    \"contact_phone\": \"{{ $('Fetch Contact from GHL').item.json.contact?.phone || 'unknown' }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "write-event-log",
+      "name": "Write Event Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook — Review Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customer Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customer Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch GHL Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GHL Credentials": {
+      "main": [
+        [
+          {
+            "node": "Fetch Contact from GHL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contact from GHL": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o — Generate Review Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o — Generate Review Request": {
+      "main": [
+        [
+          {
+            "node": "Send Review Request SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Review Request SMS": {
+      "main": [
+        [
+          {
+            "node": "Write Event Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "Vector 48"
+    },
+    {
+      "name": "Recipe"
+    },
+    {
+      "name": "v1"
+    }
+  ]
+}

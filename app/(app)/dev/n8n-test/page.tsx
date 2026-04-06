@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { N8nProvisionTestPanel } from "@/components/dev/N8nProvisionTestPanel";
 import { isN8nDevToolsEnabled } from "@/lib/n8n/devGate";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 
 export default async function N8nDevTestPage() {
@@ -17,12 +18,16 @@ export default async function N8nDevTestPage() {
   if (!user) {
     notFound();
   }
+  const session = await requireAccountForUser(supabase);
+  if (!session) {
+    notFound();
+  }
 
   const { data: account } = await supabase
     .from("accounts")
     .select("id")
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) {
     notFound();

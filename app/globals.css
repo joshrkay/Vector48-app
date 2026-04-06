@@ -11,8 +11,8 @@
     --card-foreground: 210 50% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 210 50% 10%;
-    --primary: 174 100% 35%;
-    --primary-foreground: 170 55% 93%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96%;
     --secondary-foreground: 210 50% 10%;
     --muted: 210 40% 96%;
@@ -23,15 +23,15 @@
     --destructive-foreground: 0 0% 98%;
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 174 100% 35%;
+    --ring: 221 83% 53%;
     --radius: 0.5rem;
 
     /* Vector 48 design tokens */
-    --brand: #0f1e35;
-    --v48-accent: #00b4a6;
-    --v48-accent-light: #e6f7f5;
+    --brand: #1E293B;
+    --v48-accent: #2563EB;
+    --v48-accent-light: #EFF6FF;
     --surface: #ffffff;
-    --bg: #f4f6f8;
+    --bg: #F8FAFC;
     --v48-border: #e2e8f0;
     --text-primary: #0f1923;
     --text-secondary: #64748b;

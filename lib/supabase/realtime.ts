@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/types";
@@ -13,9 +13,20 @@ export function useRealtimeInserts<T extends TableName>(
   table: T,
   filter: string,
   onInsert: (row: RowForTable<T>) => void,
+  options?: { enabled?: boolean },
 ) {
+  const [realtimeAvailable, setRealtimeAvailable] = useState(true);
+  const didReportLifecycleIssueRef = useRef(false);
+
   useEffect(() => {
+    const enabled = options?.enabled ?? true;
+    if (!enabled || !filter.trim()) {
+      setRealtimeAvailable(false);
+      return;
+    }
+
     const supabase = createBrowserClient();
+    let isMounted = true;
 
     const channelName = `realtime:${String(table)}:${filter}`;
     const channel: RealtimeChannel = supabase
@@ -32,10 +43,33 @@ export function useRealtimeInserts<T extends TableName>(
           onInsert(payload.new as RowForTable<T>);
         },
       )
-      .subscribe();
+      .subscribe((status: "SUBSCRIBED" | "TIMED_OUT" | "CLOSED" | "CHANNEL_ERROR") => {
+        if (!isMounted) return;
+
+        if (status === "SUBSCRIBED") {
+          setRealtimeAvailable(true);
+          return;
+        }
+
+        if ((status === "CHANNEL_ERROR" || status === "TIMED_OUT") && !didReportLifecycleIssueRef.current) {
+          didReportLifecycleIssueRef.current = true;
+          console.error("[realtime] channel lifecycle issue", {
+            table: String(table),
+            filter,
+            status,
+          });
+        }
+
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setRealtimeAvailable(false);
+        }
+      });
 
     return () => {
+      isMounted = false;
       void supabase.removeChannel(channel);
     };
-  }, [filter, onInsert, table]);
+  }, [filter, onInsert, options?.enabled, table]);
+
+  return { realtimeAvailable };
 }

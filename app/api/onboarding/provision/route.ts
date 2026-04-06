@@ -1,59 +1,147 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase/server";
+
+import { inngest } from "@/lib/inngest/client";
+import {
+  attachRequestIdHeader,
+  getOrCreateRequestId,
+} from "@/lib/observability/request-logging";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { provisionGHL } from "@/lib/jobs/provisionGHL";
+import { createServerClient } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient();
+  const requestId = getOrCreateRequestId(req.headers);
+  const respond = (body: unknown, status = 200) =>
+    attachRequestIdHeader(NextResponse.json(body, { status }), requestId);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    if (!user) {
+      return respond({ error: "Not authenticated" }, 401);
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const accountId = body.accountId as string | undefined;
+
+    if (!accountId) {
+      return respond({ error: "accountId is required" }, 400);
+    }
+
+    const { data: membership } = await supabase
+      .from("account_users")
+      .select("account_id")
+      .eq("account_id", accountId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!membership) {
+      return respond({ error: "Unauthorized" }, 403);
+    }
+
+    const admin = createAdminClient();
+    const { data: account, error: fetchError } = await admin
+      .from("accounts")
+      .select("ghl_provisioning_status, activate_recipe_1, voice_gender, greeting_text")
+      .eq("id", accountId)
+      .maybeSingle();
+
+    if (fetchError || !account) {
+      return respond({ error: "Account not found" }, 404);
+    }
+
+    if (account.ghl_provisioning_status === "in_progress") {
+      return respond({ jobId: accountId, status: "in_progress" }, 409);
+    }
+
+    if (account.ghl_provisioning_status === "complete") {
+      return respond({ jobId: accountId, status: "complete" }, 409);
+    }
+
+    if (account.ghl_provisioning_status === "failed") {
+      return respond({ jobId: accountId, status: "failed" }, 409);
+    }
+
+    // If the user opted into Recipe 1 during onboarding, look up the
+    // activation row that completeOnboarding() already created so we can
+    // hand its ID to the Inngest function for n8n workflow creation.
+    let activationId: string | undefined;
+    if (account.activate_recipe_1) {
+      const { data: activation } = await admin
+        .from("recipe_activations")
+        .select("id")
+        .eq("account_id", accountId)
+        .eq("recipe_slug", "ai-phone-answering")
+        .is("n8n_workflow_id", null)
+        .order("activated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      activationId = activation?.id;
+    }
+
+    const { error: updateError } = await admin
+      .from("accounts")
+      .update({
+        ghl_provisioning_status: "in_progress",
+        ghl_provisioning_error: null,
+      })
+      .eq("id", accountId);
+
+    if (updateError) {
+      console.error("[api/onboarding/provision] failed to initiate provisioning", {
+        accountId,
+        requestId,
+        status: 500,
+        error: updateError,
+      });
+      return respond({ error: "Failed to initiate provisioning" }, 500);
+    }
+
+    try {
+      await inngest.send({
+        name: "app/customer.onboarding.completed",
+        data: {
+          accountId,
+          activateRecipe: account.activate_recipe_1 === true && !!activationId,
+          activationId,
+          voiceConfig: account.voice_gender || account.greeting_text
+            ? {
+                voiceGender: account.voice_gender ?? "male",
+                voiceGreeting: account.greeting_text ?? "",
+              }
+            : undefined,
+        },
+      });
+    } catch (error) {
+      console.error("[api/onboarding/provision] failed to enqueue provisioning job", {
+        accountId,
+        requestId,
+        status: 500,
+        error,
+      });
+
+      await admin
+        .from("accounts")
+        .update({
+          ghl_provisioning_status: "failed",
+          ghl_provisioning_error: "Failed to enqueue provisioning job",
+        })
+        .eq("id", accountId);
+
+      return respond({ error: "Failed to enqueue provisioning job" }, 500);
+    }
+
+    return respond({ jobId: accountId });
+  } catch (error) {
+    console.error("[api/onboarding/provision] unexpected error", {
+      requestId,
+      status: 500,
+      error,
+    });
+    return respond({ error: "Internal server error" }, 500);
   }
-
-  const body = await req.json().catch(() => ({}));
-  const accountId = body.accountId as string | undefined;
-
-  if (!accountId) {
-    return NextResponse.json({ error: "accountId is required" }, { status: 400 });
-  }
-
-  // Verify user owns account
-  const { data: membership } = await supabase
-    .from("account_users")
-    .select("account_id")
-    .eq("account_id", accountId)
-    .eq("user_id", user.id)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  }
-
-  // Reset provisioning state for retry support
-  const admin = createAdminClient();
-  const { error: updateError } = await admin
-    .from("accounts")
-    .update({
-      provisioning_status: "pending" as const,
-      provisioning_error: null,
-    })
-    .eq("id", accountId);
-
-  if (updateError) {
-    return NextResponse.json(
-      { error: "Failed to initiate provisioning" },
-      { status: 500 },
-    );
-  }
-
-  // Fire-and-forget — provisioning runs in the background
-  provisionGHL(accountId).catch((err) => {
-    console.error("[provision/route] Unhandled provisioning error:", err);
-  });
-
-  return NextResponse.json({ jobId: accountId });
 }

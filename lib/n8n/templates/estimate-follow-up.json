@@ -1,0 +1,398 @@
+{
+  "name": "Vector 48 — Recipe 4: Estimate Follow-Up — {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recipe-estimate-followup-{{TENANT_ID}}",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook — Estimate Follow-Up",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Receives { account_id, recipe_id, trigger_data: { estimate_id, attempt: 1|2 } } from Vercel Cron"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/accounts?id=eq.{{TENANT_ID}}&select=id,business_name,vertical,notification_contact_phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-customer-config",
+      "name": "Fetch Customer Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/integrations?account_id=eq.{{TENANT_ID}}&provider=eq.ghl&select=credentials_encrypted",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-ghl-credentials",
+      "name": "Fetch GHL Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://services.leadconnectorhq.com/opportunities/{{ $('Webhook — Estimate Follow-Up').item.json.body.trigger_data.estimate_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Fetch GHL Credentials').item.json[0].credentials_encrypted.access_token }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-opportunity",
+      "name": "Check Opportunity Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ],
+      "notes": "Checks if the opportunity is still open. If already won or lost, we skip the follow-up."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "check-open",
+              "leftValue": "={{ $json.opportunity?.status }}",
+              "rightValue": "open",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-still-open",
+      "name": "IF Opportunity Still Open",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ],
+      "notes": "Only send follow-up if the opportunity hasn't been won or lost yet"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"max_tokens\": 200,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You write friendly estimate follow-up SMS messages for {{ $('Fetch Customer Config').item.json[0].business_name }}, a {{ $('Fetch Customer Config').item.json[0].vertical }} company. Keep under 300 characters. This is follow-up attempt #{{ $('Webhook — Estimate Follow-Up').item.json.body.trigger_data.attempt }}. Attempt 1: gentle check-in. Attempt 2: slightly more direct, mention limited availability. Do not use emojis. Return ONLY the SMS text.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Write follow-up #{{ $('Webhook — Estimate Follow-Up').item.json.body.trigger_data.attempt }} for the estimate we sent to {{ $('Check Opportunity Status').item.json.opportunity?.contact?.firstName || 'the customer' }}.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "gpt4o-followup",
+      "name": "GPT-4o — Generate Follow-Up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Fetch GHL Credentials').item.json[0].credentials_encrypted.access_token }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"SMS\",\n  \"contactId\": \"{{ $('Check Opportunity Status').item.json.opportunity?.contact?.id || '' }}\",\n  \"message\": \"{{ $('GPT-4o — Generate Follow-Up').item.json.choices[0].message.content }}\"\n}",
+        "options": {}
+      },
+      "id": "send-followup-sms",
+      "name": "Send Follow-Up SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/event_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"account_id\": \"{{ $('Fetch Customer Config').item.json[0].id }}\",\n  \"recipe_id\": \"estimate-followup\",\n  \"event_type\": \"followup_sent\",\n  \"status\": \"success\",\n  \"metadata\": {\n    \"attempt\": {{ $('Webhook — Estimate Follow-Up').item.json.body.trigger_data.attempt }},\n    \"contact_name\": \"{{ $('Check Opportunity Status').item.json.opportunity?.contact?.firstName || 'Unknown' }}\",\n    \"opportunity_id\": \"{{ $('Webhook — Estimate Follow-Up').item.json.body.trigger_data.estimate_id }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "write-event-log",
+      "name": "Write Event Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/event_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"account_id\": \"{{ $('Fetch Customer Config').item.json[0].id }}\",\n  \"recipe_id\": \"estimate-followup\",\n  \"event_type\": \"followup_skipped\",\n  \"status\": \"success\",\n  \"metadata\": {\n    \"reason\": \"opportunity_closed\",\n    \"opportunity_status\": \"{{ $('Check Opportunity Status').item.json.opportunity?.status || 'unknown' }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "write-skip-log",
+      "name": "Log Skipped (Closed)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        420
+      ],
+      "notes": "Logs that the follow-up was skipped because the opportunity was already closed"
+    }
+  ],
+  "connections": {
+    "Webhook — Estimate Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customer Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customer Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch GHL Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GHL Credentials": {
+      "main": [
+        [
+          {
+            "node": "Check Opportunity Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Opportunity Status": {
+      "main": [
+        [
+          {
+            "node": "IF Opportunity Still Open",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Opportunity Still Open": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o — Generate Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Skipped (Closed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o — Generate Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Send Follow-Up SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Follow-Up SMS": {
+      "main": [
+        [
+          {
+            "node": "Write Event Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "Vector 48"
+    },
+    {
+      "name": "Recipe"
+    },
+    {
+      "name": "v1"
+    }
+  ]
+}

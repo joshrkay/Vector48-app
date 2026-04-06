@@ -8,11 +8,17 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "test:unit": "node --experimental-strip-types --test lib/cron/recipeTriggerDelivery.test.ts lib/recipes/webhookEvents.test.ts lib/crm/inboxFilters.test.ts lib/crm/smsSegments.test.ts",
+    "test:unit": "node --experimental-strip-types --test lib/cron/recipeTriggerDelivery.test.ts lib/recipes/webhookEvents.test.ts lib/recipes/contactRecipeActivity.test.ts lib/crm/inboxFilters.test.ts lib/crm/smsSegments.test.ts",
+    "test:e2e": "playwright test --config=playwright.config.ts",
+    "test:e2e:headed": "playwright test --config=playwright.config.ts --headed",
+    "test:e2e:ui": "playwright test --config=playwright.config.ts --ui",
+    "test:e2e:list": "playwright test --config=playwright.config.ts --list",
+    "test:e2e:live": "node -e \"if (!process.env.PLAYWRIGHT_BASE_URL?.trim()) { console.error('Set PLAYWRIGHT_BASE_URL to your deployed URL, e.g. https://app.example.com'); process.exit(1); }\" && playwright test --config=playwright.config.ts",
     "create-test-account": "node scripts/create-test-account.mjs",
     "supabase": "npx --yes supabase@latest",
     "db:link": "npx --yes supabase@latest link",
-    "db:push": "npx --yes supabase@latest db push"
+    "db:push": "npx --yes supabase@latest db push",
+    "verify:supabase-env": "node scripts/verify-supabase-env.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
@@ -48,6 +54,7 @@
     "zustand": "5.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
     "@types/node": "22.13.5",
     "@types/react": "18.3.18",
     "@types/react-dom": "18.3.5",

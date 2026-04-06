@@ -111,12 +111,17 @@ export async function completeOnboarding(
     return { error: "Not authenticated" };
   }
 
+  const completedAt = new Date().toISOString();
+
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
       onboarding_completed_at: new Date().toISOString(),
       onboarding_step: 8,
       activate_recipe_1: activateRecipe,
+      onboarding_completed_at: completedAt,
+      ghl_provisioning_status: "pending",
+      ghl_provisioning_error: null,
     })
     .eq("id", accountId);
 

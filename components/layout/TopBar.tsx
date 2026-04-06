@@ -13,6 +13,7 @@ const pageTitles: Record<string, string> = {
   "/crm/inbox": "Inbox",
   "/crm/pipeline": "Pipeline",
   "/crm/calendar": "Calendar",
+  "/crm/reports": "Reports",
   "/settings": "Settings",
   "/billing": "Billing",
 };

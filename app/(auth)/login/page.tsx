@@ -68,21 +68,28 @@ export default function LoginPage() {
 
       const { data: account } = await supabase
         .from("accounts")
-        .select("onboarding_done_at, onboarding_completed_at")
+        .select("onboarding_done_at, onboarding_completed_at, ghl_provisioning_status")
         .eq("owner_user_id", signInData.user.id)
         .maybeSingle();
 
       const onboardingDone =
         Boolean(account?.onboarding_done_at) ||
-        Boolean(account?.onboarding_completed_at);
+        Boolean(account?.onboarding_completed_at) ||
+        account?.ghl_provisioning_status === "failed";
 
       if (!account || !onboardingDone) {
         router.push("/onboarding");
       } else {
         router.push("/dashboard");
       }
-    } catch {
-      toast.error("An unexpected error occurred. Please try again.");
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        toast.error(
+          "Unable to reach the server. The service may be temporarily unavailable — please try again in a moment.",
+        );
+      } else {
+        toast.error("An unexpected error occurred. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -129,26 +136,26 @@ export default function LoginPage() {
                     Forgot password?
                   </Link>
                 </div>
-                <FormControl>
-                  <div className="relative">
+                <div className="relative">
+                  <FormControl>
                     <Input
                       type={showPassword ? "text" : "password"}
                       placeholder="Enter your password"
                       {...field}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                    >
-                      {showPassword ? (
-                        <EyeOff size={16} />
-                      ) : (
-                        <Eye size={16} />
-                      )}
-                    </button>
-                  </div>
-                </FormControl>
+                  </FormControl>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  >
+                    {showPassword ? (
+                      <EyeOff size={16} />
+                    ) : (
+                      <Eye size={16} />
+                    )}
+                  </button>
+                </div>
                 <FormMessage />
               </FormItem>
             )}

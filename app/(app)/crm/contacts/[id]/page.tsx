@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { getContact, getContactNotes } from "@/lib/ghl/contacts";
@@ -13,6 +14,7 @@ import { ContactTimeline } from "@/components/crm/contacts/ContactTimeline";
 import { ContactConversation } from "@/components/crm/contacts/ContactConversation";
 import { ContactRecipeStatus } from "@/components/crm/contacts/ContactRecipeStatus";
 import { ContactNotes } from "@/components/crm/contacts/ContactNotes";
+import { CRMContactCacheHydrator } from "@/components/crm/CRMContactCacheHydrator";
 import { activationConfigPhoneMatchesContact } from "@/components/crm/contacts/contactUtils";
 import type { Database } from "@/lib/supabase/types";
 import type { GHLConversation, GHLMessage, GHLClientOptions, GHLContactResponse } from "@/lib/ghl/types";
@@ -45,12 +47,12 @@ async function fetchDbData(
   ]);
 
   const automationEvents =
-    eventsResult.status === "fulfilled"
+    eventsResult.status === "fulfilled" && !eventsResult.value.error
       ? ((eventsResult.value.data ?? []) as AutomationEvent[])
       : null;
 
   const allActivations =
-    activationsResult.status === "fulfilled"
+    activationsResult.status === "fulfilled" && !activationsResult.value.error
       ? (activationsResult.value.data ?? [])
       : [];
 
@@ -105,17 +107,49 @@ export default async function ContactDetailPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const session = await requireAccountForUser(supabase);
+  if (!session) redirect("/login");
+
   const { data: account } = await supabase
     .from("accounts")
     .select(
-      "id, business_name, vertical, plan_slug, phone, voice_gender, greeting_text, business_hours",
+      "id, business_name, vertical, plan_slug, phone, voice_gender, greeting_text, business_hours, ghl_provisioning_status, ghl_provisioning_error",
     )
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
   if (!account) redirect("/login");
 
-  const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
-  const ghlOpts: GHLClientOptions = { locationId, apiKey: accessToken };
+  let ghlOpts: GHLClientOptions | null = null;
+  let ghlUnavailableReason: string | null = null;
+  try {
+    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
+    ghlOpts = { locationId, apiKey: accessToken };
+  } catch (error) {
+    const reasonFromProvisioning =
+      account.ghl_provisioning_status === "failed"
+        ? (account.ghl_provisioning_error ?? "GHL provisioning failed.")
+        : null;
+    ghlUnavailableReason =
+      reasonFromProvisioning ??
+      (error instanceof Error ? error.message : "Unable to load GHL credentials.");
+  }
+
+  if (!ghlOpts) {
+    return (
+      <div className="space-y-4">
+        <a
+          href="/crm/contacts"
+          className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        >
+          ← Back to Contacts
+        </a>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          GoHighLevel is currently unavailable for this account.
+          {ghlUnavailableReason ? ` ${ghlUnavailableReason}` : ""}
+        </div>
+      </div>
+    );
+  }
 
   // Fire all fetches in parallel. One failure must not break the page.
   const [contactResult, dbResult, convResult, apptResult, notesResult, oppsResult, pipelinesResult, integrationsResult] =
@@ -179,7 +213,7 @@ export default async function ContactDetailPage({
     pipelinesResult.status === "fulfilled" ? (pipelinesResult.value.pipelines ?? []) : [];
 
   const connectedProviders =
-    integrationsResult.status === "fulfilled"
+    integrationsResult.status === "fulfilled" && !integrationsResult.value.error
       ? ((integrationsResult.value.data ?? []) as { status: string; provider: string }[])
           .filter((r) => r.status === "connected")
           .map((r) => r.provider)
@@ -203,6 +237,8 @@ export default async function ContactDetailPage({
 
   return (
     <div className="space-y-4">
+      <CRMContactCacheHydrator contacts={[contact]} />
+
       {/* Back link */}
       <a
         href="/crm/contacts"

@@ -6,6 +6,7 @@ const EVENT_TAG_MAP: Record<string, string[]> = {
   ContactUpdate: ["contacts"],
   OpportunityCreate: ["opportunities"],
   OpportunityStageUpdate: ["opportunities"],
+  OpportunityStatusUpdate: ["opportunities"],
   AppointmentCreate: ["appointments"],
   AppointmentStatusUpdate: ["appointments"],
   ConversationUnreadUpdate: ["conversations"],

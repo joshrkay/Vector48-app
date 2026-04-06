@@ -14,7 +14,7 @@ import { encryptToken } from "./token";
 import { GHLClient } from "./client";
 import { GHL_DEFAULT_VOICES } from "./voiceTypes";
 import type { GHLCreateVoiceAgentPayload } from "./voiceTypes";
-import type { GHLWebhookEvent } from "./types";
+
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -116,38 +116,47 @@ export async function provisionCustomer(
 
     const agencyClient = GHLClient.forAgency();
 
-    const locationRes = await agencyClient.locations.create({
-      companyId,
-      name: account.business_name,
-      phone: account.phone ?? undefined,
-      city: account.service_area ?? undefined,
-      country: "US",
-      timezone: "America/Phoenix",
-      email: userEmail || undefined,
-    });
+    // If sub-account was already created in a prior attempt, reuse it
+    let locationId: string;
+    if (account.ghl_location_id) {
+      locationId = account.ghl_location_id;
+      log("step_2_reuse_existing", accountId, `locationId=${locationId}`);
+    } else {
+      const location = await agencyClient.locations.create({
+        companyId,
+        name: account.business_name,
+        phone: account.phone ?? undefined,
+        city: account.address_city ?? undefined,
+        country: "US",
+        timezone: "America/Phoenix",
+        email: userEmail || undefined,
+      });
 
-    const locationId = locationRes.location.id;
+      locationId = location.id;
 
-    // Store sub-account ID immediately so we can recover on retry
-    await supabase
-      .from("accounts")
-      .update({
-        ghl_sub_account_id: locationId,
-        ghl_location_id: locationId,
-      })
-      .eq("id", accountId);
+      // Store sub-account ID immediately so we can recover on retry
+      await supabase
+        .from("accounts")
+        .update({ ghl_location_id: locationId })
+        .eq("id", accountId);
+    }
 
     log("step_2_complete", accountId, `locationId=${locationId}`);
 
-    // ── Step 3: Exchange agency token for sub-account token ────────────
+    // ── Step 3: Store agency key as location token ─────────────────────
 
     log("step_3_token_exchange", accountId);
 
-    const tokenRes = await GHLClient.exchangeSubAccountToken(
-      companyId,
-      locationId,
-    );
-    const subAccountToken = tokenRes.access_token;
+    // GHL private integration agency keys work directly for all location-scoped
+    // operations. POST /oauth/locationToken is an OAuth2-only endpoint and
+    // returns 401 when called with a private integration key — skip it entirely.
+    const agencyApiKey = process.env.GHL_AGENCY_API_KEY;
+    if (!agencyApiKey) {
+      const msg = "GHL_AGENCY_API_KEY is not configured";
+      await markFailed(supabase, accountId, msg);
+      return { success: false, error: msg };
+    }
+    const subAccountToken = agencyApiKey;
 
     // Store encrypted token on the account (used by getGHLClient)
     const encryptedToken = encryptToken(subAccountToken);
@@ -167,9 +176,9 @@ export async function provisionCustomer(
           credentials_encrypted: {
             access_token_encrypted: encryptedToken,
             location_id: locationId,
-            token_type: tokenRes.token_type,
-            expires_in: tokenRes.expires_in,
-            scope: tokenRes.scope,
+            token_type: "private_integration",
+            expires_in: null,
+            scope: "agency",
           },
         },
         { onConflict: "account_id,provider" },
@@ -177,108 +186,108 @@ export async function provisionCustomer(
 
     log("step_3_complete", accountId);
 
-    // ── Step 4: Create Voice AI agent ──────────────────────────────────
+    // ── Step 4: Create Voice AI agent (best-effort) ────────────────────
+    // Non-fatal: Voice AI may not be available for all plans or newly
+    // created sub-accounts. Phone number assignment is always manual.
 
     log("step_4_create_voice_agent", accountId);
 
     const locationClient = GHLClient.forLocation(locationId, subAccountToken);
+    let voiceAgentId: string | null = null;
 
-    const voiceGender: "male" | "female" =
-      account.voice_gender === "male" ? "male" : "female";
+    try {
+      const voiceGender: "male" | "female" =
+        account.voice_gender === "male" ? "male" : "female";
 
-    const greeting =
-      account.voice_greeting ||
-      `Hi, thanks for calling ${account.business_name}. How can I help you today?`;
+      const greeting =
+        account.greeting_text ||
+        `Hi, thanks for calling ${account.business_name}. How can I help you today?`;
 
-    const agentPayload: GHLCreateVoiceAgentPayload = {
-      locationId,
-      name: `${account.business_name} AI Assistant`,
-      businessName: account.business_name,
-      greeting,
-      prompt: buildVoicePrompt(account.business_name, account.vertical),
-      voiceId: GHL_DEFAULT_VOICES[voiceGender],
-      gender: voiceGender,
-      language: "en-US",
-      timezone: "America/Phoenix",
-      goals: [
-        { field: "caller_name", label: "Caller Name", required: true },
-        { field: "phone_number", label: "Phone Number", required: true },
-        { field: "reason_for_call", label: "Reason for Call", required: true },
-      ],
-    };
+      const agentPayload: GHLCreateVoiceAgentPayload = {
+        locationId,
+        name: `${account.business_name} AI Assistant`,
+        businessName: account.business_name,
+        greeting,
+        prompt: buildVoicePrompt(account.business_name, account.vertical),
+        voiceId: GHL_DEFAULT_VOICES[voiceGender],
+        gender: voiceGender,
+        language: "en-US",
+        timezone: "America/Phoenix",
+        goals: [
+          { field: "caller_name", label: "Caller Name", required: true },
+          { field: "phone_number", label: "Phone Number", required: true },
+          { field: "reason_for_call", label: "Reason for Call", required: true },
+        ],
+      };
 
-    const agentRes = await locationClient.voiceAgent.create(agentPayload);
-    const voiceAgentId = agentRes.agent.id;
+      const agentRes = await locationClient.voiceAgent.create(agentPayload);
+      voiceAgentId = agentRes.agent.id;
 
-    await supabase
-      .from("accounts")
-      .update({ ghl_voice_agent_id: voiceAgentId })
-      .eq("id", accountId);
+      await supabase
+        .from("accounts")
+        .update({ ghl_voice_agent_id: voiceAgentId })
+        .eq("id", accountId);
 
-    log("step_4_complete", accountId, `agentId=${voiceAgentId}`);
+      log("step_4_complete", accountId, `agentId=${voiceAgentId}`);
 
-    // [MANUAL STEP] Assign phone number to Voice AI agent for account.
-    // The GHL API may not support programmatic phone number assignment
-    // to Voice AI agents. Check the GHL admin panel to assign a number.
-    console.warn(
-      `[MANUAL STEP] Assign phone number to Voice AI agent for account ${accountId} (agent ${voiceAgentId})`,
-    );
+      // [MANUAL STEP] Assign phone number to Voice AI agent.
+      // The GHL API does not support programmatic phone number assignment
+      // to Voice AI agents. Use the GHL admin panel to assign a number.
+      console.warn(
+        `[MANUAL STEP] Assign phone number to Voice AI agent for account ${accountId} (agent ${voiceAgentId})`,
+      );
+    } catch (voiceErr) {
+      logError("step_4_skipped", accountId, sanitizeError(voiceErr));
+      console.warn(
+        `[ghl-provisioning] Voice AI agent creation skipped for ${accountId}: ${sanitizeError(voiceErr)}`,
+      );
+    }
 
     // ── Step 5: Create Voice AI custom action (webhook to n8n) ─────────
+    // Non-fatal: only attempted if step 4 succeeded.
 
     log("step_5_create_webhook_action", accountId);
 
-    const n8nBase = (process.env.N8N_WEBHOOK_BASE_URL ?? process.env.N8N_BASE_URL ?? "").replace(/\/+$/, "");
+    if (voiceAgentId) {
+      const n8nBase = (process.env.N8N_WEBHOOK_BASE_URL ?? process.env.N8N_BASE_URL ?? "").replace(/\/+$/, "");
 
-    if (n8nBase) {
-      await locationClient.voiceAgent.createAction(voiceAgentId, {
-        type: "webhook",
-        url: `${n8nBase}/recipe-ai-phone-answering/${accountId}`,
-        method: "POST",
-        description: "Post-call data to n8n for processing (summary, SMS notification)",
-      });
-      log("step_5_complete", accountId);
+      if (n8nBase) {
+        try {
+          await locationClient.voiceAgent.createAction(voiceAgentId, {
+            type: "webhook",
+            url: `${n8nBase}/recipe-ai-phone-answering/${accountId}`,
+            method: "POST",
+            description: "Post-call data to n8n for processing (summary, SMS notification)",
+          });
+          log("step_5_complete", accountId);
+        } catch (actionErr) {
+          logError("step_5_skipped", accountId, sanitizeError(actionErr));
+        }
+      } else {
+        console.warn(
+          `[ghl-provisioning] N8N_WEBHOOK_BASE_URL not set — skipping Voice AI action creation for ${accountId}`,
+        );
+      }
     } else {
-      console.warn(
-        `[ghl-provisioning] N8N_WEBHOOK_BASE_URL not set — skipping Voice AI action creation for ${accountId}`,
-      );
+      log("step_5_skipped_no_agent", accountId);
     }
 
-    // ── Step 6: Register GHL webhooks for recipe event types ───────────
+    // ── Step 6: GHL webhook note (manual setup required) ──────────────
+    //
+    // GHL Private Integration does NOT provide a REST API for registering
+    // webhooks programmatically. Webhooks must be configured once in the
+    // GHL Marketplace dashboard:
+    //   Marketplace → App Settings → Advanced Settings → Webhooks
+    //   URL: {NEXT_PUBLIC_APP_URL}/api/webhooks/ghl
+    //   Events: ContactCreate, ContactUpdate, OpportunityCreate,
+    //           AppointmentCreate, AppointmentStatusUpdate,
+    //           CallCompleted, InboundMessage, ConversationUnreadUpdate
+    //
+    // Also set the verification token in the dashboard and add it as the
+    // GHL_WEBHOOK_SECRET environment variable in Vercel. This is a one-time
+    // setup for the entire app — not per-customer.
 
-    log("step_6_register_webhooks", accountId);
-
-    const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
-    const webhookUrl = appBaseUrl
-      ? `${appBaseUrl}/api/webhooks/ghl`
-      : "";
-
-    if (webhookUrl) {
-      // Register a single webhook with all needed event types.
-      // GHL supports multiple events per webhook registration.
-      const webhookEvents: GHLWebhookEvent[] = [
-        "OpportunityCreate",
-        "AppointmentCreate",
-        "AppointmentStatusUpdate",
-        "CallCompleted",
-        "InboundMessage",
-        "ContactCreate",
-        "ContactUpdate",
-        "ConversationUnreadUpdate",
-      ];
-
-      const webhookRes = await agencyClient.webhooks.create({
-        locationId,
-        url: webhookUrl,
-        events: webhookEvents,
-      });
-
-      log("step_6_complete", accountId, `webhookId=${webhookRes.webhook.id}`);
-    } else {
-      console.warn(
-        `[ghl-provisioning] NEXT_PUBLIC_APP_URL not set — skipping webhook registration for ${accountId}`,
-      );
-    }
+    log("step_6_manual_setup_required", accountId);
 
     // ── Step 7: Mark provisioning complete ─────────────────────────────
 
@@ -287,8 +296,8 @@ export async function provisionCustomer(
     await supabase
       .from("accounts")
       .update({
-        provisioning_status: "complete",
-        provisioning_error: null,
+        ghl_provisioning_status: "complete",
+        ghl_provisioning_error: null,
         provisioning_completed_at: new Date().toISOString(),
       })
       .eq("id", accountId);
@@ -296,7 +305,7 @@ export async function provisionCustomer(
     return {
       success: true,
       ghl_sub_account_id: locationId,
-      ghl_voice_agent_id: voiceAgentId,
+      ghl_voice_agent_id: voiceAgentId ?? undefined,
     };
   } catch (err) {
     const msg = sanitizeError(err);
@@ -304,6 +313,36 @@ export async function provisionCustomer(
     await markFailed(supabase, accountId, msg);
     return { success: false, error: msg };
   }
+}
+
+// ── Public adapters ────────────────────────────────────────────────────────
+
+/**
+ * On-demand provisioning entry point used by the REST API endpoint
+ * (`/api/onboarding/provision-ghl`). Unlike `provisionCustomer`, this
+ * throws on failure so callers can catch and surface the error as an HTTP
+ * response without inspecting a success flag.
+ *
+ * `ownerEmail` is accepted for forward-compat but is not needed: the
+ * provisioning orchestrator reads the owner email from Supabase auth data
+ * directly via `account.owner_user_id`.
+ */
+export async function provisionGhlSubAccountForAccount(input: {
+  accountId: string;
+  ownerEmail?: string;
+}): Promise<{ locationId: string; usedAgencyKeyFallback: boolean }> {
+  const result = await provisionCustomer(input.accountId);
+
+  if (!result.success || !result.ghl_sub_account_id) {
+    throw new Error(result.error ?? "GHL sub-account provisioning failed");
+  }
+
+  return {
+    locationId: result.ghl_sub_account_id,
+    // Private integrations always use the agency key as the location token —
+    // there is no per-location OAuth exchange for this integration type.
+    usedAgencyKeyFallback: true,
+  };
 }
 
 // ── Internal Helpers ───────────────────────────────────────────────────────
@@ -316,8 +355,8 @@ async function markFailed(
   await supabase
     .from("accounts")
     .update({
-      provisioning_status: "error",
-      provisioning_error: error.slice(0, 4000),
+      ghl_provisioning_status: "failed",
+      ghl_provisioning_error: error.slice(0, 4000),
     })
     .eq("id", accountId);
 }

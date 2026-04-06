@@ -1,17 +1,18 @@
 import { redirect } from "next/navigation";
 import { SignOutButton } from "@/components/SignOutButton";
+import { ActiveRecipesStrip } from "@/components/dashboard/ActiveRecipesStrip";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
-import { RecipeFilter } from "@/components/dashboard/RecipeFilter";
+import { AlertBanner } from "@/components/dashboard/AlertBanner";
+import { ProvisioningBanner } from "@/components/dashboard/ProvisioningBanner";
+import { GHLSummary } from "@/components/dashboard/GHLSummary";
+import { getStatCards } from "@/lib/dashboard/statsQuery";
+import { isAlertResolved } from "@/lib/dashboard/alerts";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
-type DashboardStatCard = {
-  label: string;
-  value: string;
-  periodLabel: string;
-};
-
 type AutomationEvent = Database["public"]["Tables"]["automation_events"]["Row"];
+const WARMUP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -20,41 +21,7 @@ function getGreeting(): string {
   return "Good evening";
 }
 
-async function getStatCards(accountId: string): Promise<DashboardStatCard[]> {
-  const supabase = await createServerClient();
-
-  const [eventsResult, activeRecipesResult] = await Promise.all([
-    supabase
-      .from("automation_events")
-      .select("event_type", { count: "exact", head: true })
-      .eq("account_id", accountId),
-    supabase
-      .from("recipe_activations")
-      .select("id", { count: "exact", head: true })
-      .eq("account_id", accountId)
-      .eq("status", "active"),
-  ]);
-
-  const eventCount = eventsResult.count ?? 0;
-  const activeRecipesCount = activeRecipesResult.count ?? 0;
-
-  return [
-    { label: "Calls Handled", value: String(eventCount), periodLabel: "Total events" },
-    { label: "Leads Contacted", value: String(eventCount), periodLabel: "Total events" },
-    { label: "Reviews Sent", value: "0", periodLabel: "This week" },
-    {
-      label: "Bookings Confirmed",
-      value: String(activeRecipesCount),
-      periodLabel: "Active recipes",
-    },
-  ];
-}
-
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams?: { recipe?: string };
-}) {
+export default async function DashboardPage() {
   const supabase = await createServerClient();
 
   const {
@@ -63,15 +30,16 @@ export default async function DashboardPage({
 
   if (!user) redirect("/login");
 
+  const session = await requireAccountForUser(supabase);
+  if (!session) redirect("/login");
+
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, business_name, created_at")
-    .eq("owner_user_id", user.id)
-    .single();
+    .select("id, business_name, ghl_provisioning_status, ghl_provisioning_error, created_at")
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) redirect("/login");
-
-  const recipe = searchParams?.recipe;
 
   let query = supabase
     .from("automation_events")
@@ -82,8 +50,6 @@ export default async function DashboardPage({
     .order("created_at", { ascending: false })
     .limit(21);
 
-  if (recipe) query = query.eq("recipe_slug", recipe);
-
   const { data: eventRows } = await query;
 
   const initialRows = (eventRows ?? []) as AutomationEvent[];
@@ -91,15 +57,62 @@ export default async function DashboardPage({
   const initialNextCursor =
     initialRows.length > 20 ? initialItems[initialItems.length - 1]?.created_at ?? null : null;
 
-  const { data: activations } = await supabase
+  const { data: activeRecipes } = await supabase
     .from("recipe_activations")
-    .select("recipe_slug")
+    .select("recipe_slug, last_triggered_at")
     .eq("account_id", account.id)
     .eq("status", "active")
-    .order("recipe_slug", { ascending: true });
+    .order("last_triggered_at", { ascending: false });
 
-  const recipes = Array.from(new Set((activations ?? []).map((row) => row.recipe_slug)));
-  const statCards = await getStatCards(account.id);
+  const { data: alertRows } = await supabase
+    .from("automation_events")
+    .select("id, account_id, recipe_slug, event_type, ghl_event_type, ghl_event_id, contact_id, contact_phone, contact_name, summary, detail, created_at")
+    .eq("account_id", account.id)
+    .eq("event_type", "alert")
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  const stats = await getStatCards(account.id);
+  const statCards = [
+    { label: "Calls Handled", value: stats.callsHandled.current },
+    { label: "Leads Contacted", value: stats.leadsContacted.current },
+    { label: "Reviews Sent", value: stats.reviewsRequested.current },
+    { label: "Bookings Confirmed", value: stats.apptsConfirmed.current },
+  ];
+  const allStatsZero = statCards.every((card) => card.value === 0);
+  const unresolvedAlerts = (alertRows ?? []).filter(
+    (row) => !isAlertResolved(row.detail),
+  ) as AutomationEvent[];
+  const provisioningAlert =
+    account.ghl_provisioning_status === "failed"
+      ? ({
+          id: `ghl-provisioning-failed:${account.id}`,
+          account_id: account.id,
+          recipe_slug: null,
+          event_type: "alert",
+          ghl_event_type: null,
+          ghl_event_id: null,
+          contact_id: null,
+          contact_phone: null,
+          contact_name: null,
+          summary:
+            account.ghl_provisioning_error ??
+            "Vector 48 setup failed. Retry provisioning to continue.",
+          detail: {
+            kind: "ghl_provisioning_failed",
+            retry_account_id: account.id,
+            dismissible: false,
+          },
+          created_at: new Date().toISOString(),
+        } satisfies AutomationEvent)
+      : null;
+  const bannerAlerts = provisioningAlert
+    ? [provisioningAlert, ...unresolvedAlerts]
+    : unresolvedAlerts;
+  const accountCreatedAtMs = new Date(account.created_at).getTime();
+  const showWarmupEmptyState =
+    Number.isFinite(accountCreatedAtMs) &&
+    Date.now() - accountCreatedAtMs < WARMUP_WINDOW_MS;
 
   const greeting = getGreeting();
   const headline = account.business_name ? `${greeting}, ${account.business_name}` : greeting;
@@ -111,9 +124,12 @@ export default async function DashboardPage({
         <SignOutButton />
       </div>
 
-      <section className="mt-6 rounded-2xl border border-[var(--v48-border)] bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        Alerts will appear here when recipes require attention.
-      </section>
+      <ProvisioningBanner
+        initialStatus={account.ghl_provisioning_status}
+        accountId={account.id}
+      />
+      <AlertBanner initialAlerts={bannerAlerts} />
+      <GHLSummary />
 
       <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         {statCards.map((card) => (
@@ -123,22 +139,45 @@ export default async function DashboardPage({
           >
             <p className="text-[13px] text-[var(--text-secondary)]">{card.label}</p>
             <p className="mt-1 font-heading text-[32px] font-bold">{card.value}</p>
-            <p className="mt-1 text-[12px] text-[var(--text-secondary)]">{card.periodLabel}</p>
+            <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Last 30 days</p>
           </div>
         ))}
       </div>
+      {allStatsZero ? (
+        <p className="mt-3 text-sm text-[var(--text-secondary)]">
+          Activate a recipe to start seeing results
+        </p>
+      ) : null}
+
+      <ActiveRecipesStrip recipes={activeRecipes ?? []} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5">
-        <div className="lg:col-span-3">
-          <RecipeFilter accountId={account.id} initialRecipes={recipes} />
+        <div className="space-y-4 lg:col-span-3">
+          <div>
+            <h2 className="font-heading text-xl font-semibold text-[#0F1923]">
+              Activity Feed
+            </h2>
+            <p className="mt-1 text-sm text-[#64748B]">
+              Live updates from your automation events.
+            </p>
+          </div>
           <ActivityFeed
             initialItems={initialItems}
             initialNextCursor={initialNextCursor}
             accountId={account.id}
-            accountCreatedAt={account.created_at}
+            showWarmupEmptyState={showWarmupEmptyState}
           />
         </div>
-        <div className="lg:col-span-2" />
+        <div className="lg:col-span-2">
+          <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5">
+            <h2 className="font-heading text-xl font-semibold text-[#0F1923]">
+              Quick Actions
+            </h2>
+            <p className="mt-2 text-sm text-[#64748B]">
+              Quick Actions will land here in Prompt 7.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,8 +1,32 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { createAppointment } from "@/lib/ghl/calendars";
+import { createAppointment, getAppointments } from "@/lib/ghl/calendars";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
+
+export async function GET(request: NextRequest) {
+  const supabase = await createServerClient();
+  const session = await requireAccountForUser(supabase);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const startDate = request.nextUrl.searchParams.get("startDate") ?? undefined;
+  const endDate = request.nextUrl.searchParams.get("endDate") ?? undefined;
+  const calendarId = request.nextUrl.searchParams.get("calendarId") ?? undefined;
+
+  try {
+    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
+    const result = await getAppointments(
+      { startDate, endDate, calendarId },
+      { locationId, apiKey: accessToken },
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("[ghl-appointments-list]", error);
+    return NextResponse.json({ error: "Failed to fetch appointments" }, { status: 502 });
+  }
+}
 
 export async function POST(request: NextRequest) {
   const supabase = await createServerClient();

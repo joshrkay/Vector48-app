@@ -1,11 +1,28 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  attachRequestIdHeader,
+  getOrCreateRequestId,
+} from "@/lib/observability/request-logging";
+
 const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
-const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding"];
+const PUBLIC_ROUTES = [...AUTH_ROUTES, "/onboarding", "/reset-password"];
 const TRIAL_ALLOWED_ROUTES = ["/billing", "/settings"];
 
+// Auth callback params should never be forwarded through middleware redirects.
+// @supabase/ssr calls getUser() on every request and will try to re-exchange
+// a ?code= param it finds in the URL — but codes are single-use, so carrying
+// them through redirects causes a failed exchange → 503 on subsequent requests.
+const AUTH_PARAMS_TO_STRIP = ["code", "error", "error_description", "error_code"];
+
+function cleanRedirectUrl(url: URL): URL {
+  AUTH_PARAMS_TO_STRIP.forEach((p) => url.searchParams.delete(p));
+  return url;
+}
+
 export async function middleware(request: NextRequest) {
+  const requestId = getOrCreateRequestId(request.headers);
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -29,16 +46,26 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refresh session — if the Supabase network call fails (e.g. ECONNRESET),
+  // fall back to passing the request through rather than crashing the page.
+  let user: { id: string } | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (err) {
+    console.error("[middleware] supabase.auth.getUser failed", {
+      requestId,
+      status: supabaseResponse.status,
+      error: err,
+    });
+    return attachRequestIdHeader(supabaseResponse, requestId); // let the request through; page-level auth will catch it
+  }
 
   const pathname = request.nextUrl.pathname;
 
   // Allow API routes through — they handle their own auth
   if (pathname.startsWith("/api")) {
-    return supabaseResponse;
+    return attachRequestIdHeader(supabaseResponse, requestId);
   }
 
   // Not authenticated — redirect to login for protected routes
@@ -47,36 +74,62 @@ export async function middleware(request: NextRequest) {
     !PUBLIC_ROUTES.some((r) => pathname.startsWith(r)) &&
     !pathname.startsWith("/onboarding")
   ) {
-    const url = request.nextUrl.clone();
+    const url = cleanRedirectUrl(request.nextUrl.clone());
     url.pathname = "/login";
-    return NextResponse.redirect(url);
+    const response = NextResponse.redirect(url);
+    return attachRequestIdHeader(response, requestId);
   }
 
   // Authenticated — redirect away from auth routes
   if (user && AUTH_ROUTES.some((r) => pathname.startsWith(r))) {
-    const url = request.nextUrl.clone();
+    const url = cleanRedirectUrl(request.nextUrl.clone());
     url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+    const response = NextResponse.redirect(url);
+    return attachRequestIdHeader(response, requestId);
   }
 
   // Consolidated account checks for authenticated users on app routes
   if (user && !PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
-    const { data: account } = await supabase
-      .from("accounts")
-      .select(
-        "trial_ends_at, plan_slug, onboarding_completed_at, onboarding_done_at",
-      )
-      .eq("owner_user_id", user.id)
-      .maybeSingle();
+    let account: {
+      trial_ends_at: string | null;
+      plan_slug: string | null;
+      onboarding_completed_at: string | null;
+      ghl_provisioning_status: string | null;
+    } | null = null;
+
+    try {
+      const { data } = await supabase
+        .from("accounts")
+        .select(
+          "trial_ends_at, plan_slug, onboarding_completed_at, ghl_provisioning_status",
+        )
+        .eq("owner_user_id", user.id)
+        .maybeSingle();
+      account = data;
+    } catch (err) {
+      console.error("[middleware] accounts fetch failed", {
+        requestId,
+        status: supabaseResponse.status,
+        error: err,
+      });
+      return attachRequestIdHeader(supabaseResponse, requestId); // let the request through on DB errors
+    }
 
     const onboardingComplete =
       Boolean(account?.onboarding_completed_at) ||
-      Boolean(account?.onboarding_done_at);
+      account?.ghl_provisioning_status === "failed";
 
     if (!onboardingComplete && !pathname.startsWith("/onboarding")) {
-      const url = request.nextUrl.clone();
+      const url = cleanRedirectUrl(request.nextUrl.clone());
       url.pathname = "/onboarding";
-      return NextResponse.redirect(url);
+      const response = NextResponse.redirect(url);
+      console.info("[onboarding] route-check", {
+        path: pathname,
+        redirectTo: url.pathname,
+        status: response.status,
+        requestId,
+      });
+      return attachRequestIdHeader(response, requestId);
     }
 
     if (account) {
@@ -95,15 +148,21 @@ export async function middleware(request: NextRequest) {
         !isAllowedRoute &&
         !pathname.startsWith("/onboarding")
       ) {
-        const url = request.nextUrl.clone();
+        const url = cleanRedirectUrl(request.nextUrl.clone());
         url.pathname = "/billing";
         url.searchParams.set("reason", "trial_expired");
-        return NextResponse.redirect(url);
+        const response = NextResponse.redirect(url);
+        return attachRequestIdHeader(response, requestId);
       }
     }
   }
 
-  return supabaseResponse;
+  console.info("[onboarding] route-check", {
+    path: pathname,
+    status: supabaseResponse.status,
+    requestId,
+  });
+  return attachRequestIdHeader(supabaseResponse, requestId);
 }
 
 export const config = {

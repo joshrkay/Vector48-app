@@ -54,6 +54,25 @@ export const handlers = [
     });
   }),
 
+  // Step 2b: Exchange agency token for location token
+  http.post(`${GHL_BASE}/oauth/locationToken`, async ({ request }) => {
+    const body = await request.json();
+    callLog.push({
+      method: "POST",
+      url: "/oauth/locationToken",
+      authHeader: request.headers.get("Authorization"),
+      body,
+    });
+
+    return HttpResponse.json({
+      access_token: "mock-location-api-key-xyz",
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: "location",
+      locationId: (body as Record<string, unknown>).locationId ?? "loc_mock_001",
+    });
+  }),
+
   // Step 3: Update location settings (location auth)
   http.put(`${GHL_BASE}/locations/:locationId`, async ({ request, params }) => {
     const body = await request.json();

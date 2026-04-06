@@ -25,11 +25,23 @@ export default function EstimateAuditPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      const selectedAccountId = new URL(window.location.href).searchParams
+        .get("accountId")
+        ?.trim();
+      const { data: memberships } = await supabase
+        .from("account_users")
+        .select("account_id")
+        .eq("user_id", user.id)
+        .order("account_id", { ascending: true });
+      const accountId = selectedAccountId
+        ? memberships?.find((m) => m.account_id === selectedAccountId)?.account_id
+        : memberships?.[0]?.account_id;
+      if (!accountId) return;
       const { data: account } = await supabase
         .from("accounts")
         .select("vertical")
-        .eq("owner_user_id", user.id)
-        .single();
+        .eq("id", accountId)
+        .maybeSingle();
       if (account?.vertical) {
         setVertical(account.vertical);
       }
