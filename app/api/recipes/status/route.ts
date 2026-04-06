@@ -27,9 +27,9 @@ export async function GET(req: Request) {
 
   const { data: rows, error: listError } = await supabase
     .from("recipe_activations")
-    .select("recipe_id, status, activated_at")
+    .select("recipe_slug, status, activated_at")
     .eq("account_id", accountId)
-    .order("recipe_id", { ascending: true });
+    .order("recipe_slug", { ascending: true });
 
   if (listError) {
     return NextResponse.json({ error: listError.message }, { status: 500 });

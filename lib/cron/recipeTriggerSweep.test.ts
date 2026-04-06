@@ -5,7 +5,7 @@ import { runRecipeTriggerSweep } from "./recipeTriggerSweep.ts";
 type TriggerRow = {
   id: string;
   account_id: string;
-  recipe_id: string;
+  recipe_slug: string;
   payload: Record<string, unknown> | null;
   attempt_count: number;
 };
@@ -26,9 +26,9 @@ function makeStore(state: StoreState) {
     async claim(id: string) {
       return state.claimableIds ? state.claimableIds.has(id) : true;
     },
-    async hasActiveActivation(accountId: string, recipeId: string) {
+    async hasActiveActivation(accountId: string, recipeSlug: string) {
       if (!state.activeKeys) return true;
-      return state.activeKeys.has(`${accountId}:${recipeId}`);
+      return state.activeKeys.has(`${accountId}:${recipeSlug}`);
     },
     async markCompleted(id: string) {
       state.completed.push(id);
@@ -61,7 +61,7 @@ test("processes active queued trigger and marks completed", async () => {
       {
         id: "trg-1",
         account_id: "acc-1",
-        recipe_id: "recipe-a",
+        recipe_slug: "recipe-a",
         payload: { appointment_id: "apt-1" },
         attempt_count: 0,
       },
@@ -109,7 +109,7 @@ test("marks failed when activation is missing", async () => {
       {
         id: "trg-2",
         account_id: "acc-2",
-        recipe_id: "recipe-b",
+        recipe_slug: "recipe-b",
         payload: null,
         attempt_count: 2,
       },
@@ -148,7 +148,7 @@ test("skips rows that cannot be claimed", async () => {
       {
         id: "trg-3",
         account_id: "acc-3",
-        recipe_id: "recipe-c",
+        recipe_slug: "recipe-c",
         payload: null,
         attempt_count: 0,
       },
