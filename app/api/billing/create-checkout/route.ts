@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { requireAccountForUser } from "@/lib/auth/account";
 import { stripe } from "@/lib/stripe/client";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -10,23 +11,23 @@ const bodySchema = z.object({
 
 export async function POST(req: Request) {
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const session = await requireAccountForUser(supabase, { request: req });
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { data: account } = await supabase
     .from("accounts")
     .select("id, email, stripe_customer_id")
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const body = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
   if (!stripeCustomerId) {
     try {
       const customer = await stripe.customers.create({
-        email: account.email ?? user.email ?? undefined,
+        email: account.email ?? user?.email ?? undefined,
         metadata: { accountId: account.id },
       });
       stripeCustomerId = customer.id;

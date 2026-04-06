@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { InboxClientShell } from "@/components/crm/inbox/InboxClientShell";
 import { loadEnrichedInboxConversations } from "@/lib/crm/loadEnrichedInboxConversations";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 
 export default async function InboxPage({
@@ -15,7 +16,10 @@ export default async function InboxPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: account } = await supabase.from("accounts").select("id").eq("owner_user_id", user.id).single();
+  const session = await requireAccountForUser(supabase);
+  if (!session) redirect("/login");
+
+  const { data: account } = await supabase.from("accounts").select("id").eq("id", session.accountId).maybeSingle();
   if (!account) redirect("/login");
 
   let initial;

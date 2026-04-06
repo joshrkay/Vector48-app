@@ -1,23 +1,21 @@
 import { NextResponse } from "next/server";
 
+import { requireAccountForUser } from "@/lib/auth/account";
 import { stripe } from "@/lib/stripe/client";
 import { createServerClient } from "@/lib/supabase/server";
 
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const session = await requireAccountForUser(supabase, { request });
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { data: account } = await supabase
     .from("accounts")
     .select("id, stripe_customer_id")
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
