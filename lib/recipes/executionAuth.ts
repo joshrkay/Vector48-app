@@ -13,13 +13,36 @@ import "server-only";
 
 import crypto from "node:crypto";
 
+export const EXECUTION_AUTH_CONFIG_ERROR =
+  "RECIPE_EXECUTION_SECRET is required for recipe execution authentication";
+
+function getExecutionSecret(): string {
+  const secret = process.env.RECIPE_EXECUTION_SECRET?.trim() ?? "";
+  if (!secret) {
+    throw new Error(EXECUTION_AUTH_CONFIG_ERROR);
+  }
+  return secret;
+}
+
+export function getExecutionAuthConfigError(): string | null {
+  try {
+    getExecutionSecret();
+    return null;
+  } catch (error) {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return EXECUTION_AUTH_CONFIG_ERROR;
+  }
+}
+
 /**
  * Derive the per-account execution token.
  * Called both at provisioning (to inject into N8N template) and at request
  * time (to validate the Authorization header).
  */
 export function computeExecutionToken(accountId: string): string {
-  const secret = process.env.RECIPE_EXECUTION_SECRET ?? "";
+  const secret = getExecutionSecret();
   return crypto.createHmac("sha256", secret).update(accountId).digest("hex");
 }
 
@@ -31,6 +54,9 @@ export function computeExecutionToken(accountId: string): string {
  * meaningless without knowing which account it is supposed to authenticate.
  */
 export function validateExecutionAuth(request: Request, accountId: string): boolean {
+  // Ensure secret is configured before we attempt any authorization checks.
+  // This throws a config error when missing (callers can convert to HTTP 500).
+  getExecutionSecret();
   if (!accountId) return false;
   const header = request.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";

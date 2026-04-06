@@ -1,9 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { validateExecutionAuth } from "@/lib/recipes/executionAuth";
+import { getExecutionAuthConfigError, validateExecutionAuth } from "@/lib/recipes/executionAuth";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { getContact } from "@/lib/ghl/contacts";
 
 export async function GET(request: NextRequest) {
+  const authConfigError = getExecutionAuthConfigError();
+  if (authConfigError) {
+    return NextResponse.json({ error: authConfigError }, { status: 500 });
+  }
+
   const { searchParams } = request.nextUrl;
   const accountId = searchParams.get("accountId")?.trim() ?? "";
   const contactId = searchParams.get("contactId")?.trim() ?? "";
