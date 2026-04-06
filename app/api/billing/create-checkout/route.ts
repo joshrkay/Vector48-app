@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireAccountForUser } from "@/lib/auth/account";
 import { stripe } from "@/lib/stripe/client";
+import { requireAccountForUserWithRole } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
@@ -11,16 +12,24 @@ const bodySchema = z.object({
 
 export async function POST(req: Request) {
   const supabase = await createServerClient();
-  const session = await requireAccountForUser(supabase, { request: req });
+  const session = await requireAccountForUserWithRole(supabase, {
+    request: req,
+    requiredRole: "admin",
+  });
+
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (session === "forbidden") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { data: account } = await supabase
     .from("accounts")
     .select("id, email, stripe_customer_id")
     .eq("id", session.accountId)
-    .maybeSingle();
+    .single();
 
   if (!account) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -58,7 +67,7 @@ export async function POST(req: Request) {
   if (!stripeCustomerId) {
     try {
       const customer = await stripe.customers.create({
-        email: account.email ?? user?.email ?? undefined,
+        email: account.email ?? undefined,
         metadata: { accountId: account.id },
       });
       stripeCustomerId = customer.id;
