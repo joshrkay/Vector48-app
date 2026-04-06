@@ -3,7 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { cachedGHLClient } from "@/lib/ghl/cache";
 import { normalizePhone } from "@/components/crm/contacts/contactUtils";
 import { ContactsClientShell } from "@/components/crm/contacts/ContactsClientShell";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { tryGetAccountGhlCredentials } from "@/lib/ghl";
 
 const TAG_MAP: Record<string, string> = {
   new_lead: "New Lead",
@@ -28,42 +28,23 @@ export default async function ContactsPage({
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, ghl_provisioning_status, ghl_provisioning_error")
+    .select("id")
     .eq("owner_user_id", user.id)
     .single();
   if (!account) redirect("/login");
 
-  let auth:
-    | {
-        locationId: string;
-        accessToken: string;
-      }
-    | null = null;
-  let ghlUnavailableReason: string | null = null;
-
-  try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
-    auth = { locationId, accessToken };
-  } catch (error) {
-    const reasonFromProvisioning =
-      account.ghl_provisioning_status === "failed"
-        ? (account.ghl_provisioning_error ?? "GHL provisioning failed.")
-        : null;
-    ghlUnavailableReason =
-      reasonFromProvisioning ??
-      (error instanceof Error ? error.message : "Unable to load GHL credentials.");
-  }
+  const credentials = await tryGetAccountGhlCredentials(account.id);
 
   // Fetch contacts via cache + active recipe_activations (AI badge) in parallel
   const [contactsResult, activationsResult] = await Promise.allSettled([
-    auth
+    credentials
       ? cachedGHLClient(account.id).getContacts(
           {
             limit: 20,
             tag: TAG_MAP[filter],
             query: q,
           },
-          { locationId: auth.locationId, apiKey: auth.accessToken },
+          { locationId: credentials.locationId, apiKey: credentials.accessToken },
         )
       : Promise.resolve({ contacts: [] }),
     supabase
@@ -84,13 +65,6 @@ export default async function ContactsPage({
     .filter((phone): phone is string => phone !== null)
       : [];
 
-  if (contactsResult.status === "rejected" && !ghlUnavailableReason) {
-    ghlUnavailableReason =
-      contactsResult.reason instanceof Error
-        ? contactsResult.reason.message
-        : "Unable to load contacts from GoHighLevel.";
-  }
-
   const nextCursor =
     contacts.length === 20 ? contacts[contacts.length - 1].id : null;
 
@@ -102,7 +76,7 @@ export default async function ContactsPage({
       aiPhones={aiPhones}
       filter={filter}
       accountId={account.id}
-      ghlUnavailableReason={ghlUnavailableReason}
+      ghlUnavailableReason={null}
     />
   );
 }

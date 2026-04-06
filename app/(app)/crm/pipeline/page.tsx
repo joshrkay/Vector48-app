@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { PipelineBoard } from "@/components/crm/pipeline/PipelineBoard";
 import { cachedGHLClient } from "@/lib/ghl/cache";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { tryGetAccountGhlCredentials } from "@/lib/ghl";
 import { normalizePipelineOpportunity, normalizeUsPhone } from "@/lib/crm/pipeline";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
@@ -42,7 +42,7 @@ export default async function PipelinePage() {
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, ghl_provisioning_status, ghl_provisioning_error")
+    .select("id")
     .eq("owner_user_id", user.id)
     .single();
 
@@ -50,44 +50,24 @@ export default async function PipelinePage() {
     redirect("/login");
   }
 
-  let auth:
-    | {
-        locationId: string;
-        apiKey: string;
-      }
-    | null = null;
-  let ghlUnavailableReason: string | null = null;
+  const credentials = await tryGetAccountGhlCredentials(account.id);
 
-  try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
-    auth = { locationId, apiKey: accessToken };
-  } catch (error) {
-    const reasonFromProvisioning =
-      account.ghl_provisioning_status === "failed"
-        ? (account.ghl_provisioning_error ?? "GHL provisioning failed.")
-        : null;
-    ghlUnavailableReason =
-      reasonFromProvisioning ??
-      (error instanceof Error ? error.message : "Unable to load GHL credentials.");
-  }
-
-  if (!auth) {
+  if (!credentials) {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <div className="space-y-1">
           <h1 className="font-heading text-2xl font-bold md:text-[28px]">Pipeline</h1>
           <p className="text-sm text-[var(--text-secondary)]">
             Track open opportunities by stage and move them without leaving CRM.
           </p>
         </div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-          GoHighLevel is currently unavailable for this account.
-          {ghlUnavailableReason ? ` ${ghlUnavailableReason}` : ""}
-        </div>
+        <p className="text-sm text-[var(--text-secondary)]">0 open opportunities across 0 pipelines</p>
+        <PipelineBoard pipelines={[]} initialOpportunities={[]} />
       </div>
     );
   }
 
+  const auth = { locationId: credentials.locationId, apiKey: credentials.accessToken };
   const client = cachedGHLClient(account.id);
 
   const [pipelinesResult, opportunities, activationsResult] = await Promise.all([

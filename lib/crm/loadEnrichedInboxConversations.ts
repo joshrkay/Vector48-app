@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { tryGetAccountGhlCredentials } from "@/lib/ghl";
 import { getContact } from "@/lib/ghl/contacts";
 import { getConversations } from "@/lib/ghl/conversations";
 import type { GHLConversation } from "@/lib/ghl/types";
@@ -26,7 +26,9 @@ function contactDisplayName(contact: {
 }
 
 export async function loadEnrichedInboxConversations(accountId: string): Promise<EnrichedInboxConversations> {
-  const { locationId, accessToken } = await getAccountGhlCredentials(accountId);
+  const credentials = await tryGetAccountGhlCredentials(accountId);
+  if (!credentials) return { conversations: [], contacts: {} };
+  const { locationId, accessToken } = credentials;
   const ghlOpts = { locationId, apiKey: accessToken };
   const { conversations: raw = [] } = await getConversations(
     {
