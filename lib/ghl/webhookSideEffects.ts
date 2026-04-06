@@ -59,7 +59,20 @@ async function getPendingTriggersForContact(
   if (activeRecipeSlugs.length === 0) return [];
 
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+  const canonical = await supabase
+    .from("recipe_triggers")
+    .select("id, recipe_slug, contact_id, payload")
+    .eq("account_id", accountId)
+    .eq("contact_id", contactId)
+    .eq("status", "queued")
+    .in("recipe_slug", activeRecipeSlugs);
+
+  if (!canonical.error) {
+    return (canonical.data ?? []) as PendingTrigger[];
+  }
+
+  // Rollback compatibility for pre-status schema.
+  const legacy = await supabase
     .from("recipe_triggers")
     .select("id, recipe_slug, contact_id, payload")
     .eq("account_id", accountId)
@@ -67,11 +80,11 @@ async function getPendingTriggersForContact(
     .eq("fired", false)
     .in("recipe_slug", activeRecipeSlugs);
 
-  if (error) {
-    throw new Error(`failed to load pending triggers: ${error.message}`);
+  if (legacy.error) {
+    throw new Error(`failed to load pending triggers: ${canonical.error.message}`);
   }
 
-  return (data ?? []) as PendingTrigger[];
+  return (legacy.data ?? []) as PendingTrigger[];
 }
 
 async function pauseFollowupForHumanReply(
@@ -99,16 +112,26 @@ async function pauseFollowupForHumanReply(
   const primaryRecipeSlug = triggerSlugs[0] ?? null;
   const supabase = getSupabaseAdmin();
 
-  const { error: deleteError } = await supabase
+  const canonicalDelete = await supabase
     .from("recipe_triggers")
     .delete()
     .eq("account_id", accountId)
     .eq("contact_id", contactId)
-    .eq("fired", false)
+    .eq("status", "queued")
     .in("id", triggerIds);
 
-  if (deleteError) {
-    throw new Error(`failed to delete pending triggers: ${deleteError.message}`);
+  if (canonicalDelete.error) {
+    const legacyDelete = await supabase
+      .from("recipe_triggers")
+      .delete()
+      .eq("account_id", accountId)
+      .eq("contact_id", contactId)
+      .eq("fired", false)
+      .in("id", triggerIds);
+
+    if (legacyDelete.error) {
+      throw new Error(`failed to delete pending triggers: ${canonicalDelete.error.message}`);
+    }
   }
 
   const { error: insertError } = await supabase.from("automation_events").insert({
@@ -164,6 +187,7 @@ async function triggerAppointmentRebooking(
     recipe_slug: rebookingRecipe.recipe_slug,
     ghl_event_type: event.ghl_event_type,
     contact_id: contactId,
+    status: "queued",
     fire_at: new Date().toISOString(),
     payload: {
       source_event_id: event.ghl_event_id,
@@ -324,6 +348,7 @@ async function triggerRecipesFromGhlEvent(
           ghl_event_type: eventType,
           contact_id: contactId,
           fire_at: fireAt.toISOString(),
+          status: "queued",
           payload: {
             contactId,
             contactName: event.contact_name ?? null,

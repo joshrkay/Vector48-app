@@ -80,8 +80,8 @@ export const processRecipeTriggersFn = inngest.createFunction(
       // Fetch triggers that are due
       const { data: triggers, error } = await supabase
         .from("recipe_triggers")
-        .select("id, account_id, recipe_slug, payload")
-        .eq("fired", false)
+         .select("id, account_id, recipe_slug, payload")
+        .eq("status", "queued")
         .lte("fire_at", new Date().toISOString())
         .limit(100);
 
@@ -114,7 +114,7 @@ export const processRecipeTriggersFn = inngest.createFunction(
           if (res.ok) {
             await supabase
               .from("recipe_triggers")
-              .update({ fired: true })
+              .update({ status: "completed", processed_at: new Date().toISOString(), last_error: null })
               .eq("id", trigger.id);
             processed++;
           } else {
