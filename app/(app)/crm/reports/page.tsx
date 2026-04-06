@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import { getReportData } from "@/lib/reports/queries";
 import { RecipePerformanceTable } from "@/components/crm/reports/RecipePerformanceTable";
@@ -34,11 +35,14 @@ export default async function ReportsPage() {
 
   if (!user) redirect("/login");
 
+  const session = await requireAccountForUser(supabase);
+  if (!session) redirect("/login");
+
   const { data: account } = await supabase
     .from("accounts")
     .select("id")
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) redirect("/login");
 

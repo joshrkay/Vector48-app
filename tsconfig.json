@@ -42,6 +42,8 @@
     "node_modules",
     "supabase/functions",
     "lib/ghl/cache.ts",
-    "lib/**/*.test.ts"
+    "lib/**/*.test.ts",
+    "Vector48-app-1",
+    "Vector48-app"
   ]
 }

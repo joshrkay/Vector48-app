@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { getAppointments, getCalendars } from "@/lib/ghl/calendars";
@@ -22,11 +23,14 @@ export default async function CalendarPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const session = await requireAccountForUser(supabase, { searchParams });
+  if (!session) redirect("/login");
+
   const { data: account } = await supabase
     .from("accounts")
     .select("id, business_hours, ghl_provisioning_status")
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
   if (!account) redirect("/login");
 
   // Determine week start from URL param or default to current Monday
