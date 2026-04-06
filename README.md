@@ -56,3 +56,13 @@ If you see console errors/warnings on the login page that do not map to reposito
 4. If the message still appears with all extensions disabled, inspect app-injected scripts for custom `chrome.runtime` / `browser.runtime` usage.
 
 Repository note: current scans have not found custom `chrome.runtime` or `browser.runtime` usage in this codebase.
+
+## GHL provisioning orchestration migration note
+
+- **Single source of truth:** `lib/jobs/provisionGHL.ts` is the canonical GHL provisioning orchestration.
+- The API endpoint `app/api/onboarding/provision-ghl/route.ts` now invokes that canonical orchestrator directly.
+- `lib/ghl/provisioning.ts` remains only as a **compatibility layer** for legacy imports and should not contain independent orchestration logic.
+- Provisioning state alignment standard:
+  - Primary status field: `ghl_provisioning_status`
+  - Progress field: `provisioning_step`
+  - Error payloads should use step-prefixed messages (e.g. `register_webhooks: ...`) and mirror to compatibility fields when needed.

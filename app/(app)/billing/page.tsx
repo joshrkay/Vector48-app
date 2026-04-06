@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import type Stripe from "stripe";
 
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/client";
 import { getPricingConfig, type PricingConfig } from "@/lib/stripe/config";
@@ -21,13 +22,16 @@ export default async function BillingPage({
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+  const session = await requireAccountForUser(supabase, { searchParams });
+  if (!session) redirect("/login");
 
   const { data: account } = await supabase
     .from("accounts")
     .select(
       "id, plan_slug, trial_ends_at, stripe_customer_id, stripe_subscription_id, subscription_status",
     )
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) redirect("/login");
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { requireAccountForUser } from "@/lib/auth/account";
 import { stripe } from "@/lib/stripe/client";
 import { requireAccountForUserWithRole } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
@@ -33,6 +34,9 @@ export async function POST(req: Request) {
   if (!account) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const body = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAccountForUser } from "@/lib/auth/account";
 import { stripe } from "@/lib/stripe/client";
 import { requireAccountForUserWithRole } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";

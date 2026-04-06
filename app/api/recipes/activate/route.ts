@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { requireAccountForUser } from "@/lib/auth/account";
 import { enqueueRecipeProvisioning } from "@/lib/n8n/recipeProvisioning";
 import {
   getRecipeDefinitionOrThrow,
@@ -15,21 +16,8 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("id")
-    .eq("owner_user_id", user.id)
-    .single();
-
-  if (!account) {
+  const session = await requireAccountForUser(supabase, { request });
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -52,7 +40,7 @@ export async function POST(request: Request) {
 
   const validation = await validateActivationRequest(
     supabase,
-    account.id,
+    session.accountId,
     recipe,
     parsed.data.config,
   );
@@ -84,7 +72,7 @@ export async function POST(request: Request) {
   const { data: inserted, error: insertError } = await supabase
     .from("recipe_activations")
     .insert({
-      account_id: account.id,
+      account_id: session.accountId,
       recipe_slug: recipe.slug,
       status: "active",
       config: validation.config,
@@ -104,7 +92,7 @@ export async function POST(request: Request) {
 
   enqueueRecipeProvisioning({
     activationId: inserted.id,
-    accountId: account.id,
+    accountId: session.accountId,
     recipeSlug: recipe.slug,
     config: validation.config,
   });
