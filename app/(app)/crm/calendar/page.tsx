@@ -23,7 +23,7 @@ export default async function CalendarPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const session = await requireAccountForUser(supabase, { searchParams });
+  const session = await requireAccountForUser(supabase);
   if (!session) redirect("/login");
 
   const { data: account } = await supabase
