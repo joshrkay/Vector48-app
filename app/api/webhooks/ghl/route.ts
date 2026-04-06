@@ -1,5 +1,3 @@
-import crypto from "crypto";
-
 import { NextResponse } from "next/server";
 
 import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
@@ -8,27 +6,7 @@ import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
 import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-// GHL Private Integration webhooks use a single global verification token
-// configured in the GHL Marketplace dashboard (Advanced Settings → Webhooks).
-// There is no per-location webhook registration API — all locations share one
-// webhook URL and one secret. Store it as GHL_WEBHOOK_SECRET in Vercel env vars.
-const GLOBAL_WEBHOOK_SECRET = process.env.GHL_WEBHOOK_SECRET ?? null;
-
-function verifyToken(provided: string | null, expected: string | null): boolean {
-  if (!provided || !expected) return false;
-  const a = crypto.createHash("sha256").update(provided).digest();
-  const b = crypto.createHash("sha256").update(expected).digest();
-  return crypto.timingSafeEqual(a, b);
-}
-
-function tokenFromRequest(headers: Headers, body: Record<string, unknown>): string | null {
-  return (
-    headers.get("x-ghl-signature") ??
-    headers.get("x-ghl-webhook-secret") ??
-    (typeof body.verificationToken === "string" ? body.verificationToken : null) ??
-    (typeof body.token === "string" ? body.token : null)
-  );
-}
+import { authenticateGhlWebhook } from "./signatureVerification";
 
 function parseEventType(payload: Record<string, unknown>): string {
   if (typeof payload.type === "string") return payload.type;
@@ -51,9 +29,18 @@ function isDuplicateAutomationEventError(error: {
 export async function POST(req: Request) {
   const startedAt = Date.now();
 
+  // Read raw body first — required for signature verification over the exact
+  // bytes that GHL signed. Parsing JSON first would lose whitespace fidelity.
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return NextResponse.json({ received: true });
+  }
+
   let body: GHLWebhookPayload | Record<string, unknown>;
   try {
-    body = (await req.json()) as GHLWebhookPayload;
+    body = JSON.parse(rawBody) as GHLWebhookPayload;
   } catch {
     return NextResponse.json({ received: true });
   }
@@ -88,22 +75,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   }
 
-  // Verify using the global webhook secret configured in the GHL Marketplace
-  // dashboard. If GHL_WEBHOOK_SECRET is not yet set in env vars, log a warning
-  // but still process the event — prevents a silent shutdown of all webhooks
-  // during initial setup.
-  if (GLOBAL_WEBHOOK_SECRET) {
-    const providedToken = tokenFromRequest(req.headers, payload);
-    if (!providedToken) {
-      console.warn("[ghl-webhook] missing signature header for location", locationId);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (!verifyToken(providedToken, GLOBAL_WEBHOOK_SECRET)) {
-      console.warn("[ghl-webhook] invalid signature for location", locationId);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  } else {
-    console.warn("[ghl-webhook] GHL_WEBHOOK_SECRET not set — skipping signature verification");
+  const authResult = authenticateGhlWebhook(rawBody, req.headers);
+  if (!authResult.ok) {
+    console.warn("[ghl-webhook] webhook authentication failed", {
+      reason: authResult.reason,
+      locationId,
+    });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const ghlEventType = parseEventType(payload);
@@ -118,9 +96,7 @@ export async function POST(req: Request) {
     account_id: account.id,
   };
 
-  const { error: insertError } = await supabase
-    .from("automation_events")
-    .insert(insertRow);
+  const { error: insertError } = await supabase.from("automation_events").insert(insertRow);
 
   if (insertError) {
     if (isDuplicateAutomationEventError(insertError)) {
