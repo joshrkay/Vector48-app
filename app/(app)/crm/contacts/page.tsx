@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import { cachedGHLClient } from "@/lib/ghl/cache";
 import { normalizePhone } from "@/components/crm/contacts/contactUtils";
@@ -26,11 +27,14 @@ export default async function ContactsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const session = await requireAccountForUser(supabase);
+  if (!session) redirect("/login");
+
   const { data: account } = await supabase
     .from("accounts")
-    .select("id")
-    .eq("owner_user_id", user.id)
-    .single();
+    .select("id, ghl_provisioning_status, ghl_provisioning_error")
+    .eq("id", session.accountId)
+    .maybeSingle();
   if (!account) redirect("/login");
 
   const credentials = await tryGetAccountGhlCredentials(account.id);

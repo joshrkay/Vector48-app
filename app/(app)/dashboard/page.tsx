@@ -7,6 +7,7 @@ import { ProvisioningBanner } from "@/components/dashboard/ProvisioningBanner";
 import { GHLSummary } from "@/components/dashboard/GHLSummary";
 import { getStatCards } from "@/lib/dashboard/statsQuery";
 import { isAlertResolved } from "@/lib/dashboard/alerts";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
@@ -29,11 +30,14 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
+  const session = await requireAccountForUser(supabase);
+  if (!session) redirect("/login");
+
   const { data: account } = await supabase
     .from("accounts")
     .select("id, business_name, ghl_provisioning_status, ghl_provisioning_error, created_at")
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   if (!account) redirect("/login");
 
