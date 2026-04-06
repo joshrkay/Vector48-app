@@ -184,4 +184,7 @@ export default async function PipelinePage() {
       />
     </div>
   );
+  } catch (err) {
+    throw err;
+  }
 }
