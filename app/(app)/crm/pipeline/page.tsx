@@ -75,7 +75,9 @@ export default async function PipelinePage() {
   const auth = { locationId: credentials.locationId, apiKey: credentials.accessToken };
   const client = cachedGHLClient(account.id);
 
-  const [pipelinesResult, opportunities, activationsResult] = await Promise.all([
+  let pipelinesResult, opportunities: GHLOpportunity[], activationsResult;
+  try {
+  [pipelinesResult, opportunities, activationsResult] = await Promise.all([
     client.getPipelines(auth),
     (async () => {
       const all: GHLOpportunity[] = [];
