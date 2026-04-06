@@ -1,0 +1,309 @@
+{
+  "name": "Vector 48 — Recipe 2: Missed Call Text-Back — {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recipe-missed-call-textback-{{TENANT_ID}}",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook — Missed Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/accounts?id=eq.{{TENANT_ID}}&select=id,business_name,vertical,notification_contact_name,notification_contact_phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-customer-config",
+      "name": "Fetch Customer Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/integrations?account_id=eq.{{TENANT_ID}}&provider=eq.ghl&select=credentials_encrypted",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-ghl-credentials",
+      "name": "Fetch GHL Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"max_tokens\": 150,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You write friendly, professional SMS text-back messages for {{ $('Fetch Customer Config').item.json[0].business_name }}, a {{ $('Fetch Customer Config').item.json[0].vertical }} company. Keep messages under 160 characters. Be warm, acknowledge the missed call, and let them know someone will call back soon. Do not use emojis. Return ONLY the SMS text, nothing else.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a text-back message for a missed call we just received. The caller's number is {{ $('Webhook — Missed Call').item.json.body?.from || 'unknown' }}.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "gpt4o-textback",
+      "name": "GPT-4o — Generate Text-Back",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ],
+      "notes": "Generates a personalized text-back message using GPT-4o"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Fetch GHL Credentials').item.json[0].credentials_encrypted.access_token }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"SMS\",\n  \"contactId\": \"{{ $('Webhook — Missed Call').item.json.body?.contactId || '' }}\",\n  \"message\": \"{{ $('GPT-4o — Generate Text-Back').item.json.choices[0].message.content }}\"\n}",
+        "options": {}
+      },
+      "id": "sms-to-caller",
+      "name": "SMS Text-Back to Caller",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        200
+      ],
+      "notes": "Sends the AI-generated text-back to the missed caller via GHL"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Fetch GHL Credentials').item.json[0].credentials_encrypted.access_token }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"SMS\",\n  \"contactId\": \"{{ $('Webhook — Missed Call').item.json.body?.contactId || '' }}\",\n  \"message\": \"📱 Missed call alert for {{ $('Fetch Customer Config').item.json[0].business_name }}:\\n\\nCaller: {{ $('Webhook — Missed Call').item.json.body?.from || 'Unknown' }}\\nTime: {{ new Date().toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'}) }}\\n\\nAI sent them a text-back automatically.\"\n}",
+        "options": {}
+      },
+      "id": "sms-to-owner",
+      "name": "Notify Owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        420
+      ],
+      "notes": "Notifies the business owner about the missed call. TODO: Use notification_contact_phone directly if GHL requires conversation context"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/event_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"account_id\": \"{{ $('Fetch Customer Config').item.json[0].id }}\",\n  \"recipe_id\": \"missed-call-textback\",\n  \"event_type\": \"sms_sent\",\n  \"status\": \"success\",\n  \"metadata\": {\n    \"caller_phone\": \"{{ $('Webhook — Missed Call').item.json.body?.from || 'unknown' }}\",\n    \"textback_message\": \"{{ $('GPT-4o — Generate Text-Back').item.json.choices[0].message.content }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "write-event-log",
+      "name": "Write Event Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook — Missed Call": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customer Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customer Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch GHL Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GHL Credentials": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o — Generate Text-Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o — Generate Text-Back": {
+      "main": [
+        [
+          {
+            "node": "SMS Text-Back to Caller",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Text-Back to Caller": {
+      "main": [
+        [
+          {
+            "node": "Write Event Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "Vector 48"
+    },
+    {
+      "name": "Recipe"
+    },
+    {
+      "name": "v1"
+    }
+  ]
+}

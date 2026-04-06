@@ -1,0 +1,273 @@
+{
+  "name": "Vector 48 — Recipe 1: AI Phone Answering — {{TENANT_ID}}",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recipe-phone-answering-{{TENANT_ID}}",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook — Post-Call Data",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/accounts?id=eq.{{TENANT_ID}}&select=id,business_name,vertical,ai_voice_gender,ai_greeting,notification_contact_name,notification_contact_phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-customer-config",
+      "name": "Fetch Customer Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ],
+      "notes": "Fetches customer config from Supabase by account_id extracted from webhook URL path"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/integrations?account_id=eq.{{TENANT_ID}}&provider=eq.ghl&select=credentials_encrypted",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-ghl-credentials",
+      "name": "Fetch GHL Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ],
+      "notes": "Fetches GHL API credentials from integrations table"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"max_tokens\": 300,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Summarize this phone call transcript in 3-4 sentences. Include: who called, what they needed, and any action items. Business context: {{ $('Fetch Customer Config').item.json[0].business_name }} ({{ $('Fetch Customer Config').item.json[0].vertical }}).\\n\\nTranscript:\\n{{ $json.body?.transcript || $('Webhook — Post-Call Data').item.json.body?.transcript || 'No transcript available' }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "claude-summarize",
+      "name": "Claude — Summarize Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ],
+      "notes": "Sends call transcript to Claude Haiku for 3-4 sentence summary"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://services.leadconnectorhq.com/conversations/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Fetch GHL Credentials').item.json[0].credentials_encrypted.access_token }}"
+            },
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"SMS\",\n  \"contactId\": \"{{ $('Webhook — Post-Call Data').item.json.body?.contactId || 'unknown' }}\",\n  \"message\": \"📞 AI Call Summary for {{ $('Fetch Customer Config').item.json[0].business_name }}:\\n\\nCaller: {{ $('Webhook — Post-Call Data').item.json.body?.callerPhone || 'Unknown' }}\\n\\n{{ $('Claude — Summarize Call').item.json.content[0].text }}\\n\\nCall handled by your AI assistant.\"\n}",
+        "options": {}
+      },
+      "id": "sms-to-owner",
+      "name": "SMS Summary to Owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ],
+      "notes": "Sends SMS summary to the business owner via GHL messaging API. TODO: May need to use notification_contact_phone directly via Twilio if GHL messaging requires a conversation context"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/event_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"account_id\": \"{{ $('Fetch Customer Config').item.json[0].id }}\",\n  \"recipe_id\": \"ai-phone-answering\",\n  \"event_type\": \"call_answered\",\n  \"status\": \"success\",\n  \"metadata\": {\n    \"caller_phone\": \"{{ $('Webhook — Post-Call Data').item.json.body?.callerPhone || 'unknown' }}\",\n    \"summary\": \"{{ $('Claude — Summarize Call').item.json.content[0].text }}\",\n    \"call_duration\": {{ $('Webhook — Post-Call Data').item.json.body?.callDuration || 0 }}\n  }\n}",
+        "options": {}
+      },
+      "id": "write-event-log",
+      "name": "Write Event Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        300
+      ],
+      "notes": "Writes the recipe execution result to Supabase event_log table for dashboard rendering"
+    }
+  ],
+  "connections": {
+    "Webhook — Post-Call Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customer Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customer Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch GHL Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch GHL Credentials": {
+      "main": [
+        [
+          {
+            "node": "Claude — Summarize Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude — Summarize Call": {
+      "main": [
+        [
+          {
+            "node": "SMS Summary to Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Summary to Owner": {
+      "main": [
+        [
+          {
+            "node": "Write Event Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "Vector 48"
+    },
+    {
+      "name": "Recipe"
+    },
+    {
+      "name": "v1"
+    }
+  ]
+}
