@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { createAppointment, getAppointments } from "@/lib/ghl/calendars";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
@@ -16,11 +15,9 @@ export async function GET(request: NextRequest) {
   const calendarId = request.nextUrl.searchParams.get("calendarId") ?? undefined;
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await getAppointments(
-      { startDate, endDate, calendarId },
-      { locationId, apiKey: accessToken },
-    );
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.appointments.list({ startDate, endDate, calendarId });
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-appointments-list]", error);
@@ -53,18 +50,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await createAppointment(
-      {
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.appointments.create({
         calendarId: body.calendarId,
-        locationId,
         contactId: body.contactId,
         title: body.title,
         startTime: body.startTime,
         endTime: body.endTime,
-      },
-      { locationId, apiKey: accessToken },
-    );
+      });
+    });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     console.error("[ghl-appointment-create]", error);

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { getContacts } from "@/lib/ghl/contacts";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   toCachedContact,
@@ -75,21 +74,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-
-    const response = await getContacts(
-      {
-        locationId,
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.contacts.list({
         query: q,
         limit: SEARCH_FETCH_LIMIT,
-      },
-      {
-        locationId,
-        apiKey: accessToken,
-      },
-    );
+      });
+    });
 
-    const normalized = (response.contacts ?? [])
+    const normalized = (result.data ?? [])
       .map(toCachedContact)
       .filter((item): item is CRMContactSearchItem => item !== null);
 

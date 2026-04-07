@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { addContactNote } from "@/lib/ghl/contacts";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function POST(
@@ -28,8 +27,11 @@ export async function POST(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const note = await addContactNote(id, body.body.trim(), { locationId, apiKey: accessToken });
+    const note = await withAuthRetry(session.accountId, async (client) => {
+      return client.rawRequest<{ note: unknown }>("POST", `/contacts/${id}/notes`, {
+        body: { body: body.body.trim() },
+      });
+    });
     return NextResponse.json(note, { status: 201 });
   } catch (error) {
     console.error("[ghl-contact-note-add]", error);

@@ -1,8 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { getConversation, getMessages } from "@/lib/ghl/conversations";
-import { getContact } from "@/lib/ghl/contacts";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { getAccountGhlCredentials, withAuthRetry } from "@/lib/ghl";
 import { getRecipeActivityForContact } from "@/lib/recipes/contactRecipeActivity";
 import { createServerClient } from "@/lib/supabase/server";
 import type { GHLMessageType } from "@/lib/ghl/types";
@@ -28,37 +26,41 @@ export async function GET(
 
   try {
     const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const ghlCredentials = { locationId, accessToken };
-    const resolvedContactId =
-      contactIdFromQuery ??
-      (
-        await getConversation(conversationId, {
-          locationId,
-          apiKey: accessToken,
-        })
-      ).conversation.contactId;
 
-    const [result, activity] = await Promise.all([
-      getMessages(
-        {
-          conversationId,
+    const { messages, resolvedContactId } = await withAuthRetry(
+      session.accountId,
+      async (client) => {
+        let resolvedId = contactIdFromQuery;
+        if (!resolvedId) {
+          const convResult = await client.conversations.list({ conversationId } as never);
+          resolvedId = convResult.data?.[0]?.contactId ?? null;
+        }
+
+        const msgs = await client.conversations.getMessages(conversationId, {
           limit,
           lastMessageId,
           ...(type ? { type } : {}),
-        },
-        { locationId, apiKey: accessToken },
-      ),
-      getRecipeActivityForContact({
-        accountId: session.accountId,
-        contactId: resolvedContactId,
-        supabase,
-        ghlCredentials,
-        fetchContact: getContact,
-      }),
-    ]);
+        });
+
+        return { messages: msgs, resolvedContactId: resolvedId };
+      },
+    );
+
+    const activity = await getRecipeActivityForContact({
+      accountId: session.accountId,
+      contactId: resolvedContactId!,
+      supabase,
+      ghlCredentials: { locationId, accessToken },
+      fetchContact: async (id) => {
+        const contact = await withAuthRetry(session.accountId, async (c) => {
+          return c.contacts.get(id);
+        });
+        return { contact };
+      },
+    });
 
     return NextResponse.json({
-      messages: result.messages ?? [],
+      messages: messages ?? [],
       recipeActive: activity.active,
       recipeSlugs: activity.recipeSlugs,
     });

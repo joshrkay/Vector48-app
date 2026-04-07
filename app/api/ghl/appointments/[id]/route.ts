@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { getAppointment, updateAppointment } from "@/lib/ghl/calendars";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 import type { GHLUpdateAppointmentPayload } from "@/lib/ghl/types";
 
@@ -17,8 +16,9 @@ export async function GET(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await getAppointment(id, { locationId, apiKey: accessToken });
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.appointments.get(id);
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-appointment-get]", error);
@@ -45,8 +45,9 @@ export async function PUT(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await updateAppointment(id, body, { locationId, apiKey: accessToken });
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.appointments.update(id, body);
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-appointment-update]", error);

@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireAccountForUser } from "@/lib/auth/account";
-import { getAccountGhlCredentials, GHLClient } from "@/lib/ghl";
+import { getAccountGhlCredentials, withAuthRetry } from "@/lib/ghl";
 import { buildVoiceAgentPayload } from "@/lib/ghl/voiceAgent";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -46,10 +46,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const client = GHLClient.forLocation(locationId, accessToken);
+    const { locationId } = await getAccountGhlCredentials(session.accountId);
 
-    // Build and create the voice agent
     const payload = buildVoiceAgentPayload({
       locationId,
       businessName: account.business_name,
@@ -60,17 +58,21 @@ export async function POST(request: NextRequest) {
       timezone: body.timezone,
     });
 
-    const agentResponse = await client.voiceAgent.create(payload);
+    const agentResponse = await withAuthRetry(session.accountId, async (client) => {
+      const response = await client.voiceAgent.create(payload);
 
-    // If a webhook URL is provided, create a post-call action
-    if (body.webhookUrl && agentResponse.agent?.id) {
-      await client.voiceAgent.createAction(agentResponse.agent.id, {
-        type: "webhook",
-        url: body.webhookUrl,
-        method: "POST",
-        description: "Post-call summary webhook",
-      });
-    }
+      // If a webhook URL is provided, create a post-call action
+      if (body.webhookUrl && response.agent?.id) {
+        await client.voiceAgent.createAction(response.agent.id, {
+          type: "webhook",
+          url: body.webhookUrl,
+          method: "POST",
+          description: "Post-call summary webhook",
+        });
+      }
+
+      return response;
+    });
 
     return NextResponse.json({ agent: agentResponse.agent }, { status: 201 });
   } catch (error) {

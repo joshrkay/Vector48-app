@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { CampaignList } from "@/components/crm/campaigns/CampaignList";
-import { tryGetAccountGhlCredentials, GHLClient } from "@/lib/ghl";
+import { withAuthRetry, tryGetAccountGhlCredentials } from "@/lib/ghl";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import type { GHLCampaign } from "@/lib/ghl/types";
@@ -41,8 +41,9 @@ export default async function CampaignsPage() {
 
   let campaigns: GHLCampaign[] = [];
   try {
-    const client = GHLClient.forLocation(credentials.locationId, credentials.accessToken);
-    campaigns = await client.campaigns.list();
+    campaigns = await withAuthRetry(session.accountId, async (client) =>
+      client.campaigns.list(),
+    );
   } catch (err) {
     console.error("[campaigns] GHL API error:", (err as Error).message);
     return (

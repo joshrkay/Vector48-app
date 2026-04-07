@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { updateAppointment } from "@/lib/ghl/calendars";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function PATCH(
@@ -16,12 +15,9 @@ export async function PATCH(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await updateAppointment(
-      id,
-      { status: "cancelled" },
-      { locationId, apiKey: accessToken },
-    );
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.appointments.update(id, { status: "cancelled" });
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-appointment-cancel]", error);

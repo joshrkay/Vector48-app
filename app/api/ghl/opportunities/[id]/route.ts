@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
-import { deleteOpportunity, updateOpportunity } from "@/lib/ghl/opportunities";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 import type { GHLUpdateOpportunityPayload } from "@/lib/ghl/types";
 
@@ -26,8 +25,9 @@ export async function PATCH(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await updateOpportunity(id, body, { locationId, apiKey: accessToken });
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.opportunities.update(id, body);
+    });
 
     invalidateGHLCache(session.accountId, "OpportunityStageUpdate", {
       invalidateInMemoryFallback: true,
@@ -53,8 +53,9 @@ export async function DELETE(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    await deleteOpportunity(id, { locationId, apiKey: accessToken });
+    await withAuthRetry(session.accountId, async (client) => {
+      return client.rawRequest("DELETE", `/opportunities/${id}`);
+    });
 
     invalidateGHLCache(session.accountId, "OpportunityStageUpdate", {
       invalidateInMemoryFallback: true,

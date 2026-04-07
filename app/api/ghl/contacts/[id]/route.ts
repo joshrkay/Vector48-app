@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { getContact, updateContact } from "@/lib/ghl/contacts";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 import type { GHLUpdateContactPayload } from "@/lib/ghl/types";
 
@@ -18,9 +17,10 @@ export async function GET(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await getContact(id, { locationId, apiKey: accessToken });
-    return NextResponse.json(result);
+    const contact = await withAuthRetry(session.accountId, async (client) => {
+      return client.contacts.get(id);
+    });
+    return NextResponse.json({ contact });
   } catch (error) {
     console.error("[ghl-contact-get]", error);
     return NextResponse.json({ error: "Failed to fetch contact" }, { status: 502 });
@@ -47,9 +47,10 @@ export async function PUT(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await updateContact(id, body, { locationId, apiKey: accessToken });
-    return NextResponse.json(result);
+    const contact = await withAuthRetry(session.accountId, async (client) => {
+      return client.contacts.update(id, body);
+    });
+    return NextResponse.json({ contact });
   } catch (error) {
     console.error("[ghl-contact-update]", error);
     return NextResponse.json({ error: "Failed to update contact" }, { status: 502 });

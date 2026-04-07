@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { getCalendarSlots } from "@/lib/ghl/calendars";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function GET(
@@ -28,11 +27,9 @@ export async function GET(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await getCalendarSlots(
-      { calendarId, startDate, endDate, timezone },
-      { locationId, apiKey: accessToken },
-    );
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.calendars.getSlots({ calendarId, startDate, endDate, timezone });
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-calendar-slots]", error);

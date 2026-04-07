@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
-import { cachedGHLClient } from "@/lib/ghl/cache";
 import { normalizePhone } from "@/components/crm/contacts/contactUtils";
 import { ContactsClientShell } from "@/components/crm/contacts/ContactsClientShell";
-import { tryGetAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry, tryGetAccountGhlCredentials } from "@/lib/ghl";
 
 const TAG_MAP: Record<string, string> = {
   new_lead: "New Lead",
@@ -40,18 +39,18 @@ export default async function ContactsPage({
 
   const credentials = await tryGetAccountGhlCredentials(account.id);
 
-  // Fetch contacts via cache + active recipe_activations (AI badge) in parallel
+  // Fetch contacts via withAuthRetry + active recipe_activations (AI badge) in parallel
   const [contactsResult, activationsResult] = await Promise.allSettled([
     credentials
-      ? cachedGHLClient(account.id).getContacts(
-          {
+      ? withAuthRetry(account.id, async (client) => {
+          const result = await client.contacts.list({
             limit: 20,
             tag: TAG_MAP[filter],
             query: q,
-          },
-          { locationId: credentials.locationId, apiKey: credentials.accessToken },
-        )
-      : Promise.resolve({ contacts: [] }),
+          });
+          return { contacts: result.data };
+        })
+      : Promise.resolve({ contacts: [] as never[] }),
     supabase
       .from("recipe_activations")
       .select("config")

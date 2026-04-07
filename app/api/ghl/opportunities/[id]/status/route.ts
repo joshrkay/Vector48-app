@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireAccountForUser } from "@/lib/auth/account";
 import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
-import { getAccountGhlCredentials } from "@/lib/ghl";
-import { updateOpportunityStatus } from "@/lib/ghl/opportunities";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function PATCH(
@@ -27,12 +26,9 @@ export async function PATCH(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const opportunity = await updateOpportunityStatus(
-      id,
-      body.status,
-      { locationId, apiKey: accessToken },
-    );
+    const opportunity = await withAuthRetry(session.accountId, async (client) => {
+      return client.opportunities.updateStatus(id, body.status!);
+    });
 
     invalidateGHLCache(session.accountId, "OpportunityStatusUpdate", {
       invalidateInMemoryFallback: true,

@@ -2,11 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
-import { getAccountGhlCredentials } from "@/lib/ghl";
-import { getContact, getContactNotes } from "@/lib/ghl/contacts";
-import { getConversations, getMessages } from "@/lib/ghl/conversations";
-import { getAppointments } from "@/lib/ghl/calendars";
-import { getOpportunities, getPipelines } from "@/lib/ghl/opportunities";
+import { withAuthRetry, tryGetAccountGhlCredentials } from "@/lib/ghl";
 import { RECIPE_CATALOG } from "@/lib/recipes/catalog";
 import { mergeRecipesWithActivations } from "@/lib/recipes/merge";
 import { ContactHeader } from "@/components/crm/contacts/ContactHeader";
@@ -18,7 +14,7 @@ import { ContactNotes } from "@/components/crm/contacts/ContactNotes";
 import { CRMContactCacheHydrator } from "@/components/crm/CRMContactCacheHydrator";
 import { activationConfigPhoneMatchesContact } from "@/components/crm/contacts/contactUtils";
 import type { Database } from "@/lib/supabase/types";
-import type { GHLConversation, GHLMessage, GHLClientOptions, GHLContactResponse } from "@/lib/ghl/types";
+import type { GHLConversation, GHLMessage } from "@/lib/ghl/types";
 import type { AccountProfileSlice } from "@/lib/recipes/activationValidator";
 
 type AutomationEvent = Database["public"]["Tables"]["automation_events"]["Row"];
@@ -68,30 +64,31 @@ async function fetchDbData(
   return { automationEvents, allActivations, matchedActivations };
 }
 
-// Fetch all conversations for the contact and their messages
+// Fetch all conversations for the contact and their messages via withAuthRetry
 async function fetchConversationsWithMessages(
+  accountId: string,
   contactId: string,
-  ghlOpts: GHLClientOptions,
 ): Promise<{ conversations: GHLConversation[]; messages: GHLMessage[] }> {
-  const convResponse = await getConversations({ contactId }, ghlOpts);
-  const conversations = convResponse.conversations ?? [];
+  return withAuthRetry(accountId, async (client) => {
+    const convResponse = await client.conversations.list({ contactId });
+    const conversations: GHLConversation[] = convResponse.data ?? [];
 
-  if (conversations.length === 0) {
-    return { conversations: [], messages: [] };
-  }
+    if (conversations.length === 0) {
+      return { conversations: [], messages: [] };
+    }
 
-  // Fetch messages for each conversation in parallel
-  const messageResults = await Promise.allSettled(
-    conversations.map((conv) =>
-      getMessages({ conversationId: conv.id, limit: 50 }, ghlOpts),
-    ),
-  );
+    const messageResults = await Promise.allSettled(
+      conversations.map((conv: GHLConversation) =>
+        client.conversations.getMessages(conv.id, { limit: 50 }),
+      ),
+    );
 
-  const messages: GHLMessage[] = messageResults.flatMap((r) =>
-    r.status === "fulfilled" ? (r.value.messages ?? []) : [],
-  );
+    const messages: GHLMessage[] = messageResults.flatMap((r: PromiseSettledResult<GHLMessage[]>) =>
+      r.status === "fulfilled" ? r.value : [],
+    );
 
-  return { conversations, messages };
+    return { conversations, messages };
+  });
 }
 
 export default async function ContactDetailPage({
@@ -120,22 +117,19 @@ export default async function ContactDetailPage({
     .maybeSingle();
   if (!account) redirect("/login");
 
-  let ghlOpts: GHLClientOptions | null = null;
+  const credentials = await tryGetAccountGhlCredentials(account.id);
   let ghlUnavailableReason: string | null = null;
-  try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
-    ghlOpts = { locationId, apiKey: accessToken };
-  } catch (error) {
+
+  if (!credentials) {
     const reasonFromProvisioning =
       account.ghl_provisioning_status === "failed"
         ? (account.ghl_provisioning_error ?? "GHL provisioning failed.")
         : null;
     ghlUnavailableReason =
-      reasonFromProvisioning ??
-      (error instanceof Error ? error.message : "Unable to load GHL credentials.");
+      reasonFromProvisioning ?? "Unable to load GHL credentials.";
   }
 
-  if (!ghlOpts) {
+  if (!credentials) {
     return (
       <div className="space-y-4">
         <Link
@@ -155,14 +149,20 @@ export default async function ContactDetailPage({
   // Fire all fetches in parallel. One failure must not break the page.
   const [contactResult, dbResult, convResult, apptResult, notesResult, oppsResult, pipelinesResult, integrationsResult] =
     await Promise.allSettled([
-      getContact(id, ghlOpts),                                                     // 0 — CRITICAL
+      withAuthRetry(account.id, async (client) => client.contacts.get(id)),         // 0 — CRITICAL
       fetchDbData(supabase, account.id, id, null /* phone filled after contact */), // 1 — DB (phone patched below)
-      fetchConversationsWithMessages(id, ghlOpts),                                  // 2 — GHL conversations
-      getAppointments({ contactId: id }, ghlOpts),                                 // 3 — GHL appointments
-      getContactNotes(id, ghlOpts),                                                // 4 — GHL notes
-      getOpportunities({ contactId: id }, ghlOpts),                               // 5 — GHL opportunities
-      getPipelines(ghlOpts),                                                       // 6 — GHL pipelines
-      supabase                                                                      // 7 — integrations
+      fetchConversationsWithMessages(account.id, id),                               // 2 — GHL conversations
+      withAuthRetry(account.id, async (client) =>
+        client.appointments.list({ contactId: id }),
+      ),                                                                             // 3 — GHL appointments
+      withAuthRetry(account.id, async (client) =>
+        client.contacts.getNotes(id),
+      ),                                                                             // 4 — GHL notes
+      withAuthRetry(account.id, async (client) =>
+        client.opportunities.list({ contactId: id }),
+      ),                                                                             // 5 — GHL opportunities
+      withAuthRetry(account.id, async (client) => client.pipelines.list()),         // 6 — GHL pipelines
+      supabase                                                                       // 7 — integrations
         .from("integrations")
         .select("provider, status")
         .eq("account_id", account.id),
@@ -172,7 +172,7 @@ export default async function ContactDetailPage({
   if (contactResult.status !== "fulfilled") {
     notFound();
   }
-  const { contact } = (contactResult as PromiseFulfilledResult<GHLContactResponse>).value;
+  const contact = contactResult.value;
 
   // Re-run phone-based recipe matching now that we have the contact phone
   let dbData = dbResult.status === "fulfilled" ? dbResult.value : null;
@@ -199,19 +199,19 @@ export default async function ContactDetailPage({
   const ghlMessagesForTimeline =
     convResult.status === "fulfilled" ? convResult.value.messages : null;
   const ghlNotesForTimeline =
-    notesResult.status === "fulfilled" ? (notesResult.value.notes ?? []) : null;
+    notesResult.status === "fulfilled" ? notesResult.value : null;
 
   const appointments =
-    apptResult.status === "fulfilled" ? (apptResult.value.events ?? []) : null;
+    apptResult.status === "fulfilled" ? apptResult.value : null;
 
   const notes =
-    notesResult.status === "fulfilled" ? (notesResult.value.notes ?? []) : null;
+    notesResult.status === "fulfilled" ? notesResult.value : null;
 
   const opportunities =
-    oppsResult.status === "fulfilled" ? (oppsResult.value.opportunities ?? []) : [];
+    oppsResult.status === "fulfilled" ? (oppsResult.value.data ?? []) : [];
 
   const pipelines =
-    pipelinesResult.status === "fulfilled" ? (pipelinesResult.value.pipelines ?? []) : [];
+    pipelinesResult.status === "fulfilled" ? pipelinesResult.value : [];
 
   const connectedProviders =
     integrationsResult.status === "fulfilled" && !integrationsResult.value.error

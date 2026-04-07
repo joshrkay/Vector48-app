@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireAccountForUser } from "@/lib/auth/account";
 import { normalizePipelineOpportunity, normalizeUsPhone, messagesToActivityItems, type PipelineActivityItem } from "@/lib/crm/pipeline";
-import { getAccountGhlCredentials } from "@/lib/ghl";
-import { getContact, getContactNotes } from "@/lib/ghl/contacts";
-import { getConversations, getMessages } from "@/lib/ghl/conversations";
-import { getOpportunity } from "@/lib/ghl/opportunities";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
@@ -56,50 +53,56 @@ export async function GET(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const auth = { locationId, apiKey: accessToken };
+    const { opportunity, contactResult, notesResult, conversations } =
+      await withAuthRetry(session.accountId, async (client) => {
+        const opp = await client.opportunities.get(id);
 
-    const opportunity = await getOpportunity(id, auth);
-
-    const [contactResult, notesResult, conversationsResult, eventsResult, activationsResult] =
-      await Promise.all([
-        getContact(opportunity.contactId, auth),
-        getContactNotes(opportunity.contactId, auth),
-        getConversations(
-          {
-            contactId: opportunity.contactId,
+        const [contact, notes, convResult] = await Promise.all([
+          client.contacts.get(opp.contactId),
+          client.contacts.getNotes(opp.contactId),
+          client.conversations.list({
+            contactId: opp.contactId,
             limit: 3,
             sortBy: "last_message_date",
             sort: "desc",
-          },
-          auth,
-        ),
-        supabase
-          .from("automation_events")
-          .select("*")
-          .eq("account_id", session.accountId)
-          .eq("contact_id", opportunity.contactId)
-          .order("created_at", { ascending: false })
-          .limit(10),
-        supabase
-          .from("recipe_activations")
-          .select("*")
-          .eq("account_id", session.accountId)
-          .eq("status", "active"),
-      ]);
+          } as never),
+        ]);
 
-    const conversations = conversationsResult.conversations ?? [];
-    const messageResults = await Promise.allSettled(
-      conversations.map((conversation) =>
-        getMessages({ conversationId: conversation.id, limit: 5 }, auth),
-      ),
-    );
+        return {
+          opportunity: opp,
+          contactResult: contact,
+          notesResult: notes,
+          conversations: convResult.data ?? [],
+        };
+      });
+
+    const [messageResults, eventsResult, activationsResult] = await Promise.all([
+      withAuthRetry(session.accountId, async (client) => {
+        return Promise.allSettled(
+          conversations.map((conversation) =>
+            client.conversations.getMessages(conversation.id, { limit: 5 }),
+          ),
+        );
+      }),
+      supabase
+        .from("automation_events")
+        .select("*")
+        .eq("account_id", session.accountId)
+        .eq("contact_id", opportunity.contactId)
+        .order("created_at", { ascending: false })
+        .limit(10),
+      supabase
+        .from("recipe_activations")
+        .select("*")
+        .eq("account_id", session.accountId)
+        .eq("status", "active"),
+    ]);
 
     const messages = messageResults.flatMap((result) =>
-      result.status === "fulfilled" ? (result.value.messages ?? []) : [],
+      result.status === "fulfilled" ? (result.value ?? []) : [],
     );
 
-    const contact = contactResult.contact;
+    const contact = contactResult;
     const recipeSlugs = getRecipeSlugsForPhone(
       contact.phone,
       (activationsResult.data ?? []) as RecipeActivation[],
@@ -117,7 +120,7 @@ export async function GET(
         email: contact.email ?? null,
         phone: contact.phone ?? null,
       },
-      notes: notesResult.notes ?? [],
+      notes: notesResult ?? [],
       activity: [...messagesToActivityItems(messages), ...automationEventsToActivityItems(
         (eventsResult.data ?? []) as AutomationEvent[],
       )]

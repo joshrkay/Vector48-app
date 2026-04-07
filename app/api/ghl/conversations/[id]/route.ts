@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { getConversation } from "@/lib/ghl/conversations";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function GET(
@@ -17,11 +16,10 @@ export async function GET(
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const { conversation } = await getConversation(conversationId, {
-      locationId,
-      apiKey: accessToken,
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      return client.conversations.list({ conversationId } as never);
     });
+    const conversation = result.data?.[0] ?? null;
     return NextResponse.json({ conversation });
   } catch (error) {
     console.error("[ghl-conversation-get]", error);

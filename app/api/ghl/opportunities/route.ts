@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireAccountForUser } from "@/lib/auth/account";
 import { invalidateGHLCache } from "@/lib/ghl/cacheInvalidation";
-import { getAccountGhlCredentials } from "@/lib/ghl";
-import { addContactNote } from "@/lib/ghl/contacts";
-import { createOpportunity } from "@/lib/ghl/opportunities";
+import { withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
@@ -49,28 +47,25 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await createOpportunity(
-      {
-        locationId,
-        contactId: body.contactId.trim(),
-        pipelineId: body.pipelineId.trim(),
-        pipelineStageId: body.pipelineStageId.trim(),
-        name: body.jobType.trim(),
+    const result = await withAuthRetry(session.accountId, async (client) => {
+      const opportunity = await client.opportunities.create({
+        contactId: body.contactId!.trim(),
+        pipelineId: body.pipelineId!.trim(),
+        pipelineStageId: body.pipelineStageId!.trim(),
+        name: body.jobType!.trim(),
         ...(parsedValue !== undefined ? { monetaryValue: parsedValue } : {}),
-      },
-      { locationId, apiKey: accessToken },
-    );
-
-    if (body.notes?.trim()) {
-      void addContactNote(
-        body.contactId.trim(),
-        body.notes.trim(),
-        { locationId, apiKey: accessToken },
-      ).catch((error) => {
-        console.error("[ghl-opportunity-create-note]", error);
       });
-    }
+
+      if (body.notes?.trim()) {
+        void client.rawRequest("POST", `/contacts/${body.contactId!.trim()}/notes`, {
+          body: { body: body.notes!.trim() },
+        }).catch((error) => {
+          console.error("[ghl-opportunity-create-note]", error);
+        });
+      }
+
+      return opportunity;
+    });
 
     invalidateGHLCache(session.accountId, "OpportunityCreate", {
       invalidateInMemoryFallback: true,
