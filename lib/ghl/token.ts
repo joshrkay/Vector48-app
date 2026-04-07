@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 import { GHLClient } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAgencyAccessToken, refreshLocationToken } from "./oauth";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -149,7 +150,9 @@ async function loadCredentials(accountId: string): Promise<{
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("accounts")
-    .select("ghl_location_id, ghl_token_encrypted")
+    .select(
+      "ghl_location_id, ghl_token_encrypted, ghl_refresh_token_encrypted, ghl_token_expires_at",
+    )
     .eq("id", accountId)
     .maybeSingle();
 
@@ -162,7 +165,21 @@ async function loadCredentials(accountId: string): Promise<{
     return null;
   }
 
-  const token = decryptToken(data.ghl_token_encrypted);
+  let token: string;
+
+  // If we have a refresh token and the access token is near expiry, refresh it.
+  const hasRefresh = !!data.ghl_refresh_token_encrypted;
+  const expiresAt = data.ghl_token_expires_at
+    ? new Date(data.ghl_token_expires_at).getTime()
+    : null;
+  const isNearExpiry = expiresAt !== null && expiresAt - Date.now() < 5 * 60_000;
+
+  if (hasRefresh && isNearExpiry) {
+    token = await refreshLocationToken(accountId);
+  } else {
+    token = decryptToken(data.ghl_token_encrypted);
+  }
+
   writeCache(accountId, {
     locationId: data.ghl_location_id,
     token,
@@ -224,6 +241,7 @@ export async function getGHLClient(accountId: string): Promise<GHLClient> {
   return GHLClient.forLocation(credentials.locationId, credentials.token);
 }
 
-export function getAgencyClient(): GHLClient {
-  return GHLClient.forAgency();
+export async function getAgencyClient(): Promise<GHLClient> {
+  const token = await getAgencyAccessToken();
+  return GHLClient.forAgency(token);
 }

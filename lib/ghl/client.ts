@@ -969,13 +969,16 @@ export class GHLClient {
   static async exchangeSubAccountToken(
     companyId: string,
     locationId: string,
+    agencyToken?: string,
   ): Promise<GHLTokenExchangeResponse> {
-    const agencyApiKey = process.env.GHL_AGENCY_API_KEY;
-    if (!agencyApiKey) {
-      throw new Error("GHL_AGENCY_API_KEY is not configured");
+    let token = agencyToken;
+    if (!token) {
+      // Dynamically import to avoid circular dependency at module load time
+      const { getAgencyAccessToken } = await import("./oauth");
+      token = await getAgencyAccessToken();
     }
 
-    const client = new GHLClient({ agencyApiKey });
+    const client = new GHLClient({ agencyApiKey: token });
     return client.rawRequest<GHLTokenExchangeResponse>("POST", ENDPOINTS.tokenExchange, {
       body: { companyId, locationId },
     });
@@ -988,6 +991,8 @@ function clientFromOpts(opts?: GHLClientOptions): GHLClient {
     return GHLClient.forLocation(opts.locationId, token);
   }
 
+  // When an explicit apiKey is provided, use it directly.
+  // Otherwise fall back to the static env var (forAgency handles the env read).
   return GHLClient.forAgency(opts?.apiKey);
 }
 

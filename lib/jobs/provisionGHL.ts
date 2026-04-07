@@ -5,6 +5,10 @@ import crypto from "node:crypto";
 import { GHLClient } from "@/lib/ghl/client";
 import { createLocation, updateLocation } from "@/lib/ghl/locations";
 import { encryptToken, decryptToken } from "@/lib/ghl/token";
+import {
+  getAgencyAccessToken,
+  getAgencyCompanyId as getOAuthAgencyCompanyId,
+} from "@/lib/ghl/oauth";
 import type {
   GHLBusinessHours,
   GHLCreateLocationPayload,
@@ -140,12 +144,8 @@ function buildCompletionCompatFields(): Pick<
   };
 }
 
-function getAgencyCompanyId(): string {
-  const companyId = process.env.GHL_AGENCY_ID ?? process.env.GHL_AGENCY_COMPANY_ID;
-  if (!companyId) {
-    throw new Error("GHL_AGENCY_ID or GHL_AGENCY_COMPANY_ID is required");
-  }
-  return companyId;
+async function getAgencyCompanyId(): Promise<string> {
+  return getOAuthAgencyCompanyId();
 }
 
 function getWebhookBaseUrl(): string {
@@ -386,17 +386,34 @@ async function ensureLocationToken(account: AccountRow): Promise<string> {
     throw new Error("Location token requested before location creation");
   }
 
+  const agencyToken = await getAgencyAccessToken();
+  const companyId = await getAgencyCompanyId();
   const tokenResponse = await GHLClient.exchangeSubAccountToken(
-    getAgencyCompanyId(),
+    companyId,
     account.ghl_location_id,
+    agencyToken,
   );
   const accessToken = tokenResponse.access_token;
   const encryptedToken = encryptToken(accessToken);
 
-  await updateAccount(account.id, {
+  const updateFields: Record<string, unknown> = {
     ghl_token_encrypted: encryptedToken,
     provisioning_step: Math.max(account.provisioning_step ?? 0, 2),
-  });
+  };
+
+  // Store refresh token and expiry if present (OAuth flow provides these)
+  if (tokenResponse.refresh_token) {
+    updateFields.ghl_refresh_token_encrypted = encryptToken(
+      tokenResponse.refresh_token,
+    );
+  }
+  if (tokenResponse.expires_in) {
+    updateFields.ghl_token_expires_at = new Date(
+      Date.now() + tokenResponse.expires_in * 1000,
+    ).toISOString();
+  }
+
+  await updateAccount(account.id, updateFields);
 
   account.ghl_token_encrypted = encryptedToken;
   return accessToken;
@@ -434,8 +451,10 @@ export async function provisionGHL(accountId: string): Promise<ProvisionResult> 
 
   try {
     if (!account.ghl_location_id) {
+      const agencyToken = await getAgencyAccessToken();
+      const companyId = await getAgencyCompanyId();
       const payload: GHLCreateLocationPayload = {
-        companyId: getAgencyCompanyId(),
+        companyId,
         name: account.business_name,
         phone: account.phone ?? undefined,
         city: account.address_city ?? undefined,
@@ -445,7 +464,9 @@ export async function provisionGHL(accountId: string): Promise<ProvisionResult> 
         timezone: inferTimezone(account.address_state, account.service_area),
       };
 
-      const { location } = await createLocation(payload);
+      const { location } = await createLocation(payload, {
+        apiKey: agencyToken,
+      });
       account.ghl_location_id = location.id;
 
       await updateAccount(accountId, {
