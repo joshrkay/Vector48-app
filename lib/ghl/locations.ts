@@ -17,7 +17,7 @@ export function createLocation(
   data: GHLCreateLocationPayload,
   opts?: GHLClientOptions,
 ): Promise<GHLCreateLocationResponse> {
-  return ghlPost<GHLCreateLocationResponse>("/locations", data, opts);
+  return ghlPost<GHLCreateLocationResponse>("/locations/", data, opts);
 }
 
 /**
