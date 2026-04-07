@@ -2,6 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+const MAX_BACKOFF_MS = 300_000;
+
+/** Compute the polling delay with exponential backoff on consecutive errors. */
+export function getBackoffDelay(
+  baseInterval: number,
+  consecutiveErrors: number,
+  maxDelay: number = MAX_BACKOFF_MS,
+): number {
+  return Math.min(baseInterval * Math.pow(2, consecutiveErrors), maxDelay);
+}
+
 type SWRKey = readonly unknown[] | null;
 
 type SWROptions = {
@@ -153,11 +164,7 @@ export default function useSWR<Data>(
     let consecutiveErrors = 0;
 
     const schedule = () => {
-      const delay = Math.min(
-        refreshIntervalMs * Math.pow(2, consecutiveErrors),
-        300_000,
-      );
-      timeoutId = setTimeout(tick, delay);
+      timeoutId = setTimeout(tick, getBackoffDelay(refreshIntervalMs, consecutiveErrors));
     };
 
     const tick = () => {
