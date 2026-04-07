@@ -20,7 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { GHLCalendar } from "@/lib/ghl/types";
+import { SlotPicker } from "@/components/crm/calendar/SlotPicker";
+import type { GHLCalendar, GHLCalendarSlot } from "@/lib/ghl/types";
 import type { CRMContactSearchItem, CRMContactSearchResponse } from "@/lib/crm/types";
 
 interface Props {
@@ -232,6 +233,32 @@ export function AddAppointmentSheet({ open, onOpenChange, calendars, onCreated }
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* Available slots */}
+            {calendarId && (
+              <div className="space-y-1.5">
+                <Label>Available Slots</Label>
+                <SlotPicker
+                  calendarId={calendarId}
+                  selectedSlot={null}
+                  onSelectSlot={(slot: GHLCalendarSlot) => {
+                    const start = new Date(slot.startTime);
+                    const end = new Date(slot.endTime);
+                    const y = start.getFullYear();
+                    const m = String(start.getMonth() + 1).padStart(2, "0");
+                    const d = String(start.getDate()).padStart(2, "0");
+                    const hh = String(start.getHours()).padStart(2, "0");
+                    const mm = String(start.getMinutes()).padStart(2, "0");
+                    setDate(`${y}-${m}-${d}`);
+                    setTime(`${hh}:${mm}`);
+                    const diffMinutes = Math.round((end.getTime() - start.getTime()) / 60_000);
+                    if ([30, 60, 90, 120].includes(diffMinutes)) {
+                      setDuration(String(diffMinutes));
+                    }
+                  }}
+                />
               </div>
             )}
 
