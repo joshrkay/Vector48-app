@@ -116,6 +116,14 @@ function hasRequiredRole(role: AccountRole, requiredRole?: AccountRole): boolean
   return ROLE_PRIORITY[role] >= ROLE_PRIORITY[requiredRole];
 }
 
+export interface RequireAccountForUserOptions {
+  searchParams?:
+    | URLSearchParams
+    | Record<string, string | string[] | undefined>
+    | null
+    | undefined;
+}
+
 export async function requireAccountForUser(
   supabase: SupabaseClient<Database>,
   options: RequireAccountForUserOptions = {},
