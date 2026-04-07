@@ -1,3 +1,5 @@
+import { isGhlNative } from "@/lib/recipes/engineRegistry";
+
 const RECIPE_SCHEDULED_WEBHOOK_PATH = "/webhook/ghl/recipe-scheduled-trigger";
 
 function buildRecipeScheduledWebhookUrl(
@@ -59,19 +61,31 @@ export type SweepFailure = {
 
 export type SweepResult = SweepSuccess | SweepFailure;
 
+/**
+ * GHL-native executor function signature.
+ * Injected as a dependency so the sweep stays testable without importing
+ * server-only modules (Supabase, GHL client) in unit tests.
+ */
+export type GhlNativeExecutorFn = (params: {
+  accountId: string;
+  recipeSlug: string;
+  contactId: string;
+  triggerData: Record<string, unknown>;
+}) => Promise<{ ok: boolean; error?: string }>;
+
 type SweepDeps = {
   n8nBaseUrl: string;
   nowIso: string;
   batchLimit: number;
   store: RecipeTriggerStore;
   fetcher: typeof fetch;
+  /** Executor for GHL-native recipes. When absent, GHL-native triggers are skipped. */
+  ghlExecutor?: GhlNativeExecutorFn;
 };
 
 export async function runRecipeTriggerSweep(deps: SweepDeps): Promise<SweepResult> {
   const n8nBase = deps.n8nBaseUrl.trim();
-  if (!n8nBase) {
-    return { ok: false, status: 500, error: "N8N_BASE_URL is not configured" };
-  }
+  // n8n base URL is only required if there are n8n recipes; we check per-trigger below.
 
   let due: RecipeTriggerRow[];
   try {
@@ -130,24 +144,65 @@ export async function runRecipeTriggerSweep(deps: SweepDeps): Promise<SweepResul
       continue;
     }
 
-    const url = buildRecipeScheduledWebhookUrl(n8nBase, row.recipe_slug, row.account_id);
-    const body = buildRecipeTriggerPostBody(row.account_id, row.payload);
+    // ── Route: GHL-native or n8n ────────────────────────────────────────
+    const useGhlNative = isGhlNative(row.recipe_slug);
 
-    let response: Response;
-    try {
-      response = await deps.fetcher(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } catch (error) {
-      await markFailed(error instanceof Error ? error.message : "Webhook request failed");
-      continue;
-    }
+    if (useGhlNative) {
+      if (!deps.ghlExecutor) {
+        await markFailed("GHL-native executor not available");
+        continue;
+      }
 
-    if (!response.ok) {
-      await markFailed(`Webhook returned HTTP ${response.status}`);
-      continue;
+      const triggerData = row.payload ?? {};
+      const contactId = (triggerData.contact_id as string) ?? (triggerData.contactId as string) ?? "";
+
+      if (!contactId) {
+        await markFailed("Trigger payload missing contact_id for GHL-native recipe");
+        continue;
+      }
+
+      try {
+        const result = await deps.ghlExecutor({
+          accountId: row.account_id,
+          recipeSlug: row.recipe_slug,
+          contactId,
+          triggerData,
+        });
+
+        if (!result.ok) {
+          await markFailed(result.error ?? "GHL-native execution failed");
+          continue;
+        }
+      } catch (error) {
+        await markFailed(error instanceof Error ? error.message : "GHL-native execution error");
+        continue;
+      }
+    } else {
+      // n8n path — requires base URL
+      if (!n8nBase) {
+        await markFailed("N8N_BASE_URL is not configured");
+        continue;
+      }
+
+      const url = buildRecipeScheduledWebhookUrl(n8nBase, row.recipe_slug, row.account_id);
+      const body = buildRecipeTriggerPostBody(row.account_id, row.payload);
+
+      let response: Response;
+      try {
+        response = await deps.fetcher(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } catch (error) {
+        await markFailed(error instanceof Error ? error.message : "Webhook request failed");
+        continue;
+      }
+
+      if (!response.ok) {
+        await markFailed(`Webhook returned HTTP ${response.status}`);
+        continue;
+      }
     }
 
     try {

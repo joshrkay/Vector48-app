@@ -39,7 +39,7 @@ function makeStore(state: StoreState) {
   };
 }
 
-test("returns env error when N8N base is missing", async () => {
+test("succeeds with empty batch even when N8N base is missing", async () => {
   const result = await runRecipeTriggerSweep({
     n8nBaseUrl: "",
     nowIso: "2026-03-31T15:00:00.000Z",
@@ -48,11 +48,42 @@ test("returns env error when N8N base is missing", async () => {
     fetcher: async () => new Response(null, { status: 200 }),
   });
 
+  // Empty batch succeeds regardless of n8n config
   assert.deepEqual(result, {
-    ok: false,
-    status: 500,
-    error: "N8N_BASE_URL is not configured",
+    ok: true,
+    processed: 0,
+    failed: 0,
+    skipped: 0,
+    batch_limit: 50,
   });
+});
+
+test("fails n8n trigger when N8N_BASE_URL is empty", async () => {
+  const state: StoreState = {
+    due: [
+      {
+        id: "trg-n8n-nobase",
+        account_id: "acc-1",
+        recipe_slug: "appointment-reminder", // n8n recipe
+        payload: null,
+        attempt_count: 0,
+      },
+    ],
+    completed: [],
+    failed: [],
+  };
+
+  const result = await runRecipeTriggerSweep({
+    n8nBaseUrl: "",
+    nowIso: "2026-03-31T15:00:00.000Z",
+    batchLimit: 50,
+    store: makeStore(state),
+    fetcher: async () => new Response(null, { status: 200 }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(state.failed.length, 1);
+  assert.ok(state.failed[0]?.message.includes("N8N_BASE_URL"));
 });
 
 test("processes active queued trigger and marks completed", async () => {
@@ -140,6 +171,127 @@ test("marks failed when activation is missing", async () => {
   assert.equal(state.failed[0]?.id, "trg-2");
   assert.equal(state.failed[0]?.attemptCount, 3);
   assert.ok(state.failed[0]?.message.includes("No active recipe activation"));
+});
+
+test("routes GHL-native trigger to ghlExecutor", async () => {
+  const state: StoreState = {
+    due: [
+      {
+        id: "trg-ghl",
+        account_id: "acc-1",
+        recipe_slug: "new-lead-instant-response", // GHL-native
+        payload: { contact_id: "c1", contact_name: "John" },
+        attempt_count: 0,
+      },
+    ],
+    activeKeys: new Set(["acc-1:new-lead-instant-response"]),
+    completed: [],
+    failed: [],
+  };
+
+  let executorCalled = false;
+  let executorParams: unknown = null;
+
+  const result = await runRecipeTriggerSweep({
+    n8nBaseUrl: "https://n8n.example.com",
+    nowIso: "2026-03-31T15:00:00.000Z",
+    batchLimit: 50,
+    store: makeStore(state),
+    fetcher: async () => {
+      throw new Error("should not call n8n for GHL-native");
+    },
+    ghlExecutor: async (params) => {
+      executorCalled = true;
+      executorParams = params;
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.processed, 1);
+  assert.equal(executorCalled, true);
+  assert.deepEqual(executorParams, {
+    accountId: "acc-1",
+    recipeSlug: "new-lead-instant-response",
+    contactId: "c1",
+    triggerData: { contact_id: "c1", contact_name: "John" },
+  });
+  assert.equal(state.completed.length, 1);
+});
+
+test("fails GHL-native trigger when contact_id is missing", async () => {
+  const state: StoreState = {
+    due: [
+      {
+        id: "trg-ghl-nocontact",
+        account_id: "acc-1",
+        recipe_slug: "tech-on-the-way",
+        payload: { some_data: "value" },
+        attempt_count: 0,
+      },
+    ],
+    completed: [],
+    failed: [],
+  };
+
+  const result = await runRecipeTriggerSweep({
+    n8nBaseUrl: "https://n8n.example.com",
+    nowIso: "2026-03-31T15:00:00.000Z",
+    batchLimit: 50,
+    store: makeStore(state),
+    fetcher: async () => new Response(null, { status: 200 }),
+    ghlExecutor: async () => ({ ok: true }),
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.failed, 1);
+  assert.ok(state.failed[0]?.message.includes("contact_id"));
+});
+
+test("handles mixed n8n and GHL-native triggers", async () => {
+  const state: StoreState = {
+    due: [
+      {
+        id: "trg-n8n",
+        account_id: "acc-1",
+        recipe_slug: "review-request",
+        payload: { contact_id: "c1" },
+        attempt_count: 0,
+      },
+      {
+        id: "trg-ghl",
+        account_id: "acc-1",
+        recipe_slug: "google-review-booster",
+        payload: { contact_id: "c2" },
+        attempt_count: 0,
+      },
+    ],
+    completed: [],
+    failed: [],
+  };
+
+  let fetchCount = 0;
+  let executorCount = 0;
+
+  const result = await runRecipeTriggerSweep({
+    n8nBaseUrl: "https://n8n.example.com",
+    nowIso: "2026-03-31T15:00:00.000Z",
+    batchLimit: 50,
+    store: makeStore(state),
+    fetcher: async () => {
+      fetchCount += 1;
+      return new Response(null, { status: 200 });
+    },
+    ghlExecutor: async () => {
+      executorCount += 1;
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.processed, 2);
+  assert.equal(fetchCount, 1); // only n8n recipe hits webhook
+  assert.equal(executorCount, 1); // only GHL-native recipe hits executor
 });
 
 test("skips rows that cannot be claimed", async () => {

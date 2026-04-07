@@ -5,6 +5,7 @@ import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AlertBanner } from "@/components/dashboard/AlertBanner";
 import { ProvisioningBanner } from "@/components/dashboard/ProvisioningBanner";
 import { GHLSummary } from "@/components/dashboard/GHLSummary";
+import { QuickActions } from "@/components/dashboard/QuickActions";
 import { getStatCards } from "@/lib/dashboard/statsQuery";
 import { isAlertResolved } from "@/lib/dashboard/alerts";
 import { requireAccountForUser } from "@/lib/auth/account";
@@ -173,9 +174,9 @@ export default async function DashboardPage() {
             <h2 className="font-heading text-xl font-semibold text-[#0F1923]">
               Quick Actions
             </h2>
-            <p className="mt-2 text-sm text-[#64748B]">
-              Quick Actions will land here in Prompt 7.
-            </p>
+            <div className="mt-3">
+              <QuickActions />
+            </div>
           </div>
         </div>
       </div>

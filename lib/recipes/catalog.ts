@@ -329,7 +329,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "Automatically sends seasonal campaign messages to your customer list before peak demand periods — AC tune-ups before summer, furnace checks before winter, gutter cleaning before fall. Fills your schedule during transition periods.",
     funnelStage: "close",
-    releasePhase: "v2",
+    releasePhase: "ga",
     icon: "Sun",
     stageColor: "amber-100",
     trigger:
@@ -427,7 +427,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "When a technician is dispatched, the system sends a real-time SMS to the customer with the tech's name, ETA, and a photo if available. Reduces 'where's my tech' calls and improves the customer experience.",
     funnelStage: "deliver",
-    releasePhase: "v2",
+    releasePhase: "ga",
     icon: "Truck",
     stageColor: "green-100",
     trigger:
@@ -526,7 +526,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "After a job is completed, the system identifies related services that the customer might need and sends a personalized recommendation. Drives repeat business and increases average customer lifetime value.",
     funnelStage: "retain",
-    releasePhase: "v2",
+    releasePhase: "ga",
     icon: "TrendingUp",
     stageColor: "rose-100",
     trigger:
@@ -571,7 +571,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "After a service is completed, the system sends a message highlighting the benefits of a recurring maintenance plan — priority scheduling, discounts, and system longevity. Drives predictable recurring revenue.",
     funnelStage: "retain",
-    releasePhase: "v2",
+    releasePhase: "ga",
     icon: "Repeat",
     stageColor: "rose-100",
     trigger:
@@ -624,7 +624,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "Identifies customers who haven't booked a service in a configurable period and sends a friendly check-in message with an incentive to book again. Reactivates dormant customers and fills quiet periods.",
     funnelStage: "reactivate",
-    releasePhase: "v2",
+    releasePhase: "ga",
     icon: "UserPlus",
     stageColor: "orange-100",
     trigger:
@@ -669,7 +669,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "Identifies estimates and proposals that were sent but never accepted, then sends a follow-up message checking if the customer is still interested. Often recovers revenue that would otherwise be lost.",
     funnelStage: "reactivate",
-    releasePhase: "v3",
+    releasePhase: "ga",
     icon: "RefreshCw",
     stageColor: "orange-100",
     trigger:
@@ -714,7 +714,7 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     detailedDescription:
       "After a major weather event (storm, freeze, heat wave), the system sends targeted outreach to customers in affected areas offering inspections and repairs. Positions your business as proactive and captures demand spikes.",
     funnelStage: "reactivate",
-    releasePhase: "v3",
+    releasePhase: "ga",
     icon: "CloudLightning",
     stageColor: "orange-100",
     trigger:
