@@ -6,18 +6,24 @@ import { ghlPost, ghlPut, type GHLClientOptions } from "./client";
 import type {
   GHLCreateLocationPayload,
   GHLCreateLocationResponse,
+  GHLLocation,
   GHLUpdateLocationPayload,
 } from "./types";
 
 /**
  * Create a new GHL sub-account (location).
  * Uses agency-level API key — do NOT pass a locationId.
+ *
+ * GHL API v2 returns the location object at the top level (not wrapped in
+ * `{ location: ... }`). We normalise the response here so callers can
+ * destructure `{ location }` consistently with the rest of the codebase.
  */
-export function createLocation(
+export async function createLocation(
   data: GHLCreateLocationPayload,
   opts?: GHLClientOptions,
 ): Promise<GHLCreateLocationResponse> {
-  return ghlPost<GHLCreateLocationResponse>("/locations/", data, opts);
+  const location = await ghlPost<GHLLocation>("/locations/", data, opts);
+  return { location };
 }
 
 /**
