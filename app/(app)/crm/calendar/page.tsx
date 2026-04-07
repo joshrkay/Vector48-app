@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
-import { tryGetAccountGhlCredentials } from "@/lib/ghl";
-import { getAppointments, getCalendars } from "@/lib/ghl/calendars";
+import { tryGetAccountGhlCredentials, withAuthRetry } from "@/lib/ghl";
 import { CalendarClientShell } from "@/components/crm/calendar/CalendarClientShell";
 import {
   getStartOfWeek,
@@ -10,6 +9,7 @@ import {
   toDateString,
   fromDateString,
 } from "@/lib/crm/calendar-utils";
+import type { GHLAppointment, GHLCalendar } from "@/lib/ghl/types";
 
 export default async function CalendarPage({
   searchParams,
@@ -52,49 +52,51 @@ export default async function CalendarPage({
     typeof businessHours?.timezone === "string" ? businessHours.timezone : "UTC";
 
   const credentials = await tryGetAccountGhlCredentials(account.id);
-  const auth = credentials
-    ? { locationId: credentials.locationId, accessToken: credentials.accessToken }
-    : null;
 
-  const [appointmentsResult, calendarsResult, recipeResult] = await Promise.allSettled([
-    auth
-      ? getAppointments(
-          { startDate, endDate },
-          { locationId: auth.locationId, apiKey: auth.accessToken },
-        )
-      : Promise.resolve({ events: [] }),
-    auth
-      ? getCalendars({ locationId: auth.locationId, apiKey: auth.accessToken })
-      : Promise.resolve({ calendars: [] }),
-    supabase
-      .from("recipe_activations")
-      .select("status")
-      .eq("account_id", account.id)
-      .eq("recipe_slug", "appointment-reminder")
-      .maybeSingle(),
-  ]);
+  let appointments: GHLAppointment[] = [];
+  let calendars: GHLCalendar[] = [];
+  let ghlError = false;
 
-  const appointments =
-    appointmentsResult.status === "fulfilled"
-      ? (appointmentsResult.value.events ?? [])
-      : [];
+  if (credentials) {
+    try {
+      const ghlData = await withAuthRetry(account.id, async (client) => {
+        const [appts, cals] = await Promise.all([
+          client.appointments.list({ startDate, endDate }),
+          client.calendars.list(),
+        ]);
+        return { appointments: appts, calendars: cals };
+      });
+      appointments = ghlData.appointments;
+      calendars = ghlData.calendars;
+    } catch (err) {
+      console.error("[calendar] GHL API error:", (err as Error).message);
+      ghlError = true;
+    }
+  }
 
-  const calendars =
-    calendarsResult.status === "fulfilled"
-      ? (calendarsResult.value.calendars ?? [])
-      : [];
+  const { data: recipeData } = await supabase
+    .from("recipe_activations")
+    .select("status")
+    .eq("account_id", account.id)
+    .eq("recipe_slug", "appointment-reminder")
+    .maybeSingle();
 
-  const reminderActive =
-    recipeResult.status === "fulfilled" &&
-    recipeResult.value.data?.status === "active";
+  const reminderActive = recipeData?.status === "active";
 
   return (
-    <CalendarClientShell
-      initialAppointments={appointments}
-      initialWeekStart={toDateString(weekStart)}
-      calendars={calendars}
-      timezone={timezone}
-      reminderActive={reminderActive}
-    />
+    <>
+      {ghlError && (
+        <div className="mx-4 mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          Unable to connect to GoHighLevel. Your credentials may have expired &mdash; please reconnect in Settings.
+        </div>
+      )}
+      <CalendarClientShell
+        initialAppointments={appointments}
+        initialWeekStart={toDateString(weekStart)}
+        calendars={calendars}
+        timezone={timezone}
+        reminderActive={reminderActive}
+      />
+    </>
   );
 }

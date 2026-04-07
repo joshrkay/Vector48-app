@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { GHLClient, getAccountGhlCredentials } from "@/lib/ghl";
+import { tryGetAccountGhlCredentials, withAuthRetry } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
@@ -25,21 +25,23 @@ export async function GET() {
     return noStoreJson({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let start: number | null = null;
+  // Return a clear "not connected" status instead of 503 when GHL isn't set up
+  const creds = await tryGetAccountGhlCredentials(session.accountId);
+  if (!creds) {
+    return noStoreJson({ status: "not_connected", latencyMs: 0 });
+  }
+
+  const start = Date.now();
 
   try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(
-      session.accountId,
-    );
-    const client = GHLClient.forLocation(locationId, accessToken);
-
-    start = Date.now();
-    await client.contacts.list({ limit: 1 });
+    await withAuthRetry(session.accountId, async (client) => {
+      await client.contacts.list({ limit: 1 });
+    });
 
     return noStoreJson({ status: "connected", latencyMs: Date.now() - start });
   } catch {
     return noStoreJson(
-      { status: "error", latencyMs: start ? Date.now() - start : 0 },
+      { status: "error", latencyMs: Date.now() - start },
       { status: 503 },
     );
   }

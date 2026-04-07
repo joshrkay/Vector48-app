@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { PipelineBoard } from "@/components/crm/pipeline/PipelineBoard";
-import { cachedGHLClient } from "@/lib/ghl/cache";
-import { tryGetAccountGhlCredentials } from "@/lib/ghl";
+import { tryGetAccountGhlCredentials, withAuthRetry } from "@/lib/ghl";
 import { normalizePipelineOpportunity, normalizeUsPhone } from "@/lib/crm/pipeline";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
@@ -72,51 +71,70 @@ export default async function PipelinePage() {
     );
   }
 
-  const auth = { locationId: credentials.locationId, apiKey: credentials.accessToken };
-  const client = cachedGHLClient(account.id);
-
-  let pipelinesResult, opportunities: GHLOpportunity[], activationsResult;
   try {
-  [pipelinesResult, opportunities, activationsResult] = await Promise.all([
-    client.getPipelines(auth),
-    (async () => {
-      const all: GHLOpportunity[] = [];
-      const seenCursors = new Set<string>();
-      let cursor: string | undefined;
+  const [ghlData, activationsResult] = await Promise.all([
+    withAuthRetry(account.id, async (client) => {
+      const [pipelines, opportunities] = await Promise.all([
+        client.pipelines.list(),
+        (async () => {
+          const all: GHLOpportunity[] = [];
+          const seenCursors = new Set<string>();
+          let cursor: string | undefined;
 
-      while (true) {
-        const result = await client.getOpportunities(
-          {
-            status: "open",
-            limit: OPPORTUNITY_PAGE_SIZE,
-            sortBy: "dateAdded",
-            sortOrder: "desc",
-            startAfterId: cursor,
-          },
-          auth,
-        );
+          while (true) {
+            const result = await client.opportunities.list({
+              status: "open",
+              limit: OPPORTUNITY_PAGE_SIZE,
+              sortBy: "dateAdded",
+              sortOrder: "desc",
+              startAfterId: cursor,
+            });
 
-        const page = result.opportunities ?? [];
-        all.push(...page);
+            const page = result.data ?? [];
+            all.push(...page);
 
-        const nextCursor =
-          result.meta?.startAfterId ??
-          (page.length === OPPORTUNITY_PAGE_SIZE
-            ? page[page.length - 1]?.id
-            : null);
+            const nextCursor =
+              result.meta?.startAfterId ??
+              (page.length === OPPORTUNITY_PAGE_SIZE
+                ? page[page.length - 1]?.id
+                : null);
 
-        if (
-          page.length < OPPORTUNITY_PAGE_SIZE ||
-          !nextCursor ||
-          seenCursors.has(nextCursor)
-        ) {
-          return all;
-        }
+            if (
+              page.length < OPPORTUNITY_PAGE_SIZE ||
+              !nextCursor ||
+              seenCursors.has(nextCursor)
+            ) {
+              return all;
+            }
 
-        seenCursors.add(nextCursor);
-        cursor = nextCursor;
-      }
-    })(),
+            seenCursors.add(nextCursor);
+            cursor = nextCursor;
+          }
+        })(),
+      ]);
+
+      // Backfill missing contact details
+      const missingContactIds = Array.from(
+        new Set(
+          opportunities
+            .filter((opp) => !opp.contact?.name?.trim() || !opp.contact?.phone?.trim())
+            .map((opp) => opp.contactId),
+        ),
+      );
+
+      const missingContacts = await Promise.allSettled(
+        missingContactIds.map(async (contactId) => {
+          const contact = await client.contacts.get(contactId);
+          return [contactId, contact] as const;
+        }),
+      );
+
+      const contactMap = new Map(
+        missingContacts.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])),
+      );
+
+      return { pipelines, opportunities, contactMap };
+    }),
     supabase
       .from("recipe_activations")
       .select("*")
@@ -124,30 +142,9 @@ export default async function PipelinePage() {
       .eq("status", "active"),
   ]);
 
-  const missingContactIds = Array.from(
-    new Set(
-      opportunities
-        .filter((opportunity) => {
-          const hasName = !!opportunity.contact?.name?.trim();
-          const hasPhone = !!opportunity.contact?.phone?.trim();
-          return !hasName || !hasPhone;
-        })
-        .map((opportunity) => opportunity.contactId),
-    ),
-  );
-
-  const missingContacts = await Promise.allSettled(
-    missingContactIds.map(async (contactId) => {
-      const result = await client.getContact(contactId, auth);
-      return [contactId, result.contact] as const;
-    }),
-  );
-
-  const contactMap = new Map(
-    missingContacts.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
-  );
-
+  const { pipelines, opportunities, contactMap } = ghlData;
   const recipeActivations = (activationsResult.data ?? []) as RecipeActivation[];
+
   const normalizedOpportunities = opportunities.map((opportunity) => {
     const fallbackContact = contactMap.get(opportunity.contactId);
     const phone = fallbackContact?.phone ?? opportunity.contact?.phone ?? null;
@@ -174,12 +171,11 @@ export default async function PipelinePage() {
       <p className="text-sm text-[var(--text-secondary)]">
         {normalizedOpportunities.length}{" "}
         {normalizedOpportunities.length === 1 ? "open opportunity" : "open opportunities"} across{" "}
-        {(pipelinesResult.pipelines ?? []).length}{" "}
-        {(pipelinesResult.pipelines ?? []).length === 1 ? "pipeline" : "pipelines"}
+        {pipelines.length} {pipelines.length === 1 ? "pipeline" : "pipelines"}
       </p>
 
       <PipelineBoard
-        pipelines={pipelinesResult.pipelines ?? []}
+        pipelines={pipelines}
         initialOpportunities={normalizedOpportunities}
       />
     </div>

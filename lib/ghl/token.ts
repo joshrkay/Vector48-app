@@ -3,6 +3,7 @@ import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 import { GHLClient } from "./client";
+import { GHLApiError, GHLAuthError } from "./errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAgencyAccessToken, refreshLocationToken } from "./oauth";
 
@@ -167,15 +168,32 @@ async function loadCredentials(accountId: string): Promise<{
 
   let token: string;
 
-  // If we have a refresh token and the access token is near expiry, refresh it.
+  // If we have a refresh token and the access token is expired or near expiry, refresh it.
+  // Also refresh when expiry is unknown (NULL) — the token may be stale from
+  // agency-key provisioning that didn't record an expiry timestamp.
   const hasRefresh = !!data.ghl_refresh_token_encrypted;
   const expiresAt = data.ghl_token_expires_at
     ? new Date(data.ghl_token_expires_at).getTime()
     : null;
   const isNearExpiry = expiresAt !== null && expiresAt - Date.now() < 5 * 60_000;
+  const expiryUnknown = expiresAt === null;
 
-  if (hasRefresh && isNearExpiry) {
-    token = await refreshLocationToken(accountId);
+  if (hasRefresh && (isNearExpiry || expiryUnknown)) {
+    try {
+      token = await refreshLocationToken(accountId);
+    } catch (refreshErr) {
+      // If refresh fails, fall back to the existing token — it may still work.
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          service: "ghl",
+          event: "token_refresh_fallback",
+          accountId,
+          message: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+        }),
+      );
+      token = decryptToken(data.ghl_token_encrypted);
+    }
   } else {
     token = decryptToken(data.ghl_token_encrypted);
   }
@@ -186,6 +204,15 @@ async function loadCredentials(accountId: string): Promise<{
   });
 
   return { locationId: data.ghl_location_id, token };
+}
+
+/**
+ * Evict cached credentials for an account. Called by the GHL client
+ * after a 401 so the next loadCredentials() call forces a DB read
+ * (and potentially a token refresh).
+ */
+export function invalidateCredentialCache(accountId: string): void {
+  credentialCache.delete(accountId);
 }
 
 export async function getDecryptedToken(accountId: string): Promise<string> {
@@ -244,4 +271,63 @@ export async function getGHLClient(accountId: string): Promise<GHLClient> {
 export async function getAgencyClient(): Promise<GHLClient> {
   const token = await getAgencyAccessToken();
   return GHLClient.forAgency(token);
+}
+
+/**
+ * Run a GHL operation with automatic 401 retry.
+ *
+ * On the first 401/403 from the GHL API, the credential cache is invalidated
+ * and credentials are reloaded (which triggers a token refresh if a refresh
+ * token is available). The operation is then retried once with the new token.
+ *
+ * Usage:
+ * ```ts
+ * const pipelines = await withAuthRetry(accountId, async (client) => {
+ *   return client.pipelines.list();
+ * });
+ * ```
+ */
+export async function withAuthRetry<T>(
+  accountId: string,
+  operation: (client: GHLClient) => Promise<T>,
+): Promise<T> {
+  const credentials = await loadCredentials(accountId);
+  if (!credentials) {
+    throw new Error(`Account ${accountId} is not connected to GoHighLevel`);
+  }
+
+  const client = GHLClient.forLocation(credentials.locationId, credentials.token);
+
+  try {
+    return await operation(client);
+  } catch (error) {
+    // Only retry on auth errors (401/403)
+    const isAuthError =
+      error instanceof GHLAuthError ||
+      (error instanceof GHLApiError && (error.statusCode === 401 || error.statusCode === 403));
+
+    if (!isAuthError) throw error;
+
+    // Invalidate cache and reload (forces DB read + potential token refresh)
+    invalidateCredentialCache(accountId);
+
+    const refreshed = await loadCredentials(accountId);
+    if (!refreshed || refreshed.token === credentials.token) {
+      // Refresh didn't produce a new token — don't retry with the same one
+      throw error;
+    }
+
+    console.info(
+      JSON.stringify({
+        level: "info",
+        service: "ghl",
+        event: "auth_retry",
+        accountId,
+        message: "Retrying GHL operation with refreshed token",
+      }),
+    );
+
+    const retryClient = GHLClient.forLocation(refreshed.locationId, refreshed.token);
+    return operation(retryClient);
+  }
 }

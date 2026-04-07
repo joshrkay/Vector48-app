@@ -1,8 +1,6 @@
 import "server-only";
 
-import { tryGetAccountGhlCredentials } from "@/lib/ghl";
-import { getContact } from "@/lib/ghl/contacts";
-import { getConversations } from "@/lib/ghl/conversations";
+import { tryGetAccountGhlCredentials, withAuthRetry } from "@/lib/ghl";
 import type { GHLConversation } from "@/lib/ghl/types";
 
 export interface InboxContactPreview {
@@ -28,34 +26,32 @@ function contactDisplayName(contact: {
 export async function loadEnrichedInboxConversations(accountId: string): Promise<EnrichedInboxConversations> {
   const credentials = await tryGetAccountGhlCredentials(accountId);
   if (!credentials) return { conversations: [], contacts: {} };
-  const { locationId, accessToken } = credentials;
-  const ghlOpts = { locationId, apiKey: accessToken };
-  const { conversations: raw = [] } = await getConversations(
-    {
-      locationId,
+
+  return withAuthRetry(accountId, async (client) => {
+    const convResult = await client.conversations.list({
       limit: 20,
       sortBy: "last_message_date",
       sort: "desc",
-    },
-    ghlOpts,
-  );
+    });
+    const raw = convResult.data ?? [];
 
-  const uniqueIds = Array.from(new Set(raw.map((c) => c.contactId)));
-  const contacts: Record<string, InboxContactPreview> = {};
+    const uniqueIds = Array.from(new Set(raw.map((c: GHLConversation) => c.contactId)));
+    const contacts: Record<string, InboxContactPreview> = {};
 
-  await Promise.all(
-    uniqueIds.map(async (id) => {
-      try {
-        const { contact } = await getContact(id, ghlOpts);
-        contacts[id] = {
-          name: contactDisplayName(contact),
-          phone: contact.phone ?? "",
-        };
-      } catch {
-        contacts[id] = { name: "Unknown", phone: "" };
-      }
-    }),
-  );
+    await Promise.all(
+      uniqueIds.map(async (id) => {
+        try {
+          const contact = await client.contacts.get(id);
+          contacts[id] = {
+            name: contactDisplayName(contact),
+            phone: contact.phone ?? "",
+          };
+        } catch {
+          contacts[id] = { name: "Unknown", phone: "" };
+        }
+      }),
+    );
 
-  return { conversations: raw, contacts };
+    return { conversations: raw, contacts };
+  });
 }
