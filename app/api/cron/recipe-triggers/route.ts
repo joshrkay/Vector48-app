@@ -5,6 +5,8 @@ import {
   buildRecipeTriggerPostBody,
   verifyCronBearer,
 } from "@/lib/cron/recipeTriggerDelivery";
+import { isGhlNative } from "@/lib/recipes/engineRegistry";
+import { executeGhlNativeRecipe } from "@/lib/recipes/ghlExecutor";
 import { RECIPE_TRIGGER_CANONICAL_PENDING_STATUS } from "@/lib/recipes/schemaContracts";
 
 export const dynamic = "force-dynamic";
@@ -62,10 +64,7 @@ async function listDueTriggers(nowIso: string): Promise<{ rows: DueTriggerRow[];
 }
 
 async function runRecipeTriggerSweep(): Promise<NextResponse> {
-  const n8nBase = process.env.N8N_BASE_URL?.trim();
-  if (!n8nBase) {
-    return NextResponse.json({ error: "N8N_BASE_URL is not configured" }, { status: 500 });
-  }
+  const n8nBase = process.env.N8N_BASE_URL?.trim() ?? "";
 
   const supabase = getSupabaseAdmin();
   const nowIso = new Date().toISOString();
@@ -129,26 +128,67 @@ async function runRecipeTriggerSweep(): Promise<NextResponse> {
       continue;
     }
 
-    const url = buildRecipeScheduledWebhookUrl(n8nBase, row.recipe_slug, row.account_id);
-    const body = buildRecipeTriggerPostBody(row.account_id, row.payload);
+    // ── Route: GHL-native or n8n ──────────────────────────────────────
+    if (isGhlNative(row.recipe_slug)) {
+      const triggerData = row.payload ?? {};
+      const contactId =
+        (triggerData.contact_id as string) ??
+        (triggerData.contactId as string) ??
+        "";
 
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } catch (e) {
-      await markFailed(e instanceof Error ? e.message : "Webhook request failed");
-      failed += 1;
-      continue;
-    }
+      if (!contactId) {
+        await markFailed("Trigger payload missing contact_id for GHL-native recipe");
+        failed += 1;
+        continue;
+      }
 
-    if (!res.ok) {
-      await markFailed(`Webhook returned HTTP ${res.status}`);
-      failed += 1;
-      continue;
+      try {
+        const result = await executeGhlNativeRecipe({
+          accountId: row.account_id,
+          recipeSlug: row.recipe_slug,
+          contactId,
+          triggerData,
+        });
+
+        if (!result.ok) {
+          await markFailed(result.error ?? "GHL-native execution failed");
+          failed += 1;
+          continue;
+        }
+      } catch (e) {
+        await markFailed(e instanceof Error ? e.message : "GHL-native execution error");
+        failed += 1;
+        continue;
+      }
+    } else {
+      // n8n path
+      if (!n8nBase) {
+        await markFailed("N8N_BASE_URL is not configured");
+        failed += 1;
+        continue;
+      }
+
+      const url = buildRecipeScheduledWebhookUrl(n8nBase, row.recipe_slug, row.account_id);
+      const body = buildRecipeTriggerPostBody(row.account_id, row.payload);
+
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        await markFailed(e instanceof Error ? e.message : "Webhook request failed");
+        failed += 1;
+        continue;
+      }
+
+      if (!res.ok) {
+        await markFailed(`Webhook returned HTTP ${res.status}`);
+        failed += 1;
+        continue;
+      }
     }
 
     const { error: completeError } = await supabase
