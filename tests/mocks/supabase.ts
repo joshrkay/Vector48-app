@@ -46,6 +46,8 @@ export function createMockAccount(
     ghl_webhook_secret: null,
     ghl_token_encrypted: null,
     ghl_voice_agent_id: null,
+    ghl_refresh_token_encrypted: null,
+    ghl_token_expires_at: null,
     trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
     stripe_customer_id: null,
     stripe_subscription_id: null,

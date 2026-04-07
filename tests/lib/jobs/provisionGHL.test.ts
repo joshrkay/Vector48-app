@@ -144,6 +144,32 @@ describe("provisionGHL", () => {
     expect(tokenUpdate!.data.ghl_token_encrypted).toBeDefined();
   });
 
+  // ── Test 3b: Token exchange stores refresh token and expiry ───────────
+
+  it("stores refresh token and expiry from token exchange", async () => {
+    setMockAccount(
+      createMockAccount({
+        provisioning_step: 1,
+        ghl_location_id: "loc_mock_001",
+        ghl_token_encrypted: null,
+      }),
+    );
+
+    const result = await provisionGHL(ACCOUNT_ID);
+    expect(result).toEqual({ success: true });
+
+    // The token exchange call should have been made
+    expect(callLog[0].method).toBe("POST");
+    expect(callLog[0].url).toBe("/oauth/locationToken");
+
+    // Step 2 update should include refresh token and expiry
+    const tokenUpdate = updateLog.find((u) => u.data.provisioning_step === 2);
+    expect(tokenUpdate).toBeDefined();
+    expect(tokenUpdate!.data.ghl_token_encrypted).toBeDefined();
+    expect(tokenUpdate!.data.ghl_refresh_token_encrypted).toBeDefined();
+    expect(tokenUpdate!.data.ghl_token_expires_at).toBeDefined();
+  });
+
   // ── Test 4: Existing webhook is not duplicated ────────────────────────
 
   it("skips webhook creation when the same webhook is already registered", async () => {

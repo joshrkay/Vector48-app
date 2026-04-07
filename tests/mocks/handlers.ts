@@ -67,7 +67,8 @@ export const handlers = [
     return HttpResponse.json({
       access_token: "mock-location-api-key-xyz",
       token_type: "Bearer",
-      expires_in: 3600,
+      expires_in: 86400,
+      refresh_token: "mock-refresh-token-xyz",
       scope: "location",
       locationId: (body as Record<string, unknown>).locationId ?? "loc_mock_001",
     });
