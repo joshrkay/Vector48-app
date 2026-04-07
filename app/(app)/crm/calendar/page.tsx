@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { tryGetAccountGhlCredentials } from "@/lib/ghl";
 import { getAppointments, getCalendars } from "@/lib/ghl/calendars";
 import { CalendarClientShell } from "@/components/crm/calendar/CalendarClientShell";
 import {
@@ -23,7 +23,7 @@ export default async function CalendarPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const session = await requireAccountForUser(supabase, { searchParams });
+  const session = await requireAccountForUser(supabase);
   if (!session) redirect("/login");
 
   const { data: account } = await supabase
@@ -51,13 +51,10 @@ export default async function CalendarPage({
   const timezone: string =
     typeof businessHours?.timezone === "string" ? businessHours.timezone : "UTC";
 
-  let auth: { locationId: string; accessToken: string } | null = null;
-  try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
-    auth = { locationId, accessToken };
-  } catch {
-    // GHL not connected — render with empty data
-  }
+  const credentials = await tryGetAccountGhlCredentials(account.id);
+  const auth = credentials
+    ? { locationId: credentials.locationId, accessToken: credentials.accessToken }
+    : null;
 
   const [appointmentsResult, calendarsResult, recipeResult] = await Promise.allSettled([
     auth

@@ -2,12 +2,12 @@ const RECIPE_SCHEDULED_WEBHOOK_PATH = "/webhook/ghl/recipe-scheduled-trigger";
 
 function buildRecipeScheduledWebhookUrl(
   n8nBaseUrl: string,
-  recipeId: string,
+  recipeSlug: string,
   accountId: string,
 ): string {
   const base = n8nBaseUrl.replace(/\/$/, "");
   const q = new URLSearchParams({
-    recipe_id: recipeId,
+    recipe_id: recipeSlug,
     account_id: accountId,
   });
   return `${base}${RECIPE_SCHEDULED_WEBHOOK_PATH}?${q.toString()}`;
@@ -27,7 +27,7 @@ function buildRecipeTriggerPostBody(
 export type RecipeTriggerRow = {
   id: string;
   account_id: string;
-  recipe_id: string;
+  recipe_slug: string;
   payload: Record<string, unknown> | null;
   attempt_count: number;
 };
@@ -35,7 +35,7 @@ export type RecipeTriggerRow = {
 export type RecipeTriggerStore = {
   listDue: (params: { nowIso: string; limit: number }) => Promise<RecipeTriggerRow[]>;
   claim: (id: string) => Promise<boolean>;
-  hasActiveActivation: (accountId: string, recipeId: string) => Promise<boolean>;
+  hasActiveActivation: (accountId: string, recipeSlug: string) => Promise<boolean>;
   markFailed: (
     id: string,
     payload: { message: string; processedAt: string; attemptCount: number },
@@ -116,7 +116,7 @@ export async function runRecipeTriggerSweep(deps: SweepDeps): Promise<SweepResul
 
     let isActive = false;
     try {
-      isActive = await deps.store.hasActiveActivation(row.account_id, row.recipe_id);
+      isActive = await deps.store.hasActiveActivation(row.account_id, row.recipe_slug);
     } catch (error) {
       return {
         ok: false,
@@ -130,7 +130,7 @@ export async function runRecipeTriggerSweep(deps: SweepDeps): Promise<SweepResul
       continue;
     }
 
-    const url = buildRecipeScheduledWebhookUrl(n8nBase, row.recipe_id, row.account_id);
+    const url = buildRecipeScheduledWebhookUrl(n8nBase, row.recipe_slug, row.account_id);
     const body = buildRecipeTriggerPostBody(row.account_id, row.payload);
 
     let response: Response;

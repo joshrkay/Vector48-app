@@ -583,6 +583,21 @@ export interface GHLTokenExchangeResponse {
   expires_in: number;
   scope: string;
   locationId: string;
+  refresh_token?: string;
+  companyId?: string;
+  userType?: string;
+}
+
+/** Full OAuth token response from `POST /oauth/token`. */
+export interface GHLOAuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token: string;
+  scope: string;
+  userType: "Company" | "Location";
+  companyId: string;
+  locationId?: string;
 }
 
 // ── Misc compatibility response aliases ────────────────────────────────────

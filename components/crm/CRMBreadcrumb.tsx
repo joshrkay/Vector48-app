@@ -25,6 +25,10 @@ export function CRMBreadcrumb() {
   const crumbs = segments.map((segment, index) => {
     const href = `/${segments.slice(0, index + 1).join("/")}`;
 
+    if (segment === "crm") {
+      return { label: "CRM", href: "/crm/contacts" };
+    }
+
     if (segment === params.id && params.id) {
       const cached = getContactFromCache(params.id);
       return {

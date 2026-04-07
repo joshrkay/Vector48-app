@@ -241,9 +241,16 @@ export type Database = {
           ghl_event_type: string;
           contact_id: string | null;
           fire_at: string;
-          fired: boolean;
+          status: "queued" | "processing" | "completed" | "failed" | "cancelled";
           payload: Record<string, unknown> | null;
+          attempt_count: number;
+          last_error: string | null;
+          processed_at: string | null;
           created_at: string;
+          recipe_id: string | null;
+          fired: boolean | null;
+          trigger_data: Record<string, unknown> | null;
+          retry_count: number | null;
         };
         Insert: {
           id?: string;
@@ -252,9 +259,16 @@ export type Database = {
           ghl_event_type: string;
           contact_id?: string | null;
           fire_at: string;
-          fired?: boolean;
+          status?: "queued" | "processing" | "completed" | "failed" | "cancelled";
           payload?: Record<string, unknown> | null;
+          attempt_count?: number;
+          last_error?: string | null;
+          processed_at?: string | null;
           created_at?: string;
+          recipe_id?: string | null;
+          fired?: boolean | null;
+          trigger_data?: Record<string, unknown> | null;
+          retry_count?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["recipe_triggers"]["Insert"]>;
       };
@@ -267,6 +281,7 @@ export type Database = {
       integration_provider: "jobber" | "servicetitan" | "google_business" | "ghl" | "twilio" | "elevenlabs";
       integration_status: "connected" | "disconnected" | "error";
       rate_limit_priority: "low" | "standard" | "high";
+      recipe_trigger_status: "queued" | "processing" | "completed" | "failed" | "cancelled";
     };
   };
 };

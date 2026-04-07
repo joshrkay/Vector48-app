@@ -1,103 +1,153 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 
+type AccountRole = Database["public"]["Enums"]["account_role"];
+
+const ROLE_PRIORITY: Record<AccountRole, number> = {
+  viewer: 0,
+  admin: 1,
+};
+
+interface AccountAccessRow {
+  accountId: string;
+  role: AccountRole;
+  createdAt: string | null;
+}
+
 export interface AccountSession {
   userId: string;
   accountId: string;
-  role: Database["public"]["Tables"]["account_users"]["Row"]["role"];
+  role: AccountRole;
 }
 
 export interface RequireAccountForUserOptions {
   request?: Request;
-  selectedAccountId?: string | null;
-  searchParams?: Record<string, string | string[] | undefined>;
+  requiredRole?: AccountRole;
 }
 
-function getAccountIdFromQuery(searchParams: URLSearchParams): string | null {
-  const raw = searchParams.get("accountId") ?? searchParams.get("account_id");
-  const normalized = raw?.trim();
-  return normalized ? normalized : null;
+function parseRequestedAccountId(request?: Request): string | null {
+  if (!request) return null;
+
+  const fromHeader = request.headers.get("x-account-id")?.trim();
+  if (fromHeader) return fromHeader;
+
+  const searchParams = new URL(request.url).searchParams;
+  const fromQuery = searchParams.get("account_id")?.trim() ?? searchParams.get("accountId")?.trim();
+
+  return fromQuery || null;
 }
 
-function getExplicitAccountIdFromRecord(
-  searchParams?: Record<string, string | string[] | undefined>,
-): string | null {
-  if (!searchParams) return null;
-  const value = searchParams.accountId ?? searchParams.account_id;
-  if (Array.isArray(value)) {
-    const normalized = value[0]?.trim();
-    return normalized ? normalized : null;
+function sortAccessRows(a: AccountAccessRow, b: AccountAccessRow): number {
+  if (ROLE_PRIORITY[a.role] !== ROLE_PRIORITY[b.role]) {
+    return ROLE_PRIORITY[b.role] - ROLE_PRIORITY[a.role];
   }
-  const normalized = value?.trim();
-  return normalized ? normalized : null;
-}
 
-async function getCookieAccountId(): Promise<string | null> {
-  try {
-    const nextHeaders = await import("next/headers");
-    const cookieStore = await nextHeaders.cookies();
-    const normalized = cookieStore.get("selected_account_id")?.value?.trim();
-    return normalized ? normalized : null;
-  } catch {
-    return null;
+  const createdAtA = a.createdAt ?? "";
+  const createdAtB = b.createdAt ?? "";
+
+  if (createdAtA !== createdAtB) {
+    return createdAtA.localeCompare(createdAtB);
   }
+
+  return a.accountId.localeCompare(b.accountId);
 }
 
-async function resolveExplicitAccountId(
-  options?: RequireAccountForUserOptions,
-): Promise<string | null> {
-  const normalizedOption = options?.selectedAccountId?.trim();
-  if (normalizedOption) return normalizedOption;
+function pickAccountAccess(
+  memberships: AccountAccessRow[],
+  requestedAccountId: string | null,
+): AccountAccessRow | null {
+  if (memberships.length === 0) return null;
 
-  if (options?.request) {
-    try {
-      const url = new URL(options.request.url);
-      const fromQuery = getAccountIdFromQuery(url.searchParams);
-      if (fromQuery) return fromQuery;
-    } catch {
-      // Ignore malformed request URLs and continue to other selectors.
+  if (requestedAccountId) {
+    return memberships.find((row) => row.accountId === requestedAccountId) ?? null;
+  }
+
+  return [...memberships].sort(sortAccessRows)[0] ?? null;
+}
+
+async function loadAccountAccessRows(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<AccountAccessRow[]> {
+  const [{ data: membershipRows }, { data: ownedAccounts }] = await Promise.all([
+    supabase
+      .from("account_users")
+      .select("account_id, role, created_at")
+      .eq("user_id", userId),
+    supabase
+      .from("accounts")
+      .select("id, created_at")
+      .eq("owner_user_id", userId),
+  ]);
+
+  const rows = new Map<string, AccountAccessRow>();
+
+  for (const membership of membershipRows ?? []) {
+    rows.set(membership.account_id, {
+      accountId: membership.account_id,
+      role: membership.role,
+      createdAt: membership.created_at,
+    });
+  }
+
+  for (const account of ownedAccounts ?? []) {
+    const existing = rows.get(account.id);
+    const ownerRow: AccountAccessRow = {
+      accountId: account.id,
+      role: "admin",
+      createdAt: account.created_at,
+    };
+
+    if (!existing) {
+      rows.set(account.id, ownerRow);
+      continue;
     }
 
-    const fromHeader = options.request.headers.get("x-account-id")?.trim();
-    if (fromHeader) return fromHeader;
+    if (ROLE_PRIORITY[ownerRow.role] > ROLE_PRIORITY[existing.role]) {
+      rows.set(account.id, ownerRow);
+    }
   }
 
-  const fromSearchParams = getExplicitAccountIdFromRecord(options?.searchParams);
-  if (fromSearchParams) return fromSearchParams;
+  return Array.from(rows.values());
+}
 
-  return getCookieAccountId();
+function hasRequiredRole(role: AccountRole, requiredRole?: AccountRole): boolean {
+  if (!requiredRole) return true;
+  return ROLE_PRIORITY[role] >= ROLE_PRIORITY[requiredRole];
+}
+
+export interface RequireAccountForUserOptions {
+  searchParams?:
+    | URLSearchParams
+    | Record<string, string | string[] | undefined>
+    | null
+    | undefined;
 }
 
 export async function requireAccountForUser(
   supabase: SupabaseClient<Database>,
-  options?: RequireAccountForUserOptions,
+  options: RequireAccountForUserOptions = {},
 ): Promise<AccountSession | null> {
+  const result = await requireAccountForUserWithRole(supabase, options);
+  return result === "forbidden" ? null : result;
+}
+
+export async function requireAccountForUserWithRole(
+  supabase: SupabaseClient<Database>,
+  options: RequireAccountForUserOptions = {},
+): Promise<AccountSession | "forbidden" | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
   if (!user) return null;
 
-  const explicitAccountId = await resolveExplicitAccountId(options);
-  const { data: memberships } = await supabase
-    .from("account_users")
-    .select("account_id, role")
-    .eq("user_id", user.id)
-    .order("account_id", { ascending: true });
+  const memberships = await loadAccountAccessRows(supabase, user.id);
+  const requestedAccountId = parseRequestedAccountId(options.request);
+  const account = pickAccountAccess(memberships, requestedAccountId);
 
-  if (!memberships || memberships.length === 0) {
-    return null;
-  }
+  if (!account) return null;
+  if (!hasRequiredRole(account.role, options.requiredRole)) return "forbidden";
 
-  const selectedMembership = explicitAccountId
-    ? memberships.find((membership) => membership.account_id === explicitAccountId)
-    : memberships[0];
-  if (!selectedMembership) {
-    return null;
-  }
-
-  return {
-    userId: user.id,
-    accountId: selectedMembership.account_id,
-    role: selectedMembership.role,
-  };
+  return { userId: user.id, accountId: account.accountId, role: account.role };
 }

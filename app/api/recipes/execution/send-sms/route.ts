@@ -1,9 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { validateExecutionAuth } from "@/lib/recipes/executionAuth";
+import { getExecutionAuthConfigError, validateExecutionAuth } from "@/lib/recipes/executionAuth";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createConversation, getConversations, sendMessage } from "@/lib/ghl/conversations";
 
 export async function POST(request: NextRequest) {
+  const authConfigError = getExecutionAuthConfigError();
+  if (authConfigError) {
+    return NextResponse.json({ error: authConfigError }, { status: 500 });
+  }
+
   let body: {
     accountId: string;
     contactId: string;

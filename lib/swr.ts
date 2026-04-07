@@ -148,19 +148,46 @@ export default function useSWR<Data>(
       return;
     }
 
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+    let consecutiveErrors = 0;
+
+    const schedule = () => {
+      const delay = Math.min(
+        refreshIntervalMs * Math.pow(2, consecutiveErrors),
+        300_000,
+      );
+      timeoutId = setTimeout(tick, delay);
+    };
+
     const tick = () => {
+      if (cancelled) return;
       runFetcher(serializedKey, key, fetcher)
-        .then((result) => setData(result))
-        .catch((fetchError: unknown) => {
-          setError(fetchError instanceof Error ? fetchError : new Error("Failed to fetch data"));
-          if (!keepPreviousData) {
-            setData(undefined);
+        .then((result) => {
+          if (!cancelled) {
+            consecutiveErrors = 0;
+            setData(result);
           }
+        })
+        .catch((fetchError: unknown) => {
+          if (!cancelled) {
+            consecutiveErrors++;
+            setError(fetchError instanceof Error ? fetchError : new Error("Failed to fetch data"));
+            if (!keepPreviousData) {
+              setData(undefined);
+            }
+          }
+        })
+        .finally(() => {
+          if (!cancelled) schedule();
         });
     };
 
-    const id = window.setInterval(tick, refreshIntervalMs);
-    return () => window.clearInterval(id);
+    timeoutId = setTimeout(tick, refreshIntervalMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, [fetcher, keepPreviousData, key, refreshIntervalMs, serializedKey]);
 
   return { data, error, isLoading };

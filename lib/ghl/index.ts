@@ -11,6 +11,7 @@ export {
   decryptToken,
   getDecryptedToken,
   getAccountGhlCredentials,
+  tryGetAccountGhlCredentials,
   getGHLClient,
   getAgencyClient,
 } from "./token";
