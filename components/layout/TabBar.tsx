@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Kanban,
   CalendarDays,
+  Megaphone,
   BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ const crmTabs = [
   { label: "Inbox", href: "/crm/inbox", icon: MessageSquare },
   { label: "Pipeline", href: "/crm/pipeline", icon: Kanban },
   { label: "Calendar", href: "/crm/calendar", icon: CalendarDays },
+  { label: "Campaigns", href: "/crm/campaigns", icon: Megaphone },
   { label: "Reports", href: "/crm/reports", icon: BarChart3 },
 ] as const;
 
