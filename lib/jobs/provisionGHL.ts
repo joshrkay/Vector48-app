@@ -21,7 +21,6 @@ import type { Database } from "@/lib/supabase/types";
 type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
 type AccountsUpdate = Database["public"]["Tables"]["accounts"]["Update"];
 type ProvisioningStatus = AccountRow["ghl_provisioning_status"];
-type LegacyProvisioningStatus = AccountRow["provisioning_status"];
 type FailedStep =
   | "create_location"
   | "store_credentials"
@@ -127,19 +126,13 @@ function inferTimezone(addressState: string | null, serviceArea: string | null):
   return "America/New_York";
 }
 
-function toLegacyStatus(status: ProvisioningStatus): LegacyProvisioningStatus {
-  if (status === "failed") return "error";
-  return status;
-}
-
 function buildCompletionCompatFields(): Pick<
   AccountsUpdate,
-  "onboarding_completed_at" | "onboarding_done_at" | "provisioning_completed_at"
+  "onboarding_completed_at" | "provisioning_completed_at"
 > {
   const now = new Date().toISOString();
   return {
     onboarding_completed_at: now,
-    onboarding_done_at: now,
     provisioning_completed_at: now,
   };
 }
@@ -271,7 +264,6 @@ async function writeProvisioningState(
 ) {
   await updateAccount(accountId, {
     ghl_provisioning_status: status,
-    provisioning_status: toLegacyStatus(status),
     ...extra,
   });
 }
@@ -287,7 +279,6 @@ async function failProvisioning(
   try {
     await writeProvisioningState(accountId, "failed", {
       ghl_provisioning_error: safeMessage,
-      provisioning_error: safeMessage,
     });
   } catch (writeError) {
     console.error("[provisionGHL] failed to write failure state", writeError);
@@ -443,7 +434,6 @@ export async function provisionGHL(accountId: string): Promise<ProvisionResult> 
   try {
     await writeProvisioningState(accountId, "in_progress", {
       ghl_provisioning_error: null,
-      provisioning_error: null,
     });
   } catch (error) {
     return failProvisioning(accountId, "create_location", error);
@@ -570,8 +560,6 @@ export async function provisionGHL(accountId: string): Promise<ProvisionResult> 
   try {
     await writeProvisioningState(accountId, "complete", {
       ghl_provisioning_error: null,
-      provisioning_error: null,
-      provisioning_step: 6,
       ...buildCompletionCompatFields(),
     });
     return { success: true };
