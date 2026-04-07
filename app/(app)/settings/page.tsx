@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { computeIntegrationWarnings } from "@/lib/settings/integrationWarnings";
@@ -12,11 +13,15 @@ export default async function SettingsRoutePage() {
   if (!user) {
     redirect("/login");
   }
+  const session = await requireAccountForUser(supabase);
+  if (!session) {
+    redirect("/login");
+  }
 
   const { data: account } = await supabase
     .from("accounts")
     .select("*")
-    .eq("owner_user_id", user.id)
+    .eq("id", session.accountId)
     .maybeSingle();
 
   if (!account) {

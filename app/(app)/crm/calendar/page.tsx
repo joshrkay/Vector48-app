@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
-import { getAccountGhlCredentials } from "@/lib/ghl";
+import { tryGetAccountGhlCredentials } from "@/lib/ghl";
 import { getAppointments, getCalendars } from "@/lib/ghl/calendars";
 import { CalendarClientShell } from "@/components/crm/calendar/CalendarClientShell";
 import {
@@ -13,26 +14,30 @@ import {
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams?: { weekStart?: string };
+  searchParams?: Promise<{ weekStart?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const session = await requireAccountForUser(supabase);
+  if (!session) redirect("/login");
+
   const { data: account } = await supabase
     .from("accounts")
     .select("id, business_hours, ghl_provisioning_status")
-    .eq("owner_user_id", user.id)
-    .single();
+    .eq("id", session.accountId)
+    .maybeSingle();
   if (!account) redirect("/login");
 
   // Determine week start from URL param or default to current Monday
   let weekStart: Date;
-  if (searchParams?.weekStart) {
+  if (resolvedSearchParams?.weekStart) {
     try {
-      weekStart = fromDateString(searchParams.weekStart);
+      weekStart = fromDateString(resolvedSearchParams.weekStart);
     } catch {
       weekStart = getStartOfWeek(new Date());
     }
@@ -46,13 +51,10 @@ export default async function CalendarPage({
   const timezone: string =
     typeof businessHours?.timezone === "string" ? businessHours.timezone : "UTC";
 
-  let auth: { locationId: string; accessToken: string } | null = null;
-  try {
-    const { locationId, accessToken } = await getAccountGhlCredentials(account.id);
-    auth = { locationId, accessToken };
-  } catch {
-    // GHL not connected — render with empty data
-  }
+  const credentials = await tryGetAccountGhlCredentials(account.id);
+  const auth = credentials
+    ? { locationId: credentials.locationId, accessToken: credentials.accessToken }
+    : null;
 
   const [appointmentsResult, calendarsResult, recipeResult] = await Promise.allSettled([
     auth

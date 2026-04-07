@@ -5,11 +5,61 @@ import {
   buildRecipeTriggerPostBody,
   verifyCronBearer,
 } from "@/lib/cron/recipeTriggerDelivery";
+import { RECIPE_TRIGGER_CANONICAL_PENDING_STATUS } from "@/lib/recipes/schemaContracts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const BATCH_LIMIT = 50;
+
+type DueTriggerRow = {
+  id: string;
+  account_id: string;
+  recipe_slug: string;
+  payload: Record<string, unknown> | null;
+  attempt_count: number;
+};
+
+async function listDueTriggers(nowIso: string): Promise<{ rows: DueTriggerRow[]; error: string | null }> {
+  const supabase = getSupabaseAdmin();
+
+  const canonical = await supabase
+    .from("recipe_triggers")
+    .select("id, account_id, recipe_slug, payload, attempt_count")
+    .eq("status", RECIPE_TRIGGER_CANONICAL_PENDING_STATUS)
+    .lte("fire_at", nowIso)
+    .order("fire_at", { ascending: true })
+    .limit(BATCH_LIMIT);
+
+  if (!canonical.error) {
+    return { rows: (canonical.data ?? []) as DueTriggerRow[], error: null };
+  }
+
+  // Compatibility path for rollback windows where recipe_triggers still uses
+  // legacy columns (recipe_id + fired boolean) instead of status.
+  const legacy = await supabase
+    .from("recipe_triggers")
+    .select("id, account_id, recipe_id, payload, attempt_count")
+    .eq("fired", false)
+    .lte("fire_at", nowIso)
+    .order("fire_at", { ascending: true })
+    .limit(BATCH_LIMIT);
+
+  if (legacy.error) {
+    return { rows: [], error: canonical.error.message };
+  }
+
+  return {
+    rows: (legacy.data ?? []).map((row) => ({
+      id: row.id,
+      account_id: row.account_id,
+      recipe_slug: row.recipe_id ?? "",
+      payload: row.payload,
+      attempt_count: row.attempt_count ?? 0,
+    })),
+    error: null,
+  };
+}
 
 async function runRecipeTriggerSweep(): Promise<NextResponse> {
   const n8nBase = process.env.N8N_BASE_URL?.trim();
@@ -20,28 +70,21 @@ async function runRecipeTriggerSweep(): Promise<NextResponse> {
   const supabase = getSupabaseAdmin();
   const nowIso = new Date().toISOString();
 
-  const { data: due, error: listError } = await supabase
-    .from("recipe_triggers")
-    .select("id, account_id, recipe_id, payload, attempt_count")
-    .eq("status", "queued")
-    .lte("fire_at", nowIso)
-    .order("fire_at", { ascending: true })
-    .limit(BATCH_LIMIT);
-
+  const { rows: due, error: listError } = await listDueTriggers(nowIso);
   if (listError) {
-    return NextResponse.json({ error: listError.message }, { status: 500 });
+    return NextResponse.json({ error: listError }, { status: 500 });
   }
 
   let processed = 0;
   let failed = 0;
   let skipped = 0;
 
-  for (const row of due ?? []) {
+  for (const row of due) {
     const { data: claimed, error: claimError } = await supabase
       .from("recipe_triggers")
       .update({ status: "processing" })
       .eq("id", row.id)
-      .eq("status", "queued")
+      .eq("status", RECIPE_TRIGGER_CANONICAL_PENDING_STATUS)
       .select("id")
       .maybeSingle();
 
@@ -66,11 +109,17 @@ async function runRecipeTriggerSweep(): Promise<NextResponse> {
         .eq("id", row.id);
     };
 
+    if (!row.recipe_slug) {
+      await markFailed("Trigger is missing recipe_slug");
+      failed += 1;
+      continue;
+    }
+
     const { data: activation } = await supabase
       .from("recipe_activations")
       .select("id")
       .eq("account_id", row.account_id)
-      .eq("recipe_id", row.recipe_id)
+      .eq("recipe_slug", row.recipe_slug)
       .eq("status", "active")
       .maybeSingle();
 
@@ -80,7 +129,7 @@ async function runRecipeTriggerSweep(): Promise<NextResponse> {
       continue;
     }
 
-    const url = buildRecipeScheduledWebhookUrl(n8nBase, row.recipe_id, row.account_id);
+    const url = buildRecipeScheduledWebhookUrl(n8nBase, row.recipe_slug, row.account_id);
     const body = buildRecipeTriggerPostBody(row.account_id, row.payload);
 
     let res: Response;

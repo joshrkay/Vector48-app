@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {
+    root: import.meta.dirname,
+  },
   typescript: {
     // Type-checking is handled via tsc in CI; don't block Vercel builds on TS errors.
     ignoreBuildErrors: true,
@@ -13,9 +16,7 @@ const nextConfig = {
     ],
   },
   // pdf-parse is optional for the extract-pdf route; keep it out of the RSC bundle.
-  experimental: {
-    serverComponentsExternalPackages: ["pdf-parse"],
-  },
+  serverExternalPackages: ["pdf-parse"],
   async redirects() {
     return [
       {

@@ -504,6 +504,9 @@ export class GHLClient {
         Authorization: `Bearer ${this.token}`,
         Version: GHL_API_VERSION,
       };
+      if (this.authMode === "location" && this.locationId) {
+        headers.locationId = this.locationId;
+      }
       if (options?.body !== undefined) {
         headers["Content-Type"] = "application/json";
       }

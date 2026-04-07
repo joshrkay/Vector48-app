@@ -4,6 +4,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { TrialBanner } from "@/components/billing/TrialBanner";
 import { TrialGate } from "@/components/billing/TrialGate";
 import { VoiceButton } from "@/components/shared/VoiceButton";
+import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
@@ -29,12 +30,16 @@ export default async function AppLayout({
     } = await supabase.auth.getUser();
 
     if (user) {
-      const { data: account } = await supabase
-        .from("accounts")
-        .select(
-          "id, business_name, plan_slug, trial_ends_at, vertical, stripe_subscription_id",
-        )
-        .single();
+      const session = await requireAccountForUser(supabase);
+      const { data: account } = session
+        ? await supabase
+            .from("accounts")
+            .select(
+              "id, business_name, plan_slug, trial_ends_at, vertical, stripe_subscription_id",
+            )
+            .eq("id", session.accountId)
+            .maybeSingle()
+        : { data: null };
 
       if (account) {
         accountId = account.id;

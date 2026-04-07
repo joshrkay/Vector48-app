@@ -6,8 +6,9 @@ import { createServerClient } from "@/lib/supabase/server";
 
 export async function PATCH(
   _request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const supabase = await createServerClient();
   const session = await requireAccountForUser(supabase);
   if (!session) {
@@ -17,7 +18,7 @@ export async function PATCH(
   try {
     const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
     const result = await updateAppointment(
-      params.id,
+      id,
       { status: "cancelled" },
       { locationId, apiKey: accessToken },
     );

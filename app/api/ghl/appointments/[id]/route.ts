@@ -7,8 +7,9 @@ import type { GHLUpdateAppointmentPayload } from "@/lib/ghl/types";
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const supabase = await createServerClient();
   const session = await requireAccountForUser(supabase);
   if (!session) {
@@ -17,7 +18,7 @@ export async function GET(
 
   try {
     const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await getAppointment(params.id, { locationId, apiKey: accessToken });
+    const result = await getAppointment(id, { locationId, apiKey: accessToken });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-appointment-get]", error);
@@ -27,8 +28,9 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const supabase = await createServerClient();
   const session = await requireAccountForUser(supabase);
   if (!session) {
@@ -44,7 +46,7 @@ export async function PUT(
 
   try {
     const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await updateAppointment(params.id, body, { locationId, apiKey: accessToken });
+    const result = await updateAppointment(id, body, { locationId, apiKey: accessToken });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-appointment-update]", error);
