@@ -17,7 +17,15 @@ const SUPPORTED_EVENT_TYPES: Record<string, AutomationEventInsert["event_type"]>
   ConversationUnread: "conversation_unread",
 };
 
-const SECRET_KEYS = new Set(["token", "verificationToken", "webhookToken"]);
+const SECRET_KEYS = new Set([
+  "token",
+  "verificationToken",
+  "webhookToken",
+  "access_token",
+  "refresh_token",
+  "apiKey",
+  "api_key",
+]);
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -77,12 +85,20 @@ function getContactRecord(payload: Record<string, unknown>): Record<string, unkn
 
 function formatContactName(payload: Record<string, unknown>): string | null {
   const contact = getContactRecord(payload);
-  const full = pickString(payload, ["contactName", "name"]) ?? pickString(contact, ["contactName", "name"]);
+
+  const fromContactFull = pickString(contact, ["contactName", "name"]);
+  if (fromContactFull) return fromContactFull;
+
+  const contactFirst = pickString(contact, ["firstName"]);
+  const contactLast = pickString(contact, ["lastName"]);
+  if (contactFirst && contactLast) return `${contactFirst} ${contactLast}`;
+  if (contactFirst ?? contactLast) return contactFirst ?? contactLast;
+
+  const full = pickString(payload, ["contactName", "name"]);
   if (full) return full;
 
-  const first = pickString(payload, ["firstName"]) ?? pickString(contact, ["firstName"]);
-  const last = pickString(payload, ["lastName"]) ?? pickString(contact, ["lastName"]);
-
+  const first = pickString(payload, ["firstName"]);
+  const last = pickString(payload, ["lastName"]);
   if (first && last) return `${first} ${last}`;
   return first ?? last;
 }
