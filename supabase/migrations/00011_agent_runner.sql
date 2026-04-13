@@ -41,6 +41,9 @@ CREATE TABLE tenant_agents (
 
   -- Operator-controlled, copied from the archetype on insert.
   -- Tenants do NOT edit this — exposing tools is a security boundary.
+  -- Enforcement: the tenant_agents_protect_immutable trigger below rejects
+  -- updates to tool_config (and to id/account_id/recipe_slug) from any
+  -- caller that is not the service role.
   tool_config              JSONB NOT NULL DEFAULT '{}'::jsonb,
 
   -- Per-agent spend + rate limits. NULL means inherit plan default.
@@ -54,7 +57,12 @@ CREATE TABLE tenant_agents (
   CONSTRAINT tenant_agents_status_check
     CHECK (status IN ('active', 'paused', 'disabled')),
   CONSTRAINT tenant_agents_account_recipe_unique
-    UNIQUE (account_id, recipe_slug)
+    UNIQUE (account_id, recipe_slug),
+  -- Composite key is a FK target for tenant_agent_sessions so that
+  -- (tenant_agent_id, account_id) rows cannot drift out of sync and
+  -- leak one tenant's sessions under another tenant's RLS filter.
+  CONSTRAINT tenant_agents_id_account_key
+    UNIQUE (id, account_id)
 );
 
 CREATE INDEX tenant_agents_account_idx
@@ -70,17 +78,31 @@ CREATE INDEX tenant_agents_status_idx
 
 CREATE TABLE tenant_agent_sessions (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_agent_id  UUID NOT NULL REFERENCES tenant_agents(id) ON DELETE CASCADE,
-  -- Denormalised account_id for cheap RLS — matches tenant_agents.account_id
+  tenant_agent_id  UUID NOT NULL,
+  -- Denormalised account_id for cheap RLS. The composite FK below
+  -- (tenant_agent_id, account_id) -> tenant_agents (id, account_id)
+  -- enforces that this value always matches the agent's account, so a
+  -- caller cannot insert a session with a mismatched account_id and
+  -- have it surface under the wrong tenant's RLS filter.
   account_id       UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   contact_id       TEXT,
   messages         JSONB NOT NULL DEFAULT '[]'::jsonb,
   tool_uses        JSONB NOT NULL DEFAULT '[]'::jsonb,
   last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT tenant_agent_sessions_agent_account_fk
+    FOREIGN KEY (tenant_agent_id, account_id)
+    REFERENCES tenant_agents (id, account_id) ON DELETE CASCADE
 );
 
-CREATE INDEX tenant_agent_sessions_lookup_idx
+-- UNIQUE so the runner can SELECT … FOR UPDATE on
+-- (tenant_agent_id, contact_id) to resume a multi-turn conversation
+-- without ambiguous duplicates under concurrent writes. Postgres's
+-- default NULLS DISTINCT semantics still allow multiple rows with
+-- NULL contact_id, which is acceptable — in practice sessions are
+-- only created once we have a contact to converse with.
+CREATE UNIQUE INDEX tenant_agent_sessions_lookup_idx
   ON tenant_agent_sessions (tenant_agent_id, contact_id);
 
 CREATE INDEX tenant_agent_sessions_account_idx
@@ -115,7 +137,7 @@ CREATE INDEX llm_usage_events_recipe_idx
   ON llm_usage_events (account_id, recipe_slug, created_at DESC);
 
 -- ============================================================
--- updated_at trigger for tenant_agents
+-- updated_at + immutable-column protection triggers for tenant_agents
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION tenant_agents_set_updated_at()
@@ -129,6 +151,72 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER tenant_agents_updated_at
   BEFORE UPDATE ON tenant_agents
   FOR EACH ROW EXECUTE FUNCTION tenant_agents_set_updated_at();
+
+-- Operator-only and immutable columns. The tenant_agents_update RLS
+-- policy grants admins UPDATE on the row, which PostgREST exposes at
+-- column granularity. Without this trigger, an admin could PATCH
+-- tool_config (enabling tools the operator never approved) or
+-- recipe_slug / account_id / id (rebinding an agent to another tenant).
+--
+-- The check is bypassed for the service role — that's how the runner,
+-- the activation API, and admin scripts edit these fields.
+CREATE OR REPLACE FUNCTION tenant_agents_protect_immutable()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role' THEN
+    IF NEW.id IS DISTINCT FROM OLD.id THEN
+      RAISE EXCEPTION 'tenant_agents.id is immutable';
+    END IF;
+    IF NEW.account_id IS DISTINCT FROM OLD.account_id THEN
+      RAISE EXCEPTION 'tenant_agents.account_id is immutable';
+    END IF;
+    IF NEW.recipe_slug IS DISTINCT FROM OLD.recipe_slug THEN
+      RAISE EXCEPTION 'tenant_agents.recipe_slug is immutable';
+    END IF;
+    IF NEW.tool_config IS DISTINCT FROM OLD.tool_config THEN
+      RAISE EXCEPTION 'tenant_agents.tool_config is operator-controlled and cannot be updated by tenants';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tenant_agents_protect_immutable_trg
+  BEFORE UPDATE ON tenant_agents
+  FOR EACH ROW EXECUTE FUNCTION tenant_agents_protect_immutable();
+
+-- ============================================================
+-- Monthly spend aggregation (called from lib/recipes/runner/spendCap.ts)
+-- ============================================================
+
+-- Server-side sum so the runner never streams thousands of rows back to
+-- Node just to add them up. Runs before every Claude call via the
+-- tracked client — latency and bandwidth matter.
+--
+-- SECURITY DEFINER because llm_usage_events has per-account RLS. The
+-- caller is always the service role or the row's own account, so
+-- widening to SECURITY DEFINER plus an explicit account_id argument is
+-- safe: the function only ever sums rows for the supplied account.
+CREATE OR REPLACE FUNCTION get_monthly_spend_micros(
+  p_account_id  UUID,
+  p_recipe_slug TEXT
+) RETURNS BIGINT
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(SUM(cost_micros), 0)::BIGINT
+  FROM llm_usage_events
+  WHERE account_id = p_account_id
+    AND recipe_slug = p_recipe_slug
+    AND created_at >= date_trunc('month', (now() AT TIME ZONE 'UTC'));
+$$;
+
+-- Let authenticated users and the service role call the RPC. The
+-- function body scopes by p_account_id, and Supabase's RLS on the
+-- underlying table still applies to any direct SELECT.
+GRANT EXECUTE ON FUNCTION get_monthly_spend_micros(UUID, TEXT)
+  TO authenticated, service_role;
 
 -- ============================================================
 -- RLS

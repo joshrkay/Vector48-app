@@ -1,9 +1,23 @@
 // ---------------------------------------------------------------------------
 // Anthropic Model Pricing
 //
-// Cost per million tokens for each model the recipe runner uses. Prices are
-// in micros (USD * 1_000_000) so every calculation stays in integer math —
-// floats accumulate rounding error across millions of calls.
+// Cost per token for each model the recipe runner uses. Stored as USD
+// micros (1 USD = 1_000_000 micros).
+//
+// A model priced at $X / MTok is exactly X micros per token, so $1/MTok
+// -> 1, $5/MTok -> 5, $3/MTok -> 3, and so on. The sub-dollar cache rates
+// ($0.10/MTok, $1.25/MTok) become 0.1 and 1.25 — floating-point values
+// per-token. We accept float math at the per-token level because:
+//
+//   (1) computeCostMicros() always Math.round()s the final sum, so the
+//       value written to the bigint cost_micros column is an integer.
+//   (2) double precision has ~15 significant digits, which is several
+//       orders of magnitude more than any single recipe call can consume
+//       (even a 1M-token Opus run is well inside safe-integer range).
+//
+// The aggregation that actually matters for cost accuracy (monthly spend)
+// is done in Postgres via get_monthly_spend_micros() summing bigints —
+// no float drift there either. See migration 00011_agent_runner.sql.
 //
 // Source: https://www.anthropic.com/pricing  (verify quarterly)
 // ---------------------------------------------------------------------------

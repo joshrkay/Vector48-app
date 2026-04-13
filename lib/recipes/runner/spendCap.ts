@@ -49,28 +49,29 @@ export interface AgentSpendInfo {
 /**
  * Minimal subset of the Supabase client that getMonthlySpendMicros needs.
  * Lets tests inject a fake without pulling in @supabase/supabase-js.
+ *
+ * We only use .rpc() — the aggregation is a SECURITY DEFINER SQL function
+ * (get_monthly_spend_micros) defined in migration 00011 so the database
+ * returns a single BIGINT instead of streaming every usage row to Node.
+ * Runs before every Claude call, so the bandwidth savings compound.
  */
 export interface SpendCapSupabaseClient {
-  from: (table: string) => {
-    select: (cols: string) => {
-      eq: (col: string, value: string) => {
-        eq: (col: string, value: string) => {
-          gte: (
-            col: string,
-            value: string,
-          ) => Promise<{
-            data: Array<{ cost_micros: number | string | null }> | null;
-            error: { message: string } | null;
-          }>;
-        };
-      };
-    };
-  };
+  rpc: (
+    fn: "get_monthly_spend_micros",
+    args: { p_account_id: string; p_recipe_slug: string },
+  ) => Promise<{
+    data: number | string | null;
+    error: { message: string } | null;
+  }>;
 }
 
 /**
  * Returns the sum of cost_micros for this account+recipe in the current
  * calendar month (UTC). Used by enforceSpendCap and by the Usage dashboard.
+ *
+ * The sum happens in Postgres via get_monthly_spend_micros (migration
+ * 00011). Supabase returns BIGINT values as JS numbers when small and
+ * strings when they exceed Number.MAX_SAFE_INTEGER, so we normalise here.
  */
 export async function getMonthlySpendMicros(
   accountId: string,
@@ -84,19 +85,17 @@ export async function getMonthlySpendMicros(
     const { getSupabaseAdmin } = await import("../../supabase/admin.ts");
     supabase = getSupabaseAdmin() as unknown as SpendCapSupabaseClient;
   }
-  const monthStart = startOfUtcMonth(new Date());
 
-  const { data, error } = await supabase
-    .from("llm_usage_events")
-    .select("cost_micros")
-    .eq("account_id", accountId)
-    .eq("recipe_slug", recipeSlug)
-    .gte("created_at", monthStart.toISOString());
+  const { data, error } = await supabase.rpc("get_monthly_spend_micros", {
+    p_account_id: accountId,
+    p_recipe_slug: recipeSlug,
+  });
 
   if (error) {
     // Fail-open on read errors: the tracked client will still log usage
     // post-hoc, and we'd rather serve the request than block on a Supabase
-    // hiccup. Caller can switch to fail-closed by checking the throw.
+    // hiccup. Caller can switch to fail-closed by catching this module's
+    // warnings in the runner.
     // eslint-disable-next-line no-console
     console.warn(
       `[recipes/runner/spendCap] failed to read usage for ${accountId}/${recipeSlug}:`,
@@ -105,10 +104,8 @@ export async function getMonthlySpendMicros(
     return 0;
   }
 
-  return (data ?? []).reduce(
-    (sum, row) => sum + Number(row.cost_micros ?? 0),
-    0,
-  );
+  if (data == null) return 0;
+  return Number(data);
 }
 
 /**
@@ -137,6 +134,3 @@ export async function enforceSpendCap(
   }
 }
 
-function startOfUtcMonth(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0));
-}
