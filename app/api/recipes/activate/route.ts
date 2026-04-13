@@ -7,6 +7,8 @@ import {
   getRecipeDefinitionOrThrow,
   validateActivationRequest,
 } from "@/lib/recipes/activationValidator";
+import { AGENT_SDK_RECIPE_SLUGS } from "@/lib/recipes/runner/archetypes";
+import { seedAgentFromArchetype } from "@/lib/recipes/runner/seedAgent";
 import { createServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
@@ -96,6 +98,49 @@ export async function POST(request: Request) {
     recipeSlug: recipe.slug,
     config: validation.config,
   });
+
+  // Agent SDK runner seeding (Phase 2): when the slug has a registered
+  // archetype, copy its defaults into a tenant_agents row so the new
+  // runner has something to load. This is a best-effort side effect —
+  // the n8n provisioning path above is still the authoritative flow
+  // until the Phase 5 cutover. Seeding failures must not 500 the
+  // activate call, so we log and continue.
+  //
+  // Idempotent: the helper upserts on (account_id, recipe_slug), so
+  // re-activating a previously-activated recipe returns the existing
+  // row rather than conflicting.
+  if (AGENT_SDK_RECIPE_SLUGS.includes(recipe.slug)) {
+    try {
+      // Carry through any tenant-supplied override that the runner cares
+      // about. Today the only mapped override is
+      // `notification_contact_id` for ai-phone-answering, which the
+      // handler reads from tool_config.
+      const toolConfigOverride: Record<string, unknown> = {};
+      const notificationId = (validation.config as Record<string, unknown>)
+        .notification_contact_id;
+      if (typeof notificationId === "string" && notificationId.length > 0) {
+        toolConfigOverride.notification_contact_id = notificationId;
+      }
+
+      await seedAgentFromArchetype({
+        accountId: session.accountId,
+        recipeSlug: recipe.slug,
+        overrides:
+          Object.keys(toolConfigOverride).length > 0
+            ? { tool_config: toolConfigOverride }
+            : undefined,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[recipes/activate] failed to seed tenant_agents for ${session.accountId}/${recipe.slug}:`,
+        err,
+      );
+      // Swallow — the activation itself succeeded and the n8n engine
+      // still runs. Phase 5 cutover is gated on backfill + shadow mode,
+      // not on this path being infallible.
+    }
+  }
 
   return NextResponse.json({ success: true, activationId: inserted.id });
 }

@@ -12,12 +12,12 @@
 // it at execution time.
 // ---------------------------------------------------------------------------
 
-import { aiPhoneAnsweringArchetype } from "./archetypes/ai-phone-answering";
-import { appointmentReminderArchetype } from "./archetypes/appointment-reminder";
-import { estimateFollowUpArchetype } from "./archetypes/estimate-follow-up";
-import { leadQualificationArchetype } from "./archetypes/lead-qualification";
-import { missedCallTextBackArchetype } from "./archetypes/missed-call-text-back";
-import { reviewRequestArchetype } from "./archetypes/review-request";
+import { aiPhoneAnsweringArchetype } from "./archetypes/ai-phone-answering.ts";
+import { appointmentReminderArchetype } from "./archetypes/appointment-reminder.ts";
+import { estimateFollowUpArchetype } from "./archetypes/estimate-follow-up.ts";
+import { leadQualificationArchetype } from "./archetypes/lead-qualification.ts";
+import { missedCallTextBackArchetype } from "./archetypes/missed-call-text-back.ts";
+import { reviewRequestArchetype } from "./archetypes/review-request.ts";
 
 export interface RecipeArchetype {
   /** Recipe slug — must match lib/recipes/catalog.ts. */
