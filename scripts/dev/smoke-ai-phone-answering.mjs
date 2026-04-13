@@ -339,22 +339,22 @@ try {
     deps: { ghlPost: mockGhlPost },
   });
 
-  // Synthetic GHL CallCompleted payload
+  // Synthetic GHL CallCompleted payload — passed raw to runRecipe
+  // after the webhook-decoupling refactor. Each handler parses its
+  // own trigger shape internally.
   const trigger = {
-    call: {
-      type: "CallCompleted",
-      locationId: "loc-local",
-      contactId: "ghl-caller-smoke",
-      contact: {
-        firstName: "Janet",
-        lastName: "Smith",
-        name: "Janet Smith",
-      },
-      callDuration: 137,
-      direction: "inbound",
-      transcription:
-        "Hi this is Janet Smith, I live at 42 Oak Lane. I've got a leak under the kitchen sink and water is pooling on the floor. Can someone come tomorrow morning? Please call me back at 555-1234.",
+    type: "CallCompleted",
+    locationId: "loc-local",
+    contactId: "ghl-caller-smoke",
+    contact: {
+      firstName: "Janet",
+      lastName: "Smith",
+      name: "Janet Smith",
     },
+    callDuration: 137,
+    direction: "inbound",
+    transcription:
+      "Hi this is Janet Smith, I live at 42 Oak Lane. I've got a leak under the kitchen sink and water is pooling on the floor. Can someone come tomorrow morning? Please call me back at 555-1234.",
   };
 
   console.log(`\n== Calling runRecipe in --mode=${mode} ==`);

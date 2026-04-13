@@ -128,16 +128,14 @@ function fakeGhlPost(): {
 }
 
 const baseTrigger: PhoneAnsweringTrigger = {
-  call: {
-    type: "CallCompleted",
-    locationId: "loc-1",
-    contactId: "ghl-caller-7",
-    contact: { firstName: "Janet", lastName: "Smith", name: "Janet Smith" },
-    callDuration: 124,
-    direction: "inbound",
-    transcription:
-      "Hi this is Janet Smith calling about a leak under the sink. Can someone come take a look tomorrow morning?",
-  },
+  type: "CallCompleted",
+  locationId: "loc-1",
+  contactId: "ghl-caller-7",
+  contact: { firstName: "Janet", lastName: "Smith", name: "Janet Smith" },
+  callDuration: 124,
+  direction: "inbound",
+  transcription:
+    "Hi this is Janet Smith calling about a leak under the sink. Can someone come take a look tomorrow morning?",
 };
 
 describe("aiPhoneAnswering handler", () => {
@@ -186,19 +184,19 @@ describe("aiPhoneAnswering handler", () => {
     const { ctx, captured } = fakeCtx();
 
     const trigger: PhoneAnsweringTrigger = {
-      call: {
-        type: "CallCompleted",
-        locationId: "loc-1",
-        contactId: "ghl-caller-7",
-        transcription: "",
-        summary: undefined,
-      },
+      type: "CallCompleted",
+      locationId: "loc-1",
+      contactId: "ghl-caller-7",
+      transcription: "",
+      summary: undefined,
     };
 
     const result = await handler(ctx as unknown as RecipeContext, trigger);
 
     assert.equal(result.outcome, "skipped_no_transcript");
-    assert.equal(result.summary, null);
+    // Summary is now a human-readable string, not null — it's what
+    // the webhook route writes into automation_events.summary.
+    assert.match(result.summary ?? "", /no transcript/);
     assert.equal(result.smsMessageId, null);
     assert.equal(captured.ai, null, "Claude should not be called");
     assert.equal(calls.length, 0, "GHL should not be called");
@@ -210,12 +208,10 @@ describe("aiPhoneAnswering handler", () => {
     const { ctx } = fakeCtx();
 
     const trigger: PhoneAnsweringTrigger = {
-      call: {
-        type: "CallCompleted",
-        locationId: "loc-1",
-        contactId: "ghl-caller-7",
-        summary: "Customer booked a tune-up for Friday.",
-      },
+      type: "CallCompleted",
+      locationId: "loc-1",
+      contactId: "ghl-caller-7",
+      summary: "Customer booked a tune-up for Friday.",
     };
 
     const result = await handler(ctx as unknown as RecipeContext, trigger);

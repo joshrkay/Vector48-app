@@ -52,6 +52,17 @@ if (mode !== "local-mocked" && mode !== "local-real") {
   process.exit(1);
 }
 
+const recipeSlug = args.get("recipe") ?? "ai-phone-answering";
+if (
+  recipeSlug !== "ai-phone-answering" &&
+  recipeSlug !== "missed-call-text-back"
+) {
+  console.error(
+    `Unknown --recipe=${recipeSlug}. Use ai-phone-answering or missed-call-text-back.`,
+  );
+  process.exit(1);
+}
+
 // ── Env loading ────────────────────────────────────────────────────────────
 
 function loadEnvLocal() {
@@ -229,37 +240,47 @@ try {
   await client.query("DELETE FROM llm_usage_events WHERE account_id = $1", [accountId]);
   await client.query(
     "DELETE FROM automation_events WHERE account_id = $1 AND recipe_slug = $2",
-    [accountId, "ai-phone-answering"],
+    [accountId, recipeSlug],
   );
-  await client.query("DELETE FROM tenant_agents WHERE account_id = $1", [accountId]);
+  await client.query(
+    "DELETE FROM tenant_agents WHERE account_id = $1 AND recipe_slug = $2",
+    [accountId, recipeSlug],
+  );
 
   // Seed via the real helper (exercises the select-then-insert path).
   const { seedAgentFromArchetype } = await import(
     "../../lib/recipes/runner/seedAgent.ts"
   );
-  console.log("\n== Seeding tenant_agents row ==");
+  console.log(`\n== Seeding tenant_agents row for ${recipeSlug} ==`);
+  const seedOverrides =
+    recipeSlug === "ai-phone-answering"
+      ? { tool_config: { notification_contact_id: notificationContact } }
+      : undefined;
   const seeded = await seedAgentFromArchetype(
-    {
-      accountId,
-      recipeSlug: "ai-phone-answering",
-      overrides: {
-        tool_config: { notification_contact_id: notificationContact },
-      },
-    },
+    { accountId, recipeSlug, overrides: seedOverrides },
     { client: supabase },
   );
   console.log(`  -> seeded agent ${seeded.id}`);
 
-  // Bind the injected handler to a mock ghlPost so the SMS send is
+  // Bind the target handler to a mock ghlPost so the SMS send is
   // captured locally rather than attempted against the real GHL API.
-  const { createAiPhoneAnsweringHandler } = await import(
-    "../../lib/recipes/runner/recipes/aiPhoneAnswering.ts"
-  );
   const registry = (await import("../../lib/recipes/runner/index.ts"))
     .RECIPE_HANDLERS;
-  registry["ai-phone-answering"] = createAiPhoneAnsweringHandler({
-    deps: { ghlPost: mockGhlPost },
-  });
+  if (recipeSlug === "ai-phone-answering") {
+    const { createAiPhoneAnsweringHandler } = await import(
+      "../../lib/recipes/runner/recipes/aiPhoneAnswering.ts"
+    );
+    registry["ai-phone-answering"] = createAiPhoneAnsweringHandler({
+      deps: { ghlPost: mockGhlPost },
+    });
+  } else {
+    const { createMissedCallTextBackHandler } = await import(
+      "../../lib/recipes/runner/recipes/missedCallTextBack.ts"
+    );
+    registry["missed-call-text-back"] = createMissedCallTextBackHandler({
+      deps: { ghlPost: mockGhlPost },
+    });
+  }
 
   // Pick an Anthropic client for the chosen mode
   let anthropicClient;
@@ -303,23 +324,39 @@ try {
     "../../lib/recipes/runner/webhookHandler.ts"
   );
 
-  const body = {
-    type: "CallCompleted",
-    locationId,
-    contactId: "ghl-caller-smoke-webhook",
-    contact: {
-      firstName: "Janet",
-      lastName: "Smith",
-      name: "Janet Smith",
-    },
-    callDuration: 153,
-    direction: "inbound",
-    transcription:
-      "Hi, this is Janet Smith at 42 Oak Lane. My kitchen sink is leaking and I've got water pooling on the floor. Can someone come Tuesday morning? Call me at 555-1234.",
-  };
+  // Build a synthetic webhook body matching the recipe's trigger shape.
+  const body =
+    recipeSlug === "ai-phone-answering"
+      ? {
+          type: "CallCompleted",
+          locationId,
+          contactId: "ghl-caller-smoke-webhook",
+          contact: {
+            firstName: "Janet",
+            lastName: "Smith",
+            name: "Janet Smith",
+          },
+          callDuration: 153,
+          direction: "inbound",
+          transcription:
+            "Hi, this is Janet Smith at 42 Oak Lane. My kitchen sink is leaking and I've got water pooling on the floor. Can someone come Tuesday morning? Call me at 555-1234.",
+        }
+      : {
+          type: "CallCompleted",
+          locationId,
+          contactId: "ghl-missed-caller-smoke",
+          contact: {
+            id: "ghl-missed-caller-smoke",
+            firstName: "Alex",
+            phone: "+15551234567",
+          },
+          from: "+15551234567",
+          direction: "inbound",
+          callDuration: 0,
+        };
 
   const request = new Request(
-    "http://localhost/api/recipes/webhook/ai-phone-answering/" + accountId,
+    `http://localhost/api/recipes/webhook/${recipeSlug}/${accountId}`,
     {
       method: "POST",
       headers: {
@@ -330,10 +367,10 @@ try {
     },
   );
 
-  console.log(`\n== POST /api/recipes/webhook/ai-phone-answering/${accountId} ==`);
+  console.log(`\n== POST /api/recipes/webhook/${recipeSlug}/${accountId} ==`);
   const response = await handleRecipeWebhook(
     request,
-    { slug: "ai-phone-answering", accountId },
+    { slug: recipeSlug, accountId },
     {
       supabase,
       authenticate,
@@ -372,7 +409,7 @@ try {
      FROM automation_events
      WHERE account_id = $1 AND recipe_slug = $2
      ORDER BY created_at DESC`,
-    [accountId, "ai-phone-answering"],
+    [accountId, recipeSlug],
   );
   console.log("\n== automation_events rows (expect >= 1) ==");
   console.log(JSON.stringify(eventRows, null, 2));

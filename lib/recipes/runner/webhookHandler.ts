@@ -28,15 +28,18 @@
 //      never failures the response.
 // ---------------------------------------------------------------------------
 
-import type { GHLWebhookCallCompleted } from "@/lib/ghl/webhookTypes";
+import type { GHLWebhookBase } from "@/lib/ghl/webhookTypes";
 import {
   RecipeAgentNotFoundError,
   RecipeHandlerNotRegisteredError,
+  type RecipeResult,
   type RunRecipeOptions,
 } from "./index.ts";
-import type { PhoneAnsweringTrigger } from "./recipes/aiPhoneAnswering.ts";
 
-const SUPPORTED_SLUGS = new Set<string>(["ai-phone-answering"]);
+const SUPPORTED_SLUGS = new Set<string>([
+  "ai-phone-answering",
+  "missed-call-text-back",
+]);
 
 /**
  * Supabase-shaped client the handler uses for tenant-binding lookup
@@ -109,9 +112,12 @@ export async function handleRecipeWebhook(
     return json({ error: "webhook_unauthorized", reason: auth.reason }, 401);
   }
 
-  let body: GHLWebhookCallCompleted;
+  // Parse as the minimal GHL base shape so we can do the
+  // tenant-binding check. Each handler then interprets the body as
+  // its own webhook type — the route is recipe-agnostic from here.
+  let body: GHLWebhookBase & Record<string, unknown>;
   try {
-    body = JSON.parse(rawBody) as GHLWebhookCallCompleted;
+    body = JSON.parse(rawBody) as GHLWebhookBase & Record<string, unknown>;
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
@@ -151,15 +157,15 @@ export async function handleRecipeWebhook(
     return json({ error: "tenant_binding_mismatch" }, 403);
   }
 
-  const trigger: PhoneAnsweringTrigger = { call: body };
-
-  let result: unknown;
+  // Hand the raw body to runRecipe — the handler at `slug` parses it
+  // into its own trigger shape internally.
+  let result: RecipeResult | undefined;
   try {
-    result = await deps.runRecipe({
+    result = (await deps.runRecipe({
       accountId,
       recipeSlug: slug,
-      trigger,
-    });
+      trigger: body,
+    })) as RecipeResult;
   } catch (err) {
     if (err instanceof RecipeAgentNotFoundError) {
       return json({ error: "agent_not_configured", message: err.message }, 404);
@@ -178,25 +184,26 @@ export async function handleRecipeWebhook(
   // Best-effort automation_events write so the feed reflects the run.
   // Column shape from 001_initial_schema.sql:
   //   account_id, recipe_slug, event_type, summary (NOT NULL), detail JSONB
-  // The detail JSONB is currently tied to PhoneAnsweringResult; move
-  // serialisation into each handler when the second recipe lands.
+  //
+  // This is recipe-agnostic: each handler returns a `RecipeResult`
+  // with `outcome` + optional `summary` + optional `automationDetail`,
+  // and the route copies those fields into the event row. No handler-
+  // specific knowledge lives here.
   try {
-    const outcome =
-      (result as { outcome?: string } | undefined)?.outcome ?? "completed";
-    const smsMessageId =
-      (result as { smsMessageId?: string | null } | undefined)?.smsMessageId ??
-      null;
+    const outcome = result?.outcome ?? "completed";
+    const rowSummary = result?.summary ?? `${slug}: ${outcome}`;
+    const detail: Record<string, unknown> = {
+      outcome,
+      ...(result?.automationDetail ?? {}),
+    };
     const { error: logErr } = await deps.supabase
       .from("automation_events")
       .insert({
         account_id: accountId,
         recipe_slug: slug,
         event_type: "recipe_run",
-        summary: `${slug}: ${outcome}`,
-        detail: {
-          outcome,
-          sms_message_id: smsMessageId,
-        },
+        summary: rowSummary,
+        detail,
       });
     if (logErr) {
       // eslint-disable-next-line no-console
@@ -216,13 +223,8 @@ export async function handleRecipeWebhook(
   return json({ ok: true, result }, 200);
 }
 
-function extractLocationId(
-  body: GHLWebhookCallCompleted,
-): string | null {
-  const bodyWithExtras = body as GHLWebhookCallCompleted & {
-    location_id?: string;
-  };
-  return body.locationId ?? bodyWithExtras.location_id ?? null;
+function extractLocationId(body: GHLWebhookBase): string | null {
+  return body.locationId ?? body.location_id ?? null;
 }
 
 function json(body: unknown, status: number): Response {

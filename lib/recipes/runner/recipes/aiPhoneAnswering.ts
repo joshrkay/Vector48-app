@@ -22,21 +22,23 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import type { RecipeResult } from "../index.ts";
 import type { GHLWebhookCallCompleted } from "@/lib/ghl/webhookTypes";
 
-export interface PhoneAnsweringTrigger {
-  /** The GHL call-completed webhook body, as received on the runner route. */
-  call: GHLWebhookCallCompleted;
-}
+/**
+ * This handler's trigger *is* a `GHLWebhookCallCompleted` body — no
+ * wrapper. The webhook route passes the parsed JSON body directly to
+ * `runRecipe` so recipes don't share a single hardcoded envelope shape.
+ */
+export type PhoneAnsweringTrigger = GHLWebhookCallCompleted;
 
 export type PhoneAnsweringOutcome =
   | "summary_sent"
   | "skipped_no_transcript"
   | "skipped_no_notification_contact";
 
-export interface PhoneAnsweringResult {
+export interface PhoneAnsweringResult extends RecipeResult {
   outcome: PhoneAnsweringOutcome;
-  summary: string | null;
   smsMessageId: string | null;
 }
 
@@ -69,21 +71,26 @@ export function createAiPhoneAnsweringHandler(
 ) {
   return async function aiPhoneAnsweringHandler(
     ctx: RecipeContext,
-    trigger: PhoneAnsweringTrigger,
+    trigger: unknown,
   ): Promise<PhoneAnsweringResult> {
-    const transcript = extractTranscript(trigger.call);
+    // Each handler parses its own trigger shape. This keeps the webhook
+    // route recipe-agnostic — it passes the raw webhook body through.
+    const call = (trigger ?? {}) as PhoneAnsweringTrigger;
+
+    const transcript = extractTranscript(call);
     if (!transcript) {
       return {
         outcome: "skipped_no_transcript",
-        summary: null,
+        summary: `ai-phone-answering: skipped, no transcript in payload`,
         smsMessageId: null,
+        automationDetail: { reason: "no_transcript" },
       };
     }
 
     // Generate the call summary. ctx.ai is the tracked client — this call
     // enforces the spend cap pre-flight and writes an llm_usage_events row
     // on success, keyed by accountId + recipe_slug + tenant_agent_id.
-    const userMessage = buildUserMessage(trigger.call, transcript);
+    const userMessage = buildUserMessage(call, transcript);
     const response: Message = await ctx.ai.messages.create({
       model: ctx.agent.model,
       max_tokens: ctx.agent.max_tokens,
@@ -94,12 +101,13 @@ export function createAiPhoneAnsweringHandler(
       messages: [{ role: "user", content: userMessage }],
     });
 
-    const summary = extractText(response).trim();
-    if (!summary) {
+    const summaryText = extractText(response).trim();
+    if (!summaryText) {
       return {
         outcome: "skipped_no_transcript",
-        summary: null,
+        summary: `ai-phone-answering: empty Claude response`,
         smsMessageId: null,
+        automationDetail: { reason: "empty_llm_response" },
       };
     }
 
@@ -115,8 +123,12 @@ export function createAiPhoneAnsweringHandler(
     if (!notificationContactId) {
       return {
         outcome: "skipped_no_notification_contact",
-        summary,
+        summary: `ai-phone-answering: summary generated but no notification contact configured`,
         smsMessageId: null,
+        automationDetail: {
+          reason: "no_notification_contact",
+          generated_summary: summaryText,
+        },
       };
     }
 
@@ -129,7 +141,7 @@ export function createAiPhoneAnsweringHandler(
       {
         type: "SMS",
         contactId: notificationContactId,
-        message: formatSmsBody(summary, ctx.account.business_name),
+        message: formatSmsBody(summaryText, ctx.account.business_name),
       },
       {
         locationId: ctx.ghl.locationId,
@@ -137,10 +149,16 @@ export function createAiPhoneAnsweringHandler(
       },
     );
 
+    const smsMessageId = smsResponse.messageId ?? smsResponse.id ?? null;
     return {
       outcome: "summary_sent",
-      summary,
-      smsMessageId: smsResponse.messageId ?? smsResponse.id ?? null,
+      summary: `ai-phone-answering: summary sent to ${notificationContactId}`,
+      smsMessageId,
+      automationDetail: {
+        notification_contact_id: notificationContactId,
+        sms_message_id: smsMessageId,
+        summary_text: summaryText,
+      },
     };
   };
 }

@@ -75,10 +75,15 @@ function buildDeps(
     authenticate: overrides.authenticate ?? okAuth(),
     runRecipe:
       overrides.runRecipe ??
+      // Match the RecipeResult shape each handler now returns.
       (async () => ({
         outcome: "summary_sent",
-        summary: "Test summary",
+        summary: "ai-phone-answering: summary sent to ghl-contact-owner",
         smsMessageId: "msg-42",
+        automationDetail: {
+          notification_contact_id: "ghl-contact-owner",
+          sms_message_id: "msg-42",
+        },
       })),
   };
   return { deps, state };
@@ -110,10 +115,36 @@ describe("handleRecipeWebhook", () => {
     assert.equal(event.recipe_slug, "ai-phone-answering");
     assert.equal(event.event_type, "recipe_run");
     // summary (NOT NULL) + detail JSONB — matches 001_initial_schema.sql.
-    assert.equal(event.summary, "ai-phone-answering: summary_sent");
+    // The handler provided a `summary` field so the route copies it
+    // verbatim (it doesn't fall back to the `${slug}: ${outcome}` path).
+    assert.equal(
+      event.summary,
+      "ai-phone-answering: summary sent to ghl-contact-owner",
+    );
     assert.deepEqual(event.detail, {
       outcome: "summary_sent",
+      notification_contact_id: "ghl-contact-owner",
       sms_message_id: "msg-42",
+    });
+  });
+
+  it("falls back to `${slug}: ${outcome}` when the handler omits `summary`", async () => {
+    const { deps, state } = buildDeps({
+      runRecipe: async () => ({ outcome: "something_happened" }),
+    });
+    const res = await handleRecipeWebhook(
+      buildRequest(happyBody),
+      { slug: "ai-phone-answering", accountId: "acct-1" },
+      deps,
+    );
+    assert.equal(res.status, 200);
+    assert.equal(state.eventInserts.length, 1);
+    assert.equal(
+      state.eventInserts[0].summary,
+      "ai-phone-answering: something_happened",
+    );
+    assert.deepEqual(state.eventInserts[0].detail, {
+      outcome: "something_happened",
     });
   });
 

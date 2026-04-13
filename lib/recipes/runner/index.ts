@@ -23,6 +23,28 @@ import {
   type TenantAgent,
 } from "./context.ts";
 import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering.ts";
+import { createMissedCallTextBackHandler } from "./recipes/missedCallTextBack.ts";
+
+/**
+ * Shared shape every recipe handler must return. Lets the webhook
+ * route (and future Inngest steps) serialise a meaningful
+ * automation_events row without knowing about specific recipes.
+ *
+ * Fields:
+ *   - `outcome`: machine-readable verb describing what happened, e.g.
+ *     "summary_sent", "sms_sent", "skipped_no_transcript". Recipe-specific
+ *     enums should be assignable to `string` here.
+ *   - `summary`: short human-readable single-line description. When
+ *     omitted the caller falls back to `${slug}: ${outcome}`.
+ *   - `automationDetail`: optional recipe-specific JSONB blob stored on
+ *     the `automation_events.detail` column. Use for anything the feed
+ *     should display (sms ids, confidence scores, skipped reasons).
+ */
+export interface RecipeResult {
+  outcome: string;
+  summary?: string;
+  automationDetail?: Record<string, unknown>;
+}
 
 /**
  * Supabase-shaped interface loadActiveAgent uses. Identical to the
@@ -84,6 +106,7 @@ export type RecipeHandler<TTrigger = unknown, TResult = unknown> = (
  */
 export const RECIPE_HANDLERS: Record<string, RecipeHandler> = {
   "ai-phone-answering": createAiPhoneAnsweringHandler() as RecipeHandler,
+  "missed-call-text-back": createMissedCallTextBackHandler() as RecipeHandler,
 };
 
 export interface RunRecipeOptions {
