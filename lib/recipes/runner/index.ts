@@ -16,9 +16,35 @@
 // loud failure instead of a silent no-op during shadow mode.
 // ---------------------------------------------------------------------------
 
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { buildRecipeContext, type RecipeContext, type TenantAgent } from "./context";
-import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering";
+import {
+  buildRecipeContext,
+  type RecipeContext,
+  type RunnerDeps,
+  type TenantAgent,
+} from "./context.ts";
+import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering.ts";
+
+/**
+ * Supabase-shaped interface loadActiveAgent uses. Identical to the
+ * context module's shape but locally named so the two can evolve
+ * independently if needed.
+ */
+export interface RunnerSupabaseClient {
+  from: (table: string) => {
+    select: (cols: string) => {
+      eq: (col: string, value: string) => {
+        eq: (col: string, value: string) => {
+          eq: (col: string, value: string) => {
+            maybeSingle: () => Promise<{
+              data: Record<string, unknown> | null;
+              error: { message: string } | null;
+            }>;
+          };
+        };
+      };
+    };
+  };
+}
 
 export class RecipeAgentNotFoundError extends Error {
   constructor(accountId: string, recipeSlug: string) {
@@ -66,12 +92,19 @@ export interface RunRecipeOptions {
   trigger: unknown;
   /** Optional recipe_triggers.id for usage-event correlation. */
   triggerId?: string | null;
+  /**
+   * Dependency overrides for tests and smoke scripts. Omit in production.
+   * When present, threads through to loadActiveAgent, buildRecipeContext,
+   * and the tracked Anthropic client, so a single invocation runs
+   * against a shimmed data layer + mocked (or real) LLM.
+   */
+  deps?: RunnerDeps;
 }
 
 export async function runRecipe<TResult = unknown>(
   options: RunRecipeOptions,
 ): Promise<TResult> {
-  const { accountId, recipeSlug, trigger, triggerId } = options;
+  const { accountId, recipeSlug, trigger, triggerId, deps } = options;
 
   const handler = RECIPE_HANDLERS[recipeSlug] as
     | RecipeHandler<unknown, TResult>
@@ -80,12 +113,17 @@ export async function runRecipe<TResult = unknown>(
     throw new RecipeHandlerNotRegisteredError(recipeSlug);
   }
 
-  const agent = await loadActiveAgent(accountId, recipeSlug);
+  const agent = await loadActiveAgent(
+    accountId,
+    recipeSlug,
+    deps?.supabase as unknown as RunnerSupabaseClient | undefined,
+  );
 
   const ctx = await buildRecipeContext({
     accountId,
     agent,
     triggerId: triggerId ?? null,
+    deps,
   });
 
   return handler(ctx, trigger);
@@ -98,8 +136,16 @@ export async function runRecipe<TResult = unknown>(
 export async function loadActiveAgent(
   accountId: string,
   recipeSlug: string,
+  injected?: RunnerSupabaseClient,
 ): Promise<TenantAgent> {
-  const supabase = getSupabaseAdmin();
+  let supabase: RunnerSupabaseClient;
+  if (injected) {
+    supabase = injected;
+  } else {
+    const { getSupabaseAdmin } = await import("@/lib/supabase/admin");
+    supabase = getSupabaseAdmin() as unknown as RunnerSupabaseClient;
+  }
+
   const { data, error } = await supabase
     .from("tenant_agents")
     .select(

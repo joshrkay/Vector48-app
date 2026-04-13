@@ -17,9 +17,21 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Message, MessageCreateParamsNonStreaming } from "@anthropic-ai/sdk/resources/messages";
 
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { computeCostMicros } from "./pricing";
-import { enforceSpendCap, type AgentSpendInfo } from "./spendCap";
+import { computeCostMicros } from "./pricing.ts";
+import { enforceSpendCap, type AgentSpendInfo } from "./spendCap.ts";
+
+/**
+ * Minimal Supabase-shaped interface for recordUsage. The production
+ * path uses the real admin client (imported lazily so tests that
+ * inject a shim never touch @supabase/supabase-js).
+ */
+export interface TrackedClientSupabase {
+  from: (table: string) => {
+    insert: (row: Record<string, unknown>) => Promise<{
+      error: { message: string } | null;
+    }>;
+  };
+}
 
 let sharedClient: Anthropic | null = null;
 
@@ -52,6 +64,13 @@ export interface TrackedClientOptions {
    * Inject a fake Anthropic client for tests. Production code never sets this.
    */
   client?: Pick<Anthropic, "messages">;
+  /**
+   * Inject a Supabase-shaped client used for writing the usage event
+   * row. When omitted, the production getSupabaseAdmin() is lazy-loaded.
+   * Smoke/integration tests pass a pg-backed shim so real usage events
+   * land in a real llm_usage_events table.
+   */
+  supabase?: TrackedClientSupabase;
 }
 
 export interface TrackedAnthropic {
@@ -68,8 +87,15 @@ export function createTrackedAnthropic(
   return {
     messages: {
       async create(params: MessageCreateParamsNonStreaming): Promise<Message> {
-        // Pre-call: spend cap. Throws SpendCapExceededError if over budget.
-        await enforceSpendCap(options.agent);
+        // Pre-call: spend cap. Throws SpendCapExceededError if over
+        // budget. Thread the injected supabase shim through so the
+        // cap check hits the same data layer as recordUsage — prod
+        // uses the real admin client (lazy-imported inside spendCap),
+        // smoke/integration tests use the shim.
+        await enforceSpendCap(
+          options.agent,
+          options.supabase as unknown as Parameters<typeof enforceSpendCap>[1],
+        );
 
         const response = await client.messages.create(params);
 
@@ -77,14 +103,17 @@ export function createTrackedAnthropic(
         // non-streaming response. We never throw from logging — losing one
         // usage event is preferable to dropping a successful recipe run.
         try {
-          await recordUsage({
-            accountId: options.accountId,
-            agentId: options.agent.id,
-            recipeSlug: options.recipeSlug,
-            triggerId: options.triggerId ?? null,
-            model: params.model,
-            usage: response.usage,
-          });
+          await recordUsage(
+            {
+              accountId: options.accountId,
+              agentId: options.agent.id,
+              recipeSlug: options.recipeSlug,
+              triggerId: options.triggerId ?? null,
+              model: params.model,
+              usage: response.usage,
+            },
+            options.supabase,
+          );
         } catch (err) {
           // eslint-disable-next-line no-console
           console.error(
@@ -108,7 +137,10 @@ interface RecordUsageInput {
   usage: Message["usage"];
 }
 
-async function recordUsage(input: RecordUsageInput): Promise<void> {
+async function recordUsage(
+  input: RecordUsageInput,
+  injected?: TrackedClientSupabase,
+): Promise<void> {
   const inputTokens = input.usage.input_tokens ?? 0;
   const outputTokens = input.usage.output_tokens ?? 0;
   const cacheReadTokens = input.usage.cache_read_input_tokens ?? 0;
@@ -121,7 +153,13 @@ async function recordUsage(input: RecordUsageInput): Promise<void> {
     cacheWriteTokens,
   });
 
-  const supabase = getSupabaseAdmin();
+  let supabase: TrackedClientSupabase;
+  if (injected) {
+    supabase = injected;
+  } else {
+    const { getSupabaseAdmin } = await import("@/lib/supabase/admin");
+    supabase = getSupabaseAdmin() as unknown as TrackedClientSupabase;
+  }
   const { error } = await supabase.from("llm_usage_events").insert({
     account_id: input.accountId,
     tenant_agent_id: input.agentId,

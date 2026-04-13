@@ -11,12 +11,11 @@
 //   - A spend-cap-aware Anthropic client bound to (account, agent)
 // ---------------------------------------------------------------------------
 
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { getAccountGhlCredentials } from "@/lib/ghl/token";
 import {
   createTrackedAnthropic,
   type TrackedAnthropic,
-} from "./trackedClient";
+  type TrackedClientOptions,
+} from "./trackedClient.ts";
 
 export interface TenantAgent {
   id: string;
@@ -56,10 +55,66 @@ export interface RecipeContext {
   triggerId: string | null;
 }
 
+/**
+ * Dependencies the context builder uses to reach the outside world.
+ * Production code passes none of these (default implementations in
+ * `defaultRunnerDeps` do the real thing). Integration tests and smoke
+ * scripts pass shims for the Supabase client, the GHL credentials
+ * loader, and optionally the Anthropic client so the runner can be
+ * exercised against a local Postgres or a mocked LLM without
+ * monkey-patching module state.
+ */
+export interface RunnerDeps {
+  /**
+   * Supabase-shaped client used to fetch the account row in
+   * buildRecipeContext and (elsewhere) to load the tenant_agents row +
+   * insert llm_usage_events. The production default is
+   * getSupabaseAdmin() from @/lib/supabase/admin.
+   */
+  supabase?: SupabaseContextClient;
+  /**
+   * Loader for the per-account GHL credentials. Production default
+   * is getAccountGhlCredentials(accountId) from @/lib/ghl/token, which
+   * decrypts the OAuth token and returns it alongside the locationId.
+   */
+  getGhlCredentials?: (
+    accountId: string,
+  ) => Promise<{ locationId: string; accessToken: string }>;
+  /**
+   * Override for the underlying Anthropic SDK instance. Used by the
+   * tracked client so smoke scripts can inject a mocked LLM without
+   * disabling spend-cap + usage-event logging.
+   */
+  anthropic?: TrackedClientOptions["client"];
+}
+
+/**
+ * Minimal Supabase-shaped interface that buildRecipeContext needs.
+ * Both the real @supabase/supabase-js client and the pg-backed shim
+ * used in smoke scripts satisfy this type.
+ */
+export interface SupabaseContextClient {
+  from: (table: string) => {
+    select: (cols: string) => {
+      eq: (col: string, value: string) => {
+        maybeSingle: () => Promise<{
+          data: Record<string, unknown> | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+  };
+}
+
 export interface BuildContextOptions {
   accountId: string;
   agent: TenantAgent;
   triggerId?: string | null;
+  /**
+   * Dependency overrides. Omit in production. Integration tests and
+   * scripts pass a shimmed Supabase client + GHL credential loader.
+   */
+  deps?: RunnerDeps;
 }
 
 export async function buildRecipeContext(
@@ -78,7 +133,12 @@ export async function buildRecipeContext(
     );
   }
 
-  const supabase = getSupabaseAdmin();
+  const supabase =
+    options.deps?.supabase ??
+    ((
+      await import("@/lib/supabase/admin")
+    ).getSupabaseAdmin() as unknown as SupabaseContextClient);
+
   const { data: account, error: accountError } = await supabase
     .from("accounts")
     .select(
@@ -93,13 +153,25 @@ export async function buildRecipeContext(
     );
   }
 
-  const ghl = await getAccountGhlCredentials(accountId);
+  const getGhlCredentials =
+    options.deps?.getGhlCredentials ??
+    (async (id: string) => {
+      const { getAccountGhlCredentials } = await import("@/lib/ghl/token");
+      const creds = await getAccountGhlCredentials(id);
+      return { locationId: creds.locationId, accessToken: creds.accessToken };
+    });
+  const ghl = await getGhlCredentials(accountId);
 
   const ai = createTrackedAnthropic({
     accountId,
     recipeSlug: agent.recipe_slug,
     agent,
     triggerId: options.triggerId ?? null,
+    client: options.deps?.anthropic,
+    // Pass the shimmed supabase through so the tracked client writes
+    // llm_usage_events against the same data layer as the rest of the
+    // runner in test/smoke mode.
+    supabase: options.deps?.supabase,
   });
 
   return {
