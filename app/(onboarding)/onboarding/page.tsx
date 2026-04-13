@@ -47,10 +47,7 @@ export default async function OnboardingPage() {
   }
 
   // If onboarding already done, go to dashboard
-  if (
-    account?.onboarding_completed_at ||
-    account?.ghl_provisioning_status === "failed"
-  ) {
+  if (account?.onboarding_completed_at) {
     redirect("/dashboard");
   }
 
@@ -79,7 +76,7 @@ export default async function OnboardingPage() {
         voiceGender: (account.voice_gender as "male" | "female") || "male",
         voiceGreeting: account.greeting_text || "",
         notificationContact: account.notification_contact_name || "",
-        notificationSms: (account.notification_preferences as Record<string, unknown>)?.sms as boolean ?? false,
+        notificationSms: account.notification_preferences?.sms ?? false,
         notificationPreferences: prefs,
         activateRecipe1: true,
         currentStep: account.onboarding_step || 0,
