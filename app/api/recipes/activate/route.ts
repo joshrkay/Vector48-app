@@ -109,26 +109,26 @@ export async function POST(request: Request) {
   // Idempotent: the helper upserts on (account_id, recipe_slug), so
   // re-activating a previously-activated recipe returns the existing
   // row rather than conflicting.
+  //
+  // NOTE: per-activation `tool_config` overrides (e.g. a notification
+  // contact id for ai-phone-answering) are not wired here. An earlier
+  // draft read `validation.config.notification_contact_id`, but the
+  // activation validator runs a strict `z.object` whose shape is
+  // derived from `recipe.configFields` — any key not declared there is
+  // silently stripped. Until either (a) `notification_contact_id` is
+  // added to the catalog's `configFields`, or (b) the account-level
+  // `notification_contact_phone` is resolved to a GHL contact id at
+  // runtime, ai-phone-answering will seed with an empty
+  // `tool_config.notification_contact_id` and the handler will return
+  // `skipped_no_notification_contact` for every run. This is fine for
+  // the Phase 2 walking skeleton (the smoke script bypasses this by
+  // passing an explicit override through the helper) and is tracked
+  // as a Phase 4 dashboard task.
   if (AGENT_SDK_RECIPE_SLUGS.includes(recipe.slug)) {
     try {
-      // Carry through any tenant-supplied override that the runner cares
-      // about. Today the only mapped override is
-      // `notification_contact_id` for ai-phone-answering, which the
-      // handler reads from tool_config.
-      const toolConfigOverride: Record<string, unknown> = {};
-      const notificationId = (validation.config as Record<string, unknown>)
-        .notification_contact_id;
-      if (typeof notificationId === "string" && notificationId.length > 0) {
-        toolConfigOverride.notification_contact_id = notificationId;
-      }
-
       await seedAgentFromArchetype({
         accountId: session.accountId,
         recipeSlug: recipe.slug,
-        overrides:
-          Object.keys(toolConfigOverride).length > 0
-            ? { tool_config: toolConfigOverride }
-            : undefined,
       });
     } catch (err) {
       // eslint-disable-next-line no-console

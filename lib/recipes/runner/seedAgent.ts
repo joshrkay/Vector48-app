@@ -24,20 +24,38 @@ import {
   type RecipeArchetype,
 } from "./archetypes.ts";
 
-/** Minimal Supabase shape used by seedAgentFromArchetype. */
+/**
+ * Minimal Supabase shape used by seedAgentFromArchetype. Supports:
+ *  - Looking up an account by id: `from("accounts").select(...).eq("id", X).maybeSingle()`
+ *  - Looking up an existing tenant_agents row by composite key:
+ *    `from("tenant_agents").select(...).eq("account_id", X).eq("recipe_slug", Y).maybeSingle()`
+ *  - Inserting a new tenant_agents row returning the created row:
+ *    `from("tenant_agents").insert(row).select(cols).single()`
+ *
+ * We intentionally do NOT use `.upsert(...).onConflict(...).DO UPDATE` because
+ * that clobbers tenant edits on re-run. This module's contract is
+ * "seed-only-when-missing" so operator re-runs and the activation path
+ * preserve any subsequent tenant edits to system_prompt, model, voice,
+ * or spend cap.
+ */
 export interface SeedSupabaseClient {
   from: (table: string) => {
     select: (cols: string) => {
       eq: (col: string, value: string) => {
         maybeSingle: () => Promise<{
-          data: ArchetypeAccountRow | null;
+          data: (ArchetypeAccountRow | SeededAgentRow) | null;
           error: { message: string } | null;
         }>;
+        eq: (col: string, value: string) => {
+          maybeSingle: () => Promise<{
+            data: SeededAgentRow | null;
+            error: { message: string } | null;
+          }>;
+        };
       };
     };
-    upsert: (
+    insert: (
       row: TenantAgentInsert,
-      options: { onConflict: string },
     ) => {
       select: (cols: string) => {
         single: () => Promise<{
@@ -125,17 +143,19 @@ export interface SeedAgentDeps {
 }
 
 /**
- * Inserts (or upserts on the (account_id, recipe_slug) key) a
- * tenant_agents row seeded from the archetype defaults. Returns the
- * resulting row.
+ * Ensures a tenant_agents row exists for `(accountId, recipeSlug)`,
+ * seeded from the archetype defaults. If a row already exists, it is
+ * returned unchanged — tenant edits to `system_prompt`, `model`,
+ * `voice_id`, `monthly_spend_cap_micros`, etc. are preserved.
  *
- * Idempotent: calling seedAgentFromArchetype twice for the same
- * (account, recipe) pair returns the same row. The upsert preserves any
- * tenant edits between calls because we only write columns that the
- * archetype defines — any tenant-only fields would need to be stored
- * separately. In practice the activation path calls this once and the
- * backfill path guards with a prior `select` so the tenant-edit
- * preservation case never actually fires.
+ * This "seed-only-when-missing" semantic is the real contract the
+ * activation route and the Phase 5 backfill script rely on. Re-running
+ * either is safe and does not overwrite tenant state.
+ *
+ * To *force* a reseed (e.g. an operator-triggered "Reset to defaults"
+ * button), call this helper after deleting the existing row, or use a
+ * separate function that performs the delete + insert in a single
+ * transaction.
  */
 export async function seedAgentFromArchetype(
   options: SeedAgentOptions,
@@ -155,6 +175,30 @@ export async function seedAgentFromArchetype(
     supabase = getSupabaseAdmin() as unknown as SeedSupabaseClient;
   }
 
+  // Step 1: return any pre-existing row untouched. This is the tenant-
+  // edit preservation path — the row we fetch already reflects every
+  // subsequent mutation from the admin UI or the reset endpoint.
+  const existingLookup = supabase
+    .from("tenant_agents")
+    .select(
+      "id, account_id, recipe_slug, display_name, system_prompt, model, max_tokens, temperature, voice_id, tool_config, monthly_spend_cap_micros, rate_limit_per_hour, status",
+    )
+    .eq("account_id", options.accountId);
+  const { data: existing, error: existingError } = await existingLookup
+    .eq("recipe_slug", options.recipeSlug)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(
+      `Failed to look up existing tenant_agents row for ${options.accountId}/${options.recipeSlug}: ${existingError.message}`,
+    );
+  }
+  if (existing) {
+    return existing as SeededAgentRow;
+  }
+
+  // Step 2: no row yet — seed from the archetype. Resolve placeholders
+  // against the account row first.
   const { data: account, error: accountError } = await supabase
     .from("accounts")
     .select("id, business_name, vertical, greeting_name")
@@ -169,11 +213,12 @@ export async function seedAgentFromArchetype(
   if (!account) {
     throw new SeedAccountNotFoundError(options.accountId);
   }
+  const accountRow = account as ArchetypeAccountRow;
 
   const resolvedPrompt = resolveSystemPrompt(archetype.systemPrompt, {
-    business_name: account.business_name,
-    vertical: account.vertical,
-    greeting_name: account.greeting_name,
+    business_name: accountRow.business_name,
+    vertical: accountRow.vertical,
+    greeting_name: accountRow.greeting_name,
   } satisfies ArchetypeAccount);
 
   const row: TenantAgentInsert = {
@@ -198,10 +243,16 @@ export async function seedAgentFromArchetype(
     status: "active",
   };
 
+  // Plain INSERT (not upsert). If a concurrent writer beats us to it we
+  // surface the unique_violation via the error path — in practice both
+  // callers (activation route, backfill script) serialise per-account
+  // so the race is cosmetic.
+  const returningCols =
+    "id, account_id, recipe_slug, display_name, system_prompt, model, max_tokens, temperature, voice_id, tool_config, monthly_spend_cap_micros, rate_limit_per_hour, status";
   const { data: inserted, error: insertError } = await supabase
     .from("tenant_agents")
-    .upsert(row, { onConflict: "account_id,recipe_slug" })
-    .select("id, " + Object.keys(row).join(", "))
+    .insert(row)
+    .select(returningCols)
     .single();
 
   if (insertError) {

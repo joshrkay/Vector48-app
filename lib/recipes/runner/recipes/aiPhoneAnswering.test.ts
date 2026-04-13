@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { RecipeContext } from "../../context.ts";
 import {
   createAiPhoneAnsweringHandler,
   type GhlPostFn,
@@ -16,7 +17,9 @@ import {
 //   ctx.ai.messages.create
 //
 // Everything else is declared on RecipeContext for other consumers, so we
-// cast via `as any` at the call site rather than constructing a giant row.
+// build a partial object and cast through `unknown` at the call site
+// rather than constructing a full row. No `any` — the project's eslint
+// config rejects it.
 
 interface CapturedAiCall {
   model: string;
@@ -143,8 +146,7 @@ describe("aiPhoneAnswering handler", () => {
     const handler = createAiPhoneAnsweringHandler({ deps: { ghlPost: post } });
     const { ctx, captured } = fakeCtx();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await handler(ctx as any, baseTrigger);
+    const result = await handler(ctx as unknown as RecipeContext, baseTrigger);
 
     assert.equal(result.outcome, "summary_sent");
     assert.equal(result.smsMessageId, "ghl-msg-42");
@@ -193,8 +195,7 @@ describe("aiPhoneAnswering handler", () => {
       },
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await handler(ctx as any, trigger);
+    const result = await handler(ctx as unknown as RecipeContext, trigger);
 
     assert.equal(result.outcome, "skipped_no_transcript");
     assert.equal(result.summary, null);
@@ -217,8 +218,7 @@ describe("aiPhoneAnswering handler", () => {
       },
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await handler(ctx as any, trigger);
+    const result = await handler(ctx as unknown as RecipeContext, trigger);
 
     assert.equal(result.outcome, "summary_sent");
     assert.equal(calls.length, 1);
@@ -230,8 +230,7 @@ describe("aiPhoneAnswering handler", () => {
     // No notification_contact_id in tool_config
     const { ctx } = fakeCtx({ toolConfig: {} });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await handler(ctx as any, baseTrigger);
+    const result = await handler(ctx as unknown as RecipeContext, baseTrigger);
 
     assert.equal(result.outcome, "skipped_no_notification_contact");
     assert.ok(result.summary, "summary is still generated for logging");
@@ -248,8 +247,7 @@ describe("aiPhoneAnswering handler", () => {
     };
 
     await assert.rejects(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      () => handler(ctx as any, baseTrigger),
+      () => handler(ctx as unknown as RecipeContext, baseTrigger),
       /spend cap exceeded/,
     );
   });

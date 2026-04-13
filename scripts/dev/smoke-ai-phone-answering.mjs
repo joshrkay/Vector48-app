@@ -136,11 +136,47 @@ function makeSupabaseShim(pgClient) {
           const columns = Object.keys(row);
           const values = columns.map((c) => serialise(row[c]));
           const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-          const sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`;
-          return pgClient
-            .query(sql, values)
-            .then(() => ({ error: null }))
-            .catch((err) => ({ error: { message: err.message } }));
+          const baseSql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`;
+
+          // The builder is both:
+          //   - Awaitable directly (resolves to { error }) for callers
+          //     like trackedClient that do `.insert(row)` without chaining.
+          //   - A chain target exposing `.select(cols).single()` for
+          //     callers like seedAgent that want the inserted row back.
+          async function runPlain() {
+            try {
+              await pgClient.query(baseSql, values);
+              return { error: null };
+            } catch (err) {
+              return { error: { message: err.message } };
+            }
+          }
+          function select(cols) {
+            return {
+              async single() {
+                const returningSql = `${baseSql} RETURNING ${cols}`;
+                try {
+                  const { rows } = await pgClient.query(returningSql, values);
+                  return { data: rows[0] ?? null, error: null };
+                } catch (err) {
+                  return { data: null, error: { message: err.message } };
+                }
+              },
+            };
+          }
+          const builder = {
+            select,
+            then(onFulfilled, onRejected) {
+              return runPlain().then(onFulfilled, onRejected);
+            },
+            catch(onRejected) {
+              return runPlain().catch(onRejected);
+            },
+            finally(onFinally) {
+              return runPlain().finally(onFinally);
+            },
+          };
+          return builder;
         },
         upsert(row, options) {
           return {
