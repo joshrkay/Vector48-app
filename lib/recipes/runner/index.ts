@@ -18,6 +18,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { buildRecipeContext, type RecipeContext, type TenantAgent } from "./context";
+import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering";
 
 export class RecipeAgentNotFoundError extends Error {
   constructor(accountId: string, recipeSlug: string) {
@@ -47,10 +48,17 @@ export type RecipeHandler<TTrigger = unknown, TResult = unknown> = (
 ) => Promise<TResult>;
 
 /**
- * Phase 2 will populate this with the 6 ported recipes. Phase 1 ships the
- * empty registry so the foundation type-checks and tests can mock it.
+ * Registry of recipe handlers. Phase 2 fills this out one recipe at a
+ * time. Each entry is an already-bound handler function so the registry
+ * stays free of factory plumbing at call sites.
+ *
+ * Production handlers use their module-default deps (no injected client)
+ * so runRecipe calls the real Anthropic SDK, real GHL client, etc. Tests
+ * build their own handlers via the factory functions in `./recipes/*`.
  */
-export const RECIPE_HANDLERS: Record<string, RecipeHandler> = {};
+export const RECIPE_HANDLERS: Record<string, RecipeHandler> = {
+  "ai-phone-answering": createAiPhoneAnsweringHandler() as RecipeHandler,
+};
 
 export interface RunRecipeOptions {
   accountId: string;
