@@ -165,5 +165,5 @@ export async function loadActiveAgent(
     throw new RecipeAgentNotFoundError(accountId, recipeSlug);
   }
 
-  return data as TenantAgent;
+  return data as unknown as TenantAgent;
 }

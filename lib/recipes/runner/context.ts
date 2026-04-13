@@ -15,6 +15,7 @@ import {
   createTrackedAnthropic,
   type TrackedAnthropic,
   type TrackedClientOptions,
+  type TrackedClientSupabase,
 } from "./trackedClient.ts";
 
 export interface TenantAgent {
@@ -170,14 +171,20 @@ export async function buildRecipeContext(
     client: options.deps?.anthropic,
     // Pass the shimmed supabase through so the tracked client writes
     // llm_usage_events against the same data layer as the rest of the
-    // runner in test/smoke mode.
-    supabase: options.deps?.supabase,
+    // runner in test/smoke mode. The shapes overlap on `.from(table)`
+    // and both the TrackedClientSupabase and SupabaseContextClient
+    // shims used here implement the insert path the tracked client
+    // needs, but TypeScript can't prove it structurally because
+    // SupabaseContextClient only declares the select chain.
+    supabase: options.deps?.supabase as unknown as
+      | TrackedClientSupabase
+      | undefined,
   });
 
   return {
     accountId,
     agent,
-    account: account as AccountSnapshot,
+    account: account as unknown as AccountSnapshot,
     ghl: {
       locationId: ghl.locationId,
       accessToken: ghl.accessToken,
