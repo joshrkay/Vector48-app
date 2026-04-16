@@ -159,6 +159,9 @@ export async function buildRecipeContext(
     (async (id: string) => {
       const { getAccountGhlCredentials } = await import("@/lib/ghl/token");
       const creds = await getAccountGhlCredentials(id);
+      if (!creds) {
+        throw new Error(`No GHL credentials for account ${id}`);
+      }
       return { locationId: creds.locationId, accessToken: creds.accessToken };
     });
   const ghl = await getGhlCredentials(accountId);

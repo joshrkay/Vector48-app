@@ -36,7 +36,12 @@ import {
 } from "./index.ts";
 import type { PhoneAnsweringTrigger } from "./recipes/aiPhoneAnswering.ts";
 
-const SUPPORTED_SLUGS = new Set<string>(["ai-phone-answering"]);
+const SUPPORTED_SLUGS = new Set<string>([
+  "ai-phone-answering",
+  "missed-call-text-back",
+  "review-request",
+  "estimate-follow-up",
+]);
 
 /**
  * Supabase-shaped client the handler uses for tenant-binding lookup

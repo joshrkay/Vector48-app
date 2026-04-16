@@ -23,6 +23,9 @@ import {
   type TenantAgent,
 } from "./context.ts";
 import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering.ts";
+import { createMissedCallTextBackHandler } from "./recipes/missedCallTextBack.ts";
+import { createReviewRequestHandler } from "./recipes/reviewRequest.ts";
+import { createEstimateFollowUpHandler } from "./recipes/estimateFollowUp.ts";
 
 /**
  * Supabase-shaped interface loadActiveAgent uses. Identical to the
@@ -84,6 +87,9 @@ export type RecipeHandler<TTrigger = unknown, TResult = unknown> = (
  */
 export const RECIPE_HANDLERS: Record<string, RecipeHandler> = {
   "ai-phone-answering": createAiPhoneAnsweringHandler() as RecipeHandler,
+  "missed-call-text-back": createMissedCallTextBackHandler() as RecipeHandler,
+  "review-request": createReviewRequestHandler() as RecipeHandler,
+  "estimate-follow-up": createEstimateFollowUpHandler() as RecipeHandler,
 };
 
 export interface RunRecipeOptions {

@@ -8,11 +8,14 @@ import {
 
 describe("engineRegistry", () => {
   describe("getRecipeEngine", () => {
+    it("returns 'agent-sdk' for Agent SDK recipes", () => {
+      expect(getRecipeEngine("ai-phone-answering")).toBe("agent-sdk");
+      expect(getRecipeEngine("missed-call-text-back")).toBe("agent-sdk");
+      expect(getRecipeEngine("review-request")).toBe("agent-sdk");
+      expect(getRecipeEngine("estimate-follow-up")).toBe("agent-sdk");
+    });
+
     it("returns 'n8n' for recipes with n8n templates", () => {
-      expect(getRecipeEngine("ai-phone-answering")).toBe("n8n");
-      expect(getRecipeEngine("missed-call-text-back")).toBe("n8n");
-      expect(getRecipeEngine("review-request")).toBe("n8n");
-      expect(getRecipeEngine("estimate-follow-up")).toBe("n8n");
       expect(getRecipeEngine("appointment-reminder")).toBe("n8n");
       expect(getRecipeEngine("lead-qualification")).toBe("n8n");
     });
@@ -40,8 +43,14 @@ describe("engineRegistry", () => {
       expect(isGhlNative("tech-on-the-way")).toBe(true);
     });
 
-    it("returns false for n8n recipes", () => {
+    it("returns false for agent-sdk recipes", () => {
       expect(isGhlNative("ai-phone-answering")).toBe(false);
+      expect(isGhlNative("missed-call-text-back")).toBe(false);
+      expect(isGhlNative("review-request")).toBe(false);
+      expect(isGhlNative("estimate-follow-up")).toBe(false);
+    });
+
+    it("returns false for n8n recipes", () => {
       expect(isGhlNative("lead-qualification")).toBe(false);
     });
 
@@ -55,8 +64,8 @@ describe("engineRegistry", () => {
       expect(GHL_NATIVE_SLUGS).toHaveLength(9);
     });
 
-    it("has 6 n8n slugs", () => {
-      expect(N8N_SLUGS).toHaveLength(6);
+    it("has 2 n8n slugs", () => {
+      expect(N8N_SLUGS).toHaveLength(2);
     });
 
     it("has no overlap between n8n and ghl-native slugs", () => {
