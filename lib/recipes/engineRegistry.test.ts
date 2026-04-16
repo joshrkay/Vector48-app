@@ -14,6 +14,7 @@ describe("engineRegistry", () => {
       expect(getRecipeEngine("review-request")).toBe("agent-sdk");
       expect(getRecipeEngine("estimate-follow-up")).toBe("agent-sdk");
       expect(getRecipeEngine("appointment-reminder")).toBe("agent-sdk");
+      expect(getRecipeEngine("new-lead-instant-response")).toBe("agent-sdk");
     });
 
     it("returns 'n8n' for recipes with n8n templates", () => {
@@ -22,7 +23,6 @@ describe("engineRegistry", () => {
 
     it("returns 'ghl-native' for GHL-native recipes", () => {
       expect(getRecipeEngine("google-review-booster")).toBe("ghl-native");
-      expect(getRecipeEngine("new-lead-instant-response")).toBe("ghl-native");
       expect(getRecipeEngine("seasonal-demand-outreach")).toBe("ghl-native");
       expect(getRecipeEngine("tech-on-the-way")).toBe("ghl-native");
       expect(getRecipeEngine("post-job-upsell")).toBe("ghl-native");
@@ -49,6 +49,7 @@ describe("engineRegistry", () => {
       expect(isGhlNative("review-request")).toBe(false);
       expect(isGhlNative("estimate-follow-up")).toBe(false);
       expect(isGhlNative("appointment-reminder")).toBe(false);
+      expect(isGhlNative("new-lead-instant-response")).toBe(false);
     });
 
     it("returns false for n8n recipes", () => {
@@ -61,8 +62,8 @@ describe("engineRegistry", () => {
   });
 
   describe("slug lists", () => {
-    it("has 9 GHL-native slugs", () => {
-      expect(GHL_NATIVE_SLUGS).toHaveLength(9);
+    it("has 8 GHL-native slugs", () => {
+      expect(GHL_NATIVE_SLUGS).toHaveLength(8);
     });
 
     it("has 1 n8n slug", () => {
