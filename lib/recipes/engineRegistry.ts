@@ -17,9 +17,9 @@ const ENGINE_MAP: Record<string, RecipeEngine> = {
   "missed-call-text-back": "agent-sdk",
   "review-request": "agent-sdk",
   "estimate-follow-up": "agent-sdk",
+  "appointment-reminder": "agent-sdk",
 
   // ── n8n (workflow templates, no handler yet) ───────────────────────────────
-  "appointment-reminder": "n8n",
   "lead-qualification": "n8n", // requires AI conversation
 
   // ── GHL-native (direct SMS via GHL API) ─────────────────────────────────

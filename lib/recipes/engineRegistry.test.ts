@@ -13,10 +13,10 @@ describe("engineRegistry", () => {
       expect(getRecipeEngine("missed-call-text-back")).toBe("agent-sdk");
       expect(getRecipeEngine("review-request")).toBe("agent-sdk");
       expect(getRecipeEngine("estimate-follow-up")).toBe("agent-sdk");
+      expect(getRecipeEngine("appointment-reminder")).toBe("agent-sdk");
     });
 
     it("returns 'n8n' for recipes with n8n templates", () => {
-      expect(getRecipeEngine("appointment-reminder")).toBe("n8n");
       expect(getRecipeEngine("lead-qualification")).toBe("n8n");
     });
 
@@ -48,6 +48,7 @@ describe("engineRegistry", () => {
       expect(isGhlNative("missed-call-text-back")).toBe(false);
       expect(isGhlNative("review-request")).toBe(false);
       expect(isGhlNative("estimate-follow-up")).toBe(false);
+      expect(isGhlNative("appointment-reminder")).toBe(false);
     });
 
     it("returns false for n8n recipes", () => {
@@ -64,8 +65,8 @@ describe("engineRegistry", () => {
       expect(GHL_NATIVE_SLUGS).toHaveLength(9);
     });
 
-    it("has 2 n8n slugs", () => {
-      expect(N8N_SLUGS).toHaveLength(2);
+    it("has 1 n8n slug", () => {
+      expect(N8N_SLUGS).toHaveLength(1);
     });
 
     it("has no overlap between n8n and ghl-native slugs", () => {

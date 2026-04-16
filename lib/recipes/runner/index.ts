@@ -26,6 +26,7 @@ import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering.ts";
 import { createMissedCallTextBackHandler } from "./recipes/missedCallTextBack.ts";
 import { createReviewRequestHandler } from "./recipes/reviewRequest.ts";
 import { createEstimateFollowUpHandler } from "./recipes/estimateFollowUp.ts";
+import { createAppointmentReminderHandler } from "./recipes/appointmentReminder.ts";
 
 /**
  * Supabase-shaped interface loadActiveAgent uses. Identical to the
@@ -90,6 +91,7 @@ export const RECIPE_HANDLERS: Record<string, RecipeHandler> = {
   "missed-call-text-back": createMissedCallTextBackHandler() as RecipeHandler,
   "review-request": createReviewRequestHandler() as RecipeHandler,
   "estimate-follow-up": createEstimateFollowUpHandler() as RecipeHandler,
+  "appointment-reminder": createAppointmentReminderHandler() as RecipeHandler,
 };
 
 export interface RunRecipeOptions {
