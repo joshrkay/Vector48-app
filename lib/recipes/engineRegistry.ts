@@ -1,21 +1,24 @@
 // ---------------------------------------------------------------------------
 // Recipe Engine Registry
-// Maps each recipe slug to its execution engine: "n8n" (external workflow)
-// or "ghl-native" (direct GHL API calls, no external orchestrator).
+// Maps each recipe slug to its execution engine: "n8n" (external workflow),
+// "agent-sdk" (Agent SDK handler), or "ghl-native" (direct GHL API calls).
 // ---------------------------------------------------------------------------
 
-export type RecipeEngine = "n8n" | "ghl-native";
+export type RecipeEngine = "n8n" | "agent-sdk" | "ghl-native";
 
 /**
  * Recipes with existing n8n workflow templates stay on n8n.
+ * Recipes migrated to Agent SDK use "agent-sdk".
  * All others use the GHL-native executor (direct SMS via GHL API).
  */
 const ENGINE_MAP: Record<string, RecipeEngine> = {
-  // ── n8n (have workflow templates or need external AI) ───────────────────
-  "ai-phone-answering": "n8n",
-  "missed-call-text-back": "n8n",
-  "review-request": "n8n",
-  "estimate-follow-up": "n8n",
+  // ── Agent SDK (implemented handlers) ────────────────────────────────────────
+  "ai-phone-answering": "agent-sdk",
+  "missed-call-text-back": "agent-sdk",
+  "review-request": "agent-sdk",
+  "estimate-follow-up": "agent-sdk",
+
+  // ── n8n (workflow templates, no handler yet) ───────────────────────────────
   "appointment-reminder": "n8n",
   "lead-qualification": "n8n", // requires AI conversation
 
