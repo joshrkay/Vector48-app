@@ -15,6 +15,9 @@ describe("engineRegistry", () => {
       expect(getRecipeEngine("estimate-follow-up")).toBe("agent-sdk");
       expect(getRecipeEngine("appointment-reminder")).toBe("agent-sdk");
       expect(getRecipeEngine("new-lead-instant-response")).toBe("agent-sdk");
+      expect(getRecipeEngine("google-review-booster")).toBe("agent-sdk");
+      expect(getRecipeEngine("tech-on-the-way")).toBe("agent-sdk");
+      expect(getRecipeEngine("post-job-upsell")).toBe("agent-sdk");
     });
 
     it("returns 'n8n' for recipes with n8n templates", () => {
@@ -22,10 +25,7 @@ describe("engineRegistry", () => {
     });
 
     it("returns 'ghl-native' for GHL-native recipes", () => {
-      expect(getRecipeEngine("google-review-booster")).toBe("ghl-native");
       expect(getRecipeEngine("seasonal-demand-outreach")).toBe("ghl-native");
-      expect(getRecipeEngine("tech-on-the-way")).toBe("ghl-native");
-      expect(getRecipeEngine("post-job-upsell")).toBe("ghl-native");
       expect(getRecipeEngine("maintenance-plan-enrollment")).toBe("ghl-native");
       expect(getRecipeEngine("customer-reactivation")).toBe("ghl-native");
       expect(getRecipeEngine("unsold-estimate-reactivation")).toBe("ghl-native");
@@ -50,6 +50,9 @@ describe("engineRegistry", () => {
       expect(isGhlNative("estimate-follow-up")).toBe(false);
       expect(isGhlNative("appointment-reminder")).toBe(false);
       expect(isGhlNative("new-lead-instant-response")).toBe(false);
+      expect(isGhlNative("google-review-booster")).toBe(false);
+      expect(isGhlNative("tech-on-the-way")).toBe(false);
+      expect(isGhlNative("post-job-upsell")).toBe(false);
     });
 
     it("returns false for n8n recipes", () => {
@@ -62,8 +65,8 @@ describe("engineRegistry", () => {
   });
 
   describe("slug lists", () => {
-    it("has 8 GHL-native slugs", () => {
-      expect(GHL_NATIVE_SLUGS).toHaveLength(8);
+    it("has 5 GHL-native slugs", () => {
+      expect(GHL_NATIVE_SLUGS).toHaveLength(5);
     });
 
     it("has 1 n8n slug", () => {

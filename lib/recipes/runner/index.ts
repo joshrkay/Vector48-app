@@ -28,6 +28,9 @@ import { createReviewRequestHandler } from "./recipes/reviewRequest.ts";
 import { createEstimateFollowUpHandler } from "./recipes/estimateFollowUp.ts";
 import { createAppointmentReminderHandler } from "./recipes/appointmentReminder.ts";
 import { createNewLeadInstantResponseHandler } from "./recipes/newLeadInstantResponse.ts";
+import { createGoogleReviewBoosterHandler } from "./recipes/googleReviewBooster.ts";
+import { createTechOnTheWayHandler } from "./recipes/techOnTheWay.ts";
+import { createPostJobUpsellHandler } from "./recipes/postJobUpsell.ts";
 
 /**
  * Supabase-shaped interface loadActiveAgent uses. Identical to the
@@ -94,6 +97,9 @@ export const RECIPE_HANDLERS: Record<string, RecipeHandler> = {
   "estimate-follow-up": createEstimateFollowUpHandler() as RecipeHandler,
   "appointment-reminder": createAppointmentReminderHandler() as RecipeHandler,
   "new-lead-instant-response": createNewLeadInstantResponseHandler() as RecipeHandler,
+  "google-review-booster": createGoogleReviewBoosterHandler() as RecipeHandler,
+  "tech-on-the-way": createTechOnTheWayHandler() as RecipeHandler,
+  "post-job-upsell": createPostJobUpsellHandler() as RecipeHandler,
 };
 
 export interface RunRecipeOptions {
