@@ -41,6 +41,11 @@ const SUPPORTED_SLUGS = new Set<string>([
   "missed-call-text-back",
   "review-request",
   "estimate-follow-up",
+  "appointment-reminder",
+  "new-lead-instant-response",
+  "google-review-booster",
+  "tech-on-the-way",
+  "post-job-upsell",
 ]);
 
 /**

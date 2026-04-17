@@ -17,17 +17,17 @@ const ENGINE_MAP: Record<string, RecipeEngine> = {
   "missed-call-text-back": "agent-sdk",
   "review-request": "agent-sdk",
   "estimate-follow-up": "agent-sdk",
+  "appointment-reminder": "agent-sdk",
+  "new-lead-instant-response": "agent-sdk",
+  "google-review-booster": "agent-sdk",
+  "tech-on-the-way": "agent-sdk",
+  "post-job-upsell": "agent-sdk",
 
   // ── n8n (workflow templates, no handler yet) ───────────────────────────────
-  "appointment-reminder": "n8n",
   "lead-qualification": "n8n", // requires AI conversation
 
   // ── GHL-native (direct SMS via GHL API) ─────────────────────────────────
-  "google-review-booster": "ghl-native",
-  "new-lead-instant-response": "ghl-native",
   "seasonal-demand-outreach": "ghl-native",
-  "tech-on-the-way": "ghl-native",
-  "post-job-upsell": "ghl-native",
   "maintenance-plan-enrollment": "ghl-native",
   "customer-reactivation": "ghl-native",
   "unsold-estimate-reactivation": "ghl-native",
