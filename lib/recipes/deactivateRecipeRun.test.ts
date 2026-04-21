@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runDeactivateRecipe, type DeactivateRecipeEnv, type RecipeActivationRow } from "./deactivateRecipeRun";
+import { runDeactivateRecipe, type DeactivateRecipeEnv, type RecipeActivationRow } from "./deactivateRecipeRun.ts";
 
 const activeRow = (overrides: Partial<RecipeActivationRow> = {}): RecipeActivationRow => ({
   id: "act-1",

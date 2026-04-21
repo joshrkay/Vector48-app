@@ -16,6 +16,7 @@ type RecipeTrigger = {
   contact_id: string | null;
   fire_at: string;
   fired: boolean;
+  status: "queued" | "fired" | "paused";
   payload: Record<string, unknown> | null;
 };
 
@@ -178,6 +179,7 @@ describe("processSideEffects", () => {
           contact_id: "contact-1",
           fire_at: "2026-04-01T12:00:00.000Z",
           fired: false,
+          status: "queued",
           payload: null,
         },
         {
@@ -188,6 +190,7 @@ describe("processSideEffects", () => {
           contact_id: "contact-1",
           fire_at: "2026-04-01T12:00:00.000Z",
           fired: false,
+          status: "queued",
           payload: null,
         },
       ],

@@ -23,8 +23,14 @@ describe("invalidateGHLCache", () => {
       invalidateInMemoryFallback: true,
     });
 
-    expect(revalidateTag).toHaveBeenCalledWith("ghl:acct-1:contacts");
-    expect(revalidateTag).not.toHaveBeenCalledWith("ghl:acct-1:conversations");
+    expect(revalidateTag).toHaveBeenCalledWith(
+      "ghl:acct-1:contacts",
+      expect.anything(),
+    );
+    expect(revalidateTag).not.toHaveBeenCalledWith(
+      "ghl:acct-1:conversations",
+      expect.anything(),
+    );
     expect(cacheStore.has("ghl:acct-1:contacts:list")).toBe(false);
     expect(cacheStore.has("ghl:acct-1:conversations:list")).toBe(true);
   });
@@ -35,7 +41,15 @@ describe("invalidateGHLCache", () => {
     invalidateGHLCache("acct-2", "ConversationUnreadUpdate");
     invalidateGHLCache("acct-2", "AppointmentStatusUpdate");
 
-    expect(revalidateTag).toHaveBeenNthCalledWith(1, "ghl:acct-2:conversations");
-    expect(revalidateTag).toHaveBeenNthCalledWith(2, "ghl:acct-2:appointments");
+    expect(revalidateTag).toHaveBeenNthCalledWith(
+      1,
+      "ghl:acct-2:conversations",
+      expect.anything(),
+    );
+    expect(revalidateTag).toHaveBeenNthCalledWith(
+      2,
+      "ghl:acct-2:appointments",
+      expect.anything(),
+    );
   });
 });

@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const invalidateGHLCache = vi.fn();
 const processSideEffects = vi.fn().mockResolvedValue(undefined);
 const parseGHLWebhook = vi.fn();
+const authenticateGhlWebhook = vi.fn();
 
-let accountResult: { data: { id: string; ghl_webhook_secret: string | null } | null; error: { message: string } | null };
+let accountResult: { data: { id: string } | null; error: { message: string } | null };
 let insertResult: { error: { code?: string; message: string; details?: string } | null };
 
 const mockAdmin = {
@@ -50,16 +51,22 @@ vi.mock("@/lib/ghl/webhookParser", () => ({
   parseGHLWebhook,
 }));
 
+vi.mock("@/app/api/webhooks/ghl/signatureVerification", () => ({
+  authenticateGhlWebhook,
+}));
+
 describe("GHL webhook route", () => {
   beforeEach(() => {
     accountResult = {
-      data: { id: "acct-1", ghl_webhook_secret: "valid-secret" },
+      data: { id: "acct-1" },
       error: null,
     };
     insertResult = { error: null };
     invalidateGHLCache.mockReset();
     processSideEffects.mockClear();
     parseGHLWebhook.mockReset();
+    authenticateGhlWebhook.mockReset();
+    authenticateGhlWebhook.mockReturnValue({ ok: true, algorithm: "ed25519" });
     parseGHLWebhook.mockReturnValue({
       recipe_slug: null,
       event_type: "message_received",
@@ -73,7 +80,11 @@ describe("GHL webhook route", () => {
     });
   });
 
-  it("returns 401 when the token is missing", async () => {
+  it("returns 401 when the signature is missing", async () => {
+    authenticateGhlWebhook.mockReturnValue({
+      ok: false,
+      reason: "missing_signature",
+    });
     const { POST } = await import("@/app/api/webhooks/ghl/route");
 
     const response = await POST(
@@ -87,13 +98,17 @@ describe("GHL webhook route", () => {
     expect(parseGHLWebhook).not.toHaveBeenCalled();
   });
 
-  it("returns 401 when the token is invalid", async () => {
+  it("returns 401 when the signature is invalid", async () => {
+    authenticateGhlWebhook.mockReturnValue({
+      ok: false,
+      reason: "invalid_ed25519_signature",
+    });
     const { POST } = await import("@/app/api/webhooks/ghl/route");
 
     const response = await POST(
       new Request("https://example.com/api/webhooks/ghl", {
         method: "POST",
-        headers: { "x-ghl-webhook-secret": "wrong-secret" },
+        headers: { "x-ghl-signature": "bogus" },
         body: JSON.stringify({ type: "InboundMessage", locationId: "loc-1" }),
       }),
     );
@@ -109,7 +124,7 @@ describe("GHL webhook route", () => {
     const response = await POST(
       new Request("https://example.com/api/webhooks/ghl", {
         method: "POST",
-        headers: { "x-ghl-webhook-secret": "valid-secret" },
+        headers: { "x-ghl-signature": "valid-sig" },
         body: JSON.stringify({ type: "InboundMessage", locationId: "loc-unknown" }),
       }),
     );
@@ -124,7 +139,7 @@ describe("GHL webhook route", () => {
     const response = await POST(
       new Request("https://example.com/api/webhooks/ghl", {
         method: "POST",
-        headers: { "x-ghl-webhook-secret": "valid-secret" },
+        headers: { "x-ghl-signature": "valid-sig" },
         body: JSON.stringify({ type: "InboundMessage", locationId: "loc-1" }),
       }),
     );
@@ -159,7 +174,7 @@ describe("GHL webhook route", () => {
     const response = await POST(
       new Request("https://example.com/api/webhooks/ghl", {
         method: "POST",
-        headers: { "x-ghl-webhook-secret": "valid-secret" },
+        headers: { "x-ghl-signature": "valid-sig" },
         body: JSON.stringify({ type: "InboundMessage", locationId: "loc-1" }),
       }),
     );

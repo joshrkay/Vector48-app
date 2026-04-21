@@ -39,8 +39,8 @@ describe("engineRegistry", () => {
 
   describe("isGhlNative", () => {
     it("returns true for GHL-native recipes", () => {
-      expect(isGhlNative("new-lead-instant-response")).toBe(true);
-      expect(isGhlNative("tech-on-the-way")).toBe(true);
+      expect(isGhlNative("seasonal-demand-outreach")).toBe(true);
+      expect(isGhlNative("customer-reactivation")).toBe(true);
     });
 
     it("returns false for agent-sdk recipes", () => {

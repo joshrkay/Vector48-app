@@ -1,5 +1,5 @@
-import { RECIPE_CATALOG } from "../recipes/catalog";
-import type { VoiceAction } from "@/lib/voice/types";
+import { RECIPE_CATALOG } from "../recipes/catalog.ts";
+import type { VoiceAction } from "./types.ts";
 
 export interface VoiceLiveSummary {
   openLeads: number;

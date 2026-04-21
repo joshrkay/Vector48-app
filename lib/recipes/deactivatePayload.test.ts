@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseDeactivateRecipePayload } from "./deactivatePayload";
+import { parseDeactivateRecipePayload } from "./deactivatePayload.ts";
 
 test("rejects non-object JSON", () => {
   assert.deepEqual(parseDeactivateRecipePayload(null), {

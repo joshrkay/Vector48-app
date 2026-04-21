@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deleteGhlRecipeWebhook } from "./ghlRecipeWebhooks";
+import { deleteGhlRecipeWebhook } from "./ghlRecipeWebhooks.ts";
 
 test("deleteGhlRecipeWebhook succeeds on 200", async () => {
   const fetchFn = async () => new Response(null, { status: 200 });
