@@ -85,6 +85,14 @@ export async function POST(req: Request) {
   }
 
   const ghlEventType = parseEventType(payload);
+
+  // Invalidate cache for every resource-changing event we recognize, regardless
+  // of whether we persist it to automation_events. This catches delete and
+  // note events that aren't in SUPPORTED_EVENT_TYPES but still mutate upstream
+  // state we've cached. revalidateTag is idempotent, so re-invalidation on
+  // webhook redelivery is harmless.
+  invalidateGHLCache(account.id, ghlEventType, { invalidateInMemoryFallback: true });
+
   const normalized = parseGHLWebhook(payload, ghlEventType);
 
   if (!normalized) {
@@ -105,8 +113,6 @@ export async function POST(req: Request) {
 
     console.error("[ghl-webhook] failed to write automation event", insertError.message);
   } else {
-    invalidateGHLCache(account.id, ghlEventType, { invalidateInMemoryFallback: true });
-
     queueMicrotask(() => {
       void processSideEffects(account.id, { ...normalized, account_id: account.id }, payload);
     });

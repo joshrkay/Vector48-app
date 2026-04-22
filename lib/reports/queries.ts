@@ -113,13 +113,17 @@ async function getLeadSources(
   client: ReturnType<typeof cachedGHLClient>,
   auth: GHLClientOptions,
 ): Promise<LeadSourceRow[]> {
+  // Bound the query by date — without a filter we'd paginate every contact
+  // ever created, which on large accounts means ~20 × 250 calls per report
+  // cold-load. 90 days matches the reporting horizon the UI cares about.
   const MAX_PAGES = 20;
+  const ninetyDaysAgo = daysAgo(90);
   const counts = new Map<string, number>();
 
   let cursor: string | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
     const result = await client.getContacts(
-      { limit: 250, startAfterId: cursor },
+      { limit: 250, startAfterId: cursor, "dateAdded[gte]": ninetyDaysAgo },
       auth,
     );
 

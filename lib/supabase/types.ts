@@ -272,6 +272,19 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["recipe_triggers"]["Insert"]>;
       };
+      stripe_processed_events: {
+        Row: {
+          event_id: string;
+          event_type: string;
+          processed_at: string;
+        };
+        Insert: {
+          event_id: string;
+          event_type: string;
+          processed_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["stripe_processed_events"]["Insert"]>;
+      };
     };
     Enums: {
       vertical: "hvac" | "plumbing" | "electrical" | "roofing" | "landscaping";

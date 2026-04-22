@@ -17,6 +17,7 @@ export async function register() {
       code: health.code,
       scope: health.scope,
       message: health.message,
+      missing: "missing" in health ? health.missing : undefined,
     });
   }
 

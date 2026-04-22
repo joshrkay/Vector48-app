@@ -1,4 +1,4 @@
-import { isGhlNative } from "@/lib/recipes/engineRegistry";
+import { isGhlNative } from "../recipes/engineRegistry.ts";
 
 const RECIPE_SCHEDULED_WEBHOOK_PATH = "/webhook/ghl/recipe-scheduled-trigger";
 

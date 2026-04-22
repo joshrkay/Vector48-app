@@ -33,6 +33,7 @@ import {
   getAppointments,
   getAppointment,
 } from "./calendars";
+import { getCampaigns } from "./campaigns";
 
 import type {
   GHLContactsListParams,
@@ -56,6 +57,7 @@ import type {
   GHLCalendar,
   GHLCalendarSlotsParams,
   GHLCalendarSlotsResponse,
+  GHLCampaignsListResponse,
 } from "./types";
 
 // ── Cache key builder ─────────────────────────────────────────────────────
@@ -229,6 +231,9 @@ export interface CachedGHLClient {
     eventId: string,
     opts?: GHLClientOptions,
   ) => Promise<{ event: GHLAppointment }>;
+
+  // Campaigns
+  getCampaigns: (opts?: GHLClientOptions) => Promise<GHLCampaignsListResponse>;
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────
@@ -323,6 +328,12 @@ export function cachedGHLClient(accountId: string): CachedGHLClient {
     getAppointment: (eventId, opts?) =>
       withCache(accountId, "appointments:get", { eventId }, opts, (cacheOpts) =>
         getAppointment(eventId, cacheOpts),
+      ),
+
+    // ── Campaigns ───────────────────────────────────────────────────────
+    getCampaigns: (opts?) =>
+      withCache(accountId, "campaigns:list", {}, opts, (cacheOpts) =>
+        getCampaigns(cacheOpts),
       ),
   };
 }

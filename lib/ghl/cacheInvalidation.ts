@@ -4,13 +4,23 @@ import { cacheStore } from "./cacheStore";
 const EVENT_TAG_MAP: Record<string, string[]> = {
   ContactCreate: ["contacts"],
   ContactUpdate: ["contacts"],
+  ContactDelete: ["contacts"],
+  ContactTagUpdate: ["contacts"],
+  NoteCreate: ["contacts"],
+  NoteUpdate: ["contacts"],
+  NoteDelete: ["contacts"],
   OpportunityCreate: ["opportunities"],
   OpportunityStageUpdate: ["opportunities"],
   OpportunityStatusUpdate: ["opportunities"],
+  OpportunityUpdate: ["opportunities"],
+  OpportunityDelete: ["opportunities"],
   AppointmentCreate: ["appointments"],
   AppointmentStatusUpdate: ["appointments"],
+  AppointmentUpdate: ["appointments"],
+  AppointmentDelete: ["appointments"],
   ConversationUnreadUpdate: ["conversations"],
   InboundMessage: ["conversations"],
+  OutboundMessage: ["conversations"],
 };
 
 export function invalidateGHLCache(

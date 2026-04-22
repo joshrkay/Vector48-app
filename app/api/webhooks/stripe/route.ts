@@ -23,8 +23,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  const supabase = createAdminClient();
+
+  // Idempotency: insert event.id into the ledger. If it already exists, the
+  // event has been processed — return early without re-applying mutations.
+  const { error: ledgerError } = await supabase
+    .from("stripe_processed_events")
+    .insert({ event_id: event.id, event_type: event.type });
+
+  if (ledgerError) {
+    if (ledgerError.code === "23505") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    console.error("[webhooks/stripe] Ledger insert failed:", ledgerError.message);
+    // Non-fatal: still attempt to handle the event so we don't lose data.
+  }
+
   try {
-    await handleStripeEvent(event);
+    await handleStripeEvent(event, supabase);
   } catch (err) {
     // Always return 200 on handler errors — Stripe retries otherwise
     console.error("[webhooks/stripe] Handler error for", event.type, ":", err);
@@ -33,8 +49,9 @@ export async function POST(request: Request) {
   return NextResponse.json({ received: true });
 }
 
-async function handleStripeEvent(event: Stripe.Event) {
-  const supabase = createAdminClient();
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+async function handleStripeEvent(event: Stripe.Event, supabase: AdminClient) {
 
   switch (event.type) {
     case "checkout.session.completed": {

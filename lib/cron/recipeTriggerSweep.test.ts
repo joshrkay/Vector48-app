@@ -179,12 +179,12 @@ test("routes GHL-native trigger to ghlExecutor", async () => {
       {
         id: "trg-ghl",
         account_id: "acc-1",
-        recipe_slug: "new-lead-instant-response", // GHL-native
+        recipe_slug: "seasonal-demand-outreach", // GHL-native
         payload: { contact_id: "c1", contact_name: "John" },
         attempt_count: 0,
       },
     ],
-    activeKeys: new Set(["acc-1:new-lead-instant-response"]),
+    activeKeys: new Set(["acc-1:seasonal-demand-outreach"]),
     completed: [],
     failed: [],
   };
@@ -212,7 +212,7 @@ test("routes GHL-native trigger to ghlExecutor", async () => {
   assert.equal(executorCalled, true);
   assert.deepEqual(executorParams, {
     accountId: "acc-1",
-    recipeSlug: "new-lead-instant-response",
+    recipeSlug: "seasonal-demand-outreach",
     contactId: "c1",
     triggerData: { contact_id: "c1", contact_name: "John" },
   });
@@ -225,7 +225,7 @@ test("fails GHL-native trigger when contact_id is missing", async () => {
       {
         id: "trg-ghl-nocontact",
         account_id: "acc-1",
-        recipe_slug: "tech-on-the-way",
+        recipe_slug: "customer-reactivation",
         payload: { some_data: "value" },
         attempt_count: 0,
       },
@@ -254,14 +254,14 @@ test("handles mixed n8n and GHL-native triggers", async () => {
       {
         id: "trg-n8n",
         account_id: "acc-1",
-        recipe_slug: "review-request",
+        recipe_slug: "lead-qualification",
         payload: { contact_id: "c1" },
         attempt_count: 0,
       },
       {
         id: "trg-ghl",
         account_id: "acc-1",
-        recipe_slug: "google-review-booster",
+        recipe_slug: "seasonal-demand-outreach",
         payload: { contact_id: "c2" },
         attempt_count: 0,
       },

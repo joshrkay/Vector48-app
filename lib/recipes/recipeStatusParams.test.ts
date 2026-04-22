@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseAccountIdFromRecipeStatusUrl } from "./recipeStatusParams";
+import { parseAccountIdFromRecipeStatusUrl } from "./recipeStatusParams.ts";
 
 test("returns null when account_id is missing", () => {
   assert.equal(parseAccountIdFromRecipeStatusUrl("http://localhost/api/recipes/status"), null);

@@ -69,6 +69,8 @@ import type {
   GHLVoiceAgentResponse,
 } from "./voiceTypes";
 
+import { tryAcquire } from "./rateLimiter";
+
 export type { GHLClientOptions } from "./types";
 
 type LocationClientConfig = {
@@ -93,7 +95,6 @@ const LOCAL_RATE_LIMIT = 120;
 const LOCAL_RATE_WINDOW_MS = 60_000;
 const MAX_ATTEMPTS = 4;
 const RETRY_BACKOFF_MS = [1_000, 2_000, 4_000];
-const RATE_LIMIT_STALE_MS = LOCAL_RATE_WINDOW_MS * 3;
 
 // Docs drift notes:
 // - Contacts list officially points to POST /contacts/search in some docs, but
@@ -117,15 +118,6 @@ const ENDPOINTS = {
   tokenExchange: "/oauth/locationToken",
 } as const;
 
-interface RateBucket {
-  count: number;
-  windowStart: number;
-  lock: Promise<void>;
-  lastAccess: number;
-}
-
-const rateBuckets = new Map<string, RateBucket>();
-
 function getBaseUrl(): string {
   return (
     process.env.GHL_API_BASE_URL ?? "https://services.leadconnectorhq.com"
@@ -146,76 +138,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-async function runExclusive<T>(
-  bucket: RateBucket,
-  fn: () => Promise<T> | T,
-): Promise<T> {
-  const previous = bucket.lock;
-  let release!: () => void;
-  bucket.lock = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  await previous;
-  try {
-    return await fn();
-  } finally {
-    release();
-  }
-}
-
-function getRateBucket(key: string): RateBucket {
-  const existing = rateBuckets.get(key);
-  if (existing) {
-    existing.lastAccess = Date.now();
-    return existing;
-  }
-
-  const bucket: RateBucket = {
-    count: 0,
-    windowStart: Date.now(),
-    lock: Promise.resolve(),
-    lastAccess: Date.now(),
-  };
-  rateBuckets.set(key, bucket);
-
-  if (rateBuckets.size > 250) {
-    const cutoff = Date.now() - RATE_LIMIT_STALE_MS;
-    for (const [bucketKey, candidate] of Array.from(rateBuckets.entries())) {
-      if (candidate.lastAccess < cutoff) {
-        rateBuckets.delete(bucketKey);
-      }
-    }
-  }
-
-  return bucket;
-}
-
 async function enforceLocalRateLimit(key: string): Promise<void> {
-  const bucket = getRateBucket(key);
-
-  await runExclusive(bucket, () => {
-    const now = Date.now();
-    bucket.lastAccess = now;
-
-    if (now - bucket.windowStart >= LOCAL_RATE_WINDOW_MS) {
-      bucket.count = 0;
-      bucket.windowStart = now;
-    }
-
-    if (bucket.count >= LOCAL_RATE_LIMIT) {
-      const retryAfter = Math.max(
-        1,
-        Math.ceil((bucket.windowStart + LOCAL_RATE_WINDOW_MS - now) / 1000),
-      );
-      throw new GHLRateLimitError(
-        "Local per-location GHL rate limit exceeded",
-        retryAfter,
-      );
-    }
-
-    bucket.count += 1;
-  });
+  const result = await tryAcquire(key, LOCAL_RATE_LIMIT, LOCAL_RATE_WINDOW_MS);
+  if (!result.ok) {
+    throw new GHLRateLimitError(
+      "Per-location GHL rate limit exceeded",
+      result.retryAfterSeconds,
+    );
+  }
 }
 
 function logRequest(

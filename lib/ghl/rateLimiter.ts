@@ -1,211 +1,193 @@
 // ---------------------------------------------------------------------------
 // GoHighLevel — Tier-Aware Per-Account Rate Limiter
-// Uses a per-account 60-second sliding window of request timestamps.
-// Budget is determined by the account's pricing tier. When the budget is
-// exhausted, requests are queued and resolved once capacity is available.
+// Fixed-window counter shared across serverless instances via Upstash Redis.
+// Falls back to an in-process Map when UPSTASH_REDIS_REST_* env vars are not
+// set (used by dev and tests). Two entry points:
+//   - tryAcquire(key, budget, windowMs): non-blocking; callers decide retry.
+//   - acquireRateLimit(accountId): blocks until a slot is available (tier-aware).
 // Server-only.
 // ---------------------------------------------------------------------------
 
+import { Redis } from "@upstash/redis";
+
 import { getTierConfig } from "./tierConfig";
 
-// ── Constants ─────────────────────────────────────────────────────────────
+const WINDOW_MS = 60_000;
+const DEFAULT_BUDGET = 60;
+const BUDGET_CACHE_TTL_MS = 30_000;
 
-const WINDOW_MS = 60_000; // 60-second sliding window
-const STALE_CLEANUP_MS = 5 * 60_000; // clean up buckets idle for 5 min
-const DEFAULT_BUDGET = 60; // fallback if tier lookup hasn't resolved yet
+// ── Upstash Redis client (lazy, env-driven) ────────────────────────────────
 
-// ── Per-account bucket state ──────────────────────────────────────────────
-
-interface Bucket {
-  accountId: string;
-  budget: number;
-  requestTimestamps: number[];
-  queue: Array<() => void>;
-  wakeTimer: ReturnType<typeof setTimeout> | null;
-  lastAccess: number;
-  lock: Promise<void>;
+export interface RateLimiterRedisLike {
+  incr(key: string): Promise<number>;
+  expire(key: string, seconds: number): Promise<unknown>;
 }
 
-const buckets = new Map<string, Bucket>();
+let redisClient: RateLimiterRedisLike | null = null;
+let redisInitialized = false;
 
-// ── Periodic cleanup of stale buckets ─────────────────────────────────────
+export function getRateLimiterRedis(): RateLimiterRedisLike | null {
+  if (redisInitialized) return redisClient;
+  redisInitialized = true;
 
-let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
 
-function ensureCleanup() {
-  if (cleanupTimer) return;
-  cleanupTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [id, bucket] of Array.from(buckets.entries())) {
-      if (now - bucket.lastAccess > STALE_CLEANUP_MS) {
-        if (bucket.wakeTimer) clearTimeout(bucket.wakeTimer);
-        buckets.delete(id);
-      }
-    }
-    if (buckets.size === 0 && cleanupTimer) {
-      clearInterval(cleanupTimer);
-      cleanupTimer = null;
-    }
-  }, STALE_CLEANUP_MS);
-  if (typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
-    (cleanupTimer as { unref: () => void }).unref();
-  }
-}
-
-async function runExclusive<T>(bucket: Bucket, fn: () => T): Promise<Awaited<T>> {
-  const previous = bucket.lock;
-  let release!: () => void;
-  bucket.lock = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  await previous;
   try {
-    return await fn();
-  } finally {
-    release();
+    redisClient = new Redis({ url, token }) as unknown as RateLimiterRedisLike;
+  } catch (err) {
+    console.error("[ghl/rateLimiter] Failed to initialize Upstash Redis", err);
+    redisClient = null;
   }
+  return redisClient;
 }
 
-function pruneExpired(bucket: Bucket, now: number) {
-  const cutoff = now - WINDOW_MS;
-  while (bucket.requestTimestamps.length > 0 && bucket.requestTimestamps[0]! <= cutoff) {
-    bucket.requestTimestamps.shift();
-  }
+export function __resetRateLimiterForTests() {
+  redisClient = null;
+  redisInitialized = false;
+  budgetCache.clear();
+  localCounters.clear();
 }
 
-function scheduleWake(bucket: Bucket, delayMs: number) {
-  if (bucket.wakeTimer) return;
-
-  bucket.wakeTimer = setTimeout(() => {
-    void runExclusive(bucket, () => {
-      bucket.wakeTimer = null;
-      const now = Date.now();
-      bucket.lastAccess = now;
-      pruneExpired(bucket, now);
-
-      if (bucket.queue.length === 0) return;
-
-      if (bucket.requestTimestamps.length < bucket.budget) {
-        const wake = bucket.queue.shift();
-        wake?.();
-      }
-
-      scheduleNextWake(bucket);
-    });
-  }, Math.max(0, delayMs));
-
-  if (typeof bucket.wakeTimer === "object" && "unref" in bucket.wakeTimer) {
-    (bucket.wakeTimer as { unref: () => void }).unref();
-  }
+export function __setRateLimiterRedisForTests(client: RateLimiterRedisLike | null) {
+  redisClient = client;
+  redisInitialized = true;
 }
 
-function scheduleNextWake(bucket: Bucket) {
-  if (bucket.queue.length === 0 || bucket.wakeTimer) return;
+// ── Tier-aware budget cache (avoids DB hit per acquire) ────────────────────
 
-  const now = Date.now();
-  pruneExpired(bucket, now);
+const budgetCache = new Map<string, { budget: number; expiresAt: number }>();
 
-  if (bucket.requestTimestamps.length < bucket.budget) {
-    scheduleWake(bucket, 0);
-    return;
-  }
-
-  const earliest = bucket.requestTimestamps[0];
-  if (typeof earliest !== "number") {
-    scheduleWake(bucket, 0);
-    return;
-  }
-
-  const delayMs = earliest + WINDOW_MS - now;
-  scheduleWake(bucket, delayMs);
-}
-
-// ── Get or create a bucket for an account ─────────────────────────────────
-
-async function getBucket(accountId: string): Promise<Bucket> {
-  let bucket = buckets.get(accountId);
-  if (bucket) {
-    bucket.lastAccess = Date.now();
-    return bucket;
-  }
+async function resolveBudget(accountId: string): Promise<number> {
+  const cached = budgetCache.get(accountId);
+  if (cached && cached.expiresAt > Date.now()) return cached.budget;
 
   let budget = DEFAULT_BUDGET;
   try {
     const config = await getTierConfig(accountId);
     budget = config.rateLimitBudget;
   } catch {
-    // Fall back to default budget on error
+    // Keep default budget on error.
   }
 
-  bucket = {
-    accountId,
+  budgetCache.set(accountId, {
     budget,
-    requestTimestamps: [],
-    queue: [],
-    wakeTimer: null,
-    lastAccess: Date.now(),
-    lock: Promise.resolve(),
-  };
-
-  buckets.set(accountId, bucket);
-  ensureCleanup();
-
-  return bucket;
+    expiresAt: Date.now() + BUDGET_CACHE_TTL_MS,
+  });
+  return budget;
 }
 
-async function refreshBudget(bucket: Bucket) {
-  try {
-    const config = await getTierConfig(bucket.accountId);
-    bucket.budget = config.rateLimitBudget;
-  } catch {
-    // Keep existing budget on error
+// ── Result type shared by local + shared paths ─────────────────────────────
+
+export interface AcquireResult {
+  ok: boolean;
+  retryAfterSeconds: number;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Local in-process fallback (dev, tests, and Redis outages) ──────────────
+
+interface LocalCounter {
+  windowIndex: number;
+  count: number;
+}
+
+const localCounters = new Map<string, LocalCounter>();
+
+function tryAcquireLocal(
+  bucketKey: string,
+  budget: number,
+  windowMs: number,
+): AcquireResult {
+  const now = Date.now();
+  const windowIndex = Math.floor(now / windowMs);
+
+  let counter = localCounters.get(bucketKey);
+  if (!counter || counter.windowIndex !== windowIndex) {
+    counter = { windowIndex, count: 0 };
+    localCounters.set(bucketKey, counter);
   }
+
+  counter.count += 1;
+
+  if (counter.count <= budget) {
+    return { ok: true, retryAfterSeconds: 0 };
+  }
+
+  const msUntilNextWindow = (windowIndex + 1) * windowMs - now;
+  return {
+    ok: false,
+    retryAfterSeconds: Math.max(1, Math.ceil(msUntilNextWindow / 1000)),
+  };
 }
 
-// ── Public API ────────────────────────────────────────────────────────────
+// ── Shared Redis path ──────────────────────────────────────────────────────
+
+async function tryAcquireShared(
+  bucketKey: string,
+  budget: number,
+  windowMs: number,
+  redis: RateLimiterRedisLike,
+): Promise<AcquireResult> {
+  const now = Date.now();
+  const windowIndex = Math.floor(now / windowMs);
+  const key = `ghl:rl:${bucketKey}:${windowIndex}`;
+
+  let count: number;
+  try {
+    count = await redis.incr(key);
+    if (count === 1) {
+      await redis.expire(key, Math.ceil(windowMs / 1000) + 5);
+    }
+  } catch (err) {
+    // Fail open on Redis errors so an Upstash outage doesn't halt every GHL
+    // call. The in-process local counter still provides a single-instance
+    // floor via the client's retry-on-429 logic.
+    console.error("[ghl/rateLimiter] Redis error, failing open", err);
+    return { ok: true, retryAfterSeconds: 0 };
+  }
+
+  if (count <= budget) return { ok: true, retryAfterSeconds: 0 };
+
+  const msUntilNextWindow = (windowIndex + 1) * windowMs - now;
+  return {
+    ok: false,
+    retryAfterSeconds: Math.max(1, Math.ceil(msUntilNextWindow / 1000)),
+  };
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Acquires a rate-limit slot for the given account. Resolves immediately
- * if budget is available; otherwise queues and resolves when capacity
- * becomes available. Never rejects — the caller just waits.
+ * Non-blocking rate-limit check. Routes to Upstash Redis when configured,
+ * otherwise uses an in-process counter. Returns whether the slot was acquired
+ * and — if not — how many seconds to wait before retrying.
+ */
+export async function tryAcquire(
+  bucketKey: string,
+  budget: number,
+  windowMs: number = WINDOW_MS,
+): Promise<AcquireResult> {
+  const redis = getRateLimiterRedis();
+  if (redis) return tryAcquireShared(bucketKey, budget, windowMs, redis);
+  return tryAcquireLocal(bucketKey, budget, windowMs);
+}
+
+/**
+ * Blocks until a rate-limit slot is available for the given account, using
+ * the tier-aware budget from pricing_config. Never rejects — the caller just
+ * waits.
  */
 export async function acquireRateLimit(accountId: string): Promise<void> {
-  const bucket = await getBucket(accountId);
-  await runExclusive(bucket, () => refreshBudget(bucket));
+  const budget = await resolveBudget(accountId);
 
-  while (true) {
-    let wakePromise: Promise<void> | null = null;
-    const acquired = await runExclusive(bucket, () => {
-      const now = Date.now();
-      bucket.lastAccess = now;
-      pruneExpired(bucket, now);
-
-      // Preserve ordering: while there is a queue, all new callers join it.
-      if (bucket.requestTimestamps.length < bucket.budget && bucket.queue.length === 0) {
-        bucket.requestTimestamps.push(now);
-        return true;
-      }
-
-      wakePromise = new Promise<void>((resolve) => {
-        bucket.queue.push(resolve);
-      });
-
-      scheduleNextWake(bucket);
-      return false;
-    });
-
-    if (acquired) {
-      // Successfully recorded this request timestamp.
-      await runExclusive(bucket, () => {
-        if (bucket.queue.length > 0) {
-          scheduleNextWake(bucket);
-        }
-      });
-      return;
-    }
-
-    await wakePromise;
-    // On wakeup, loop and re-check budget under lock.
+  for (;;) {
+    const result = await tryAcquire(accountId, budget);
+    if (result.ok) return;
+    await sleep(result.retryAfterSeconds * 1000);
   }
 }

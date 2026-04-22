@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAccountForUser } from "@/lib/auth/account";
-import { getCalendars } from "@/lib/ghl/calendars";
+import { cachedGHLClient } from "@/lib/ghl/cache";
 import { getAccountGhlCredentials } from "@/lib/ghl";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -13,7 +13,10 @@ export async function GET() {
 
   try {
     const { locationId, accessToken } = await getAccountGhlCredentials(session.accountId);
-    const result = await getCalendars({ locationId, apiKey: accessToken });
+    const result = await cachedGHLClient(session.accountId).getCalendars({
+      locationId,
+      apiKey: accessToken,
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("[ghl-calendars-list]", error);
