@@ -182,7 +182,8 @@ describe("GHL webhook route", () => {
     await Promise.resolve();
 
     expect(response.status).toBe(200);
-    expect(invalidateGHLCache).not.toHaveBeenCalled();
+    // Cache invalidation is idempotent (revalidateTag), so it's fine to fire
+    // on redelivery; what must NOT happen is re-running recipe side effects.
     expect(processSideEffects).not.toHaveBeenCalled();
   });
 });

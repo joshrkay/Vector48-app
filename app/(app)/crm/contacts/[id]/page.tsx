@@ -3,10 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireAccountForUser } from "@/lib/auth/account";
 import { createServerClient } from "@/lib/supabase/server";
 import { getAccountGhlCredentials } from "@/lib/ghl";
-import { getContact, getContactNotes } from "@/lib/ghl/contacts";
-import { getConversations, getMessages } from "@/lib/ghl/conversations";
-import { getAppointments } from "@/lib/ghl/calendars";
-import { getOpportunities, getPipelines } from "@/lib/ghl/opportunities";
+import { cachedGHLClient, type CachedGHLClient } from "@/lib/ghl/cache";
 import { RECIPE_CATALOG } from "@/lib/recipes/catalog";
 import { mergeRecipesWithActivations } from "@/lib/recipes/merge";
 import { ContactHeader } from "@/components/crm/contacts/ContactHeader";
@@ -70,10 +67,11 @@ async function fetchDbData(
 
 // Fetch all conversations for the contact and their messages
 async function fetchConversationsWithMessages(
+  client: CachedGHLClient,
   contactId: string,
   ghlOpts: GHLClientOptions,
 ): Promise<{ conversations: GHLConversation[]; messages: GHLMessage[] }> {
-  const convResponse = await getConversations({ contactId }, ghlOpts);
+  const convResponse = await client.getConversations({ contactId }, ghlOpts);
   const conversations = convResponse.conversations ?? [];
 
   if (conversations.length === 0) {
@@ -83,7 +81,7 @@ async function fetchConversationsWithMessages(
   // Fetch messages for each conversation in parallel
   const messageResults = await Promise.allSettled(
     conversations.map((conv) =>
-      getMessages({ conversationId: conv.id, limit: 50 }, ghlOpts),
+      client.getMessages({ conversationId: conv.id, limit: 50 }, ghlOpts),
     ),
   );
 
@@ -153,16 +151,17 @@ export default async function ContactDetailPage({
   }
 
   // Fire all fetches in parallel. One failure must not break the page.
+  const ghl = cachedGHLClient(account.id);
   const [contactResult, dbResult, convResult, apptResult, notesResult, oppsResult, pipelinesResult, integrationsResult] =
     await Promise.allSettled([
-      getContact(id, ghlOpts),                                                     // 0 — CRITICAL
-      fetchDbData(supabase, account.id, id, null /* phone filled after contact */), // 1 — DB (phone patched below)
-      fetchConversationsWithMessages(id, ghlOpts),                                  // 2 — GHL conversations
-      getAppointments({ contactId: id }, ghlOpts),                                 // 3 — GHL appointments
-      getContactNotes(id, ghlOpts),                                                // 4 — GHL notes
-      getOpportunities({ contactId: id }, ghlOpts),                               // 5 — GHL opportunities
-      getPipelines(ghlOpts),                                                       // 6 — GHL pipelines
-      supabase                                                                      // 7 — integrations
+      ghl.getContact(id, ghlOpts),                                                   // 0 — CRITICAL
+      fetchDbData(supabase, account.id, id, null /* phone filled after contact */),  // 1 — DB (phone patched below)
+      fetchConversationsWithMessages(ghl, id, ghlOpts),                              // 2 — GHL conversations
+      ghl.getAppointments({ contactId: id }, ghlOpts),                               // 3 — GHL appointments
+      ghl.getContactNotes(id, ghlOpts),                                              // 4 — GHL notes
+      ghl.getOpportunities({ contactId: id }, ghlOpts),                              // 5 — GHL opportunities
+      ghl.getPipelines(ghlOpts),                                                     // 6 — GHL pipelines
+      supabase                                                                        // 7 — integrations
         .from("integrations")
         .select("provider, status")
         .eq("account_id", account.id),
