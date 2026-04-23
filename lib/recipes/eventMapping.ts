@@ -74,8 +74,16 @@ export const SCHEDULED_RECIPE_OFFSETS: Record<
 /**
  * Recipes that fire immediately to n8n (Pattern A — inbound).
  * The webhook handler POSTs directly to n8n instead of writing recipe_triggers.
+ *
+ * `missed-call-text-back` is the canonical inbound recipe. `new-lead-instant-response`
+ * is also included here so it can fire from the synthetic `CallbackNeeded` event
+ * — without this, triggerRecipesFromGhlEvent would drop it (non-inbound + zero
+ * offsets in SCHEDULED_RECIPE_OFFSETS).
  */
-export const INBOUND_RECIPES = new Set(["missed-call-text-back"]);
+export const INBOUND_RECIPES = new Set([
+  "missed-call-text-back",
+  "new-lead-instant-response",
+]);
 
 /**
  * n8n webhook path for a given recipe + account.

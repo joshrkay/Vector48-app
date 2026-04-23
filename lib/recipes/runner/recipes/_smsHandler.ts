@@ -129,6 +129,19 @@ export function createSmsRecipeHandler<TConfig extends Record<string, unknown>>(
 
     const messageId = await sendSms(contactId, smsBody, ctx, options.deps?.ghlPost);
 
+    if (!messageId) {
+      // sendSms returns null on GHL delivery failure — callers were
+      // previously seeing options.successOutcome with messageId=null, which
+      // is misleading. Surface the failure through the existing
+      // skipped_no_message outcome so dashboards and retries behave correctly.
+      return {
+        outcome: "skipped_no_message",
+        smsBody,
+        messageId: null,
+        reason: "GHL message delivery failed",
+      };
+    }
+
     return {
       outcome: options.successOutcome,
       smsBody,
@@ -179,7 +192,11 @@ async function fetchCallerContact(
       firstName: c.firstName ?? undefined,
       phone: c.phone ?? undefined,
     };
-  } catch {
+  } catch (error) {
+    console.error(
+      `[sms-recipe] failed to fetch contact ${contactId}`,
+      error instanceof Error ? error.message : error,
+    );
     return null;
   }
 }
@@ -206,7 +223,16 @@ async function generateSms(
     .trim();
 
   if (!text) return null;
-  return text.length > maxChars ? text.slice(0, maxChars - 3) + "..." : text;
+  if (text.length > maxChars) {
+    // Claude occasionally overruns the prompt-stated max. Log and truncate so a
+    // runaway response can't push SMS costs up, but surface it loudly so ops
+    // can spot recipes that need prompt tuning.
+    console.warn(
+      `[sms-recipe] generated SMS exceeded ${maxChars} chars (was ${text.length}); truncating`,
+    );
+    return text.slice(0, maxChars - 3) + "...";
+  }
+  return text;
 }
 
 async function sendSms(

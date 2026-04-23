@@ -15,7 +15,12 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { reason?: string; contactName?: string; contactPhone?: string };
+  let body: {
+    reason?: string;
+    contactName?: string;
+    contactPhone?: string;
+    idempotencyKey?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -23,6 +28,14 @@ export async function POST(
   }
 
   const reason = (body.reason ?? "Flagged by operator").trim() || "Flagged by operator";
+
+  // Prefer an explicit client-supplied idempotency key (header or body field)
+  // so double-clicks / network retries of the UI button land on the same
+  // underlying automation_events row via the unique-index dedup path.
+  const idempotencyKey =
+    request.headers.get("x-idempotency-key")?.trim() ||
+    body.idempotencyKey?.trim() ||
+    null;
 
   try {
     const result = await markCallbackNeeded({
@@ -32,6 +45,7 @@ export async function POST(
       source: "ui_button",
       contactName: body.contactName ?? null,
       contactPhone: body.contactPhone ?? null,
+      sourceEventId: idempotencyKey,
     });
 
     return NextResponse.json(result, { status: 201 });

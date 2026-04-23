@@ -131,6 +131,7 @@ export async function markCallbackNeeded(
     .from("automation_events")
     .insert(event);
 
+  let wasDeduped = false;
   if (insertError) {
     // Unique-index conflict on (account_id, ghl_event_id) is expected when
     // the same note webhook is re-delivered. Treat as success.
@@ -139,22 +140,27 @@ export async function markCallbackNeeded(
         `failed to insert callback_needed event: ${insertError.message}`,
       );
     }
+    wasDeduped = true;
     warnings.push("automation_events_dedup_hit");
   }
 
   // 4. Fan out to recipe side effects. processSideEffects reads
   //    GHL_EVENT_TO_RECIPES["CallbackNeeded"] and enqueues the right recipes.
-  try {
-    await processSideEffects(accountId, event, {
-      contactId,
-      contact: { id: contactId, phone: params.contactPhone ?? undefined },
-      reason,
-      source,
-    });
-  } catch (err) {
-    warnings.push(
-      `side_effects_failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  //    Skip this on dedup — the first delivery already fanned out and we
+  //    must not trigger duplicate outbound SMS / recipe_triggers rows.
+  if (!wasDeduped) {
+    try {
+      await processSideEffects(accountId, event, {
+        contactId,
+        contact: { id: contactId, phone: params.contactPhone ?? undefined },
+        reason,
+        source,
+      });
+    } catch (err) {
+      warnings.push(
+        `side_effects_failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   return {
