@@ -13,7 +13,7 @@ export const getSessionData = cache(async () => {
   const { data: account } = await supabase
     .from("accounts")
     .select(
-      "id, business_name, plan_slug, trial_ends_at, onboarding_done_at, onboarding_completed_at, ghl_provisioning_status",
+      "id, business_name, plan_slug, trial_ends_at, onboarding_completed_at, ghl_provisioning_status",
     )
     .eq("id", session.accountId)
     .maybeSingle();

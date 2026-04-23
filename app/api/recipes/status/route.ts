@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireAccountForUser } from "@/lib/auth/account";
+import { createServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { parseAccountIdFromRecipeStatusUrl } from "@/lib/recipes/recipeStatusParams";
 
@@ -7,6 +9,16 @@ export async function GET(req: Request) {
 
   if (!accountId) {
     return NextResponse.json({ error: "account_id is required" }, { status: 400 });
+  }
+
+  const userClient = await createServerClient();
+  const session = await requireAccountForUser(userClient);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (session.accountId !== accountId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const supabase = getSupabaseAdmin();

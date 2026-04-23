@@ -74,6 +74,9 @@ async function handleStripeEvent(event: Stripe.Event, supabase: AdminClient) {
           plan_slug: planSlug,
           stripe_subscription_id: subscriptionId,
           subscription_status: "active",
+          // Clear trial window now that the user has a paid subscription — otherwise
+          // downstream daysRemaining math can go negative and trial banners flicker.
+          trial_ends_at: null,
         })
         .eq("id", accountId);
 

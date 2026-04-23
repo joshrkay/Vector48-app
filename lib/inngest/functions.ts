@@ -18,6 +18,12 @@ export const provisionCustomerFn = inngest.createFunction(
   {
     id: "provision-customer",
     retries: 2,
+    // One provision per account at a time. Without this, Inngest retries after
+    // partial success would re-call provisionCustomer() and (depending on which
+    // step already succeeded) could create a duplicate GHL sub-account.
+    // provisionCustomer() itself is idempotent per step (resumes from
+    // accounts.provisioning_step), so a single in-flight run is what we want.
+    idempotency: "event.data.accountId",
   },
   { event: "app/customer.onboarding.completed" },
   async ({ event, step }) => {

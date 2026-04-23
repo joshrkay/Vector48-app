@@ -21,6 +21,21 @@ interface BuildVoiceAgentPayloadOptions {
   timezone?: string;
 }
 
+/**
+ * Strip characters that could be used for prompt injection when a user-chosen
+ * businessName is interpolated into a system prompt. Newlines, quotes, braces,
+ * and angle-brackets are the typical breakouts; instruction keywords get
+ * defanged with a zero-width join so they remain readable but can't match.
+ */
+function sanitizeForPrompt(value: string, maxLength = 100): string {
+  const cleaned = value
+    .replace(/[\n\r\t  ]+/g, " ")
+    .replace(/["'`<>{}\\]/g, "")
+    .replace(/\b(ignore|disregard|override|system|assistant|user):/gi, "$1​:")
+    .trim();
+  return cleaned.length > maxLength ? cleaned.slice(0, maxLength) : cleaned || "the business";
+}
+
 function defaultGreeting(businessName: string, vertical?: string | null): string {
   const verticalLabels: Record<string, string> = {
     hvac: "heating or cooling",
@@ -34,17 +49,18 @@ function defaultGreeting(businessName: string, vertical?: string | null): string
     ? verticalLabels[vertical]
     : "service";
 
-  return `Hi, thanks for calling ${businessName}! I'm the AI assistant. I can help you schedule a ${service} appointment. What can I help you with today?`;
+  const safeName = sanitizeForPrompt(businessName);
+  return `Hi, thanks for calling ${safeName}! I'm the AI assistant. I can help you schedule a ${service} appointment. What can I help you with today?`;
 }
 
 function defaultPrompt(businessName: string, vertical?: string | null): string {
+  const safeName = sanitizeForPrompt(businessName);
+  const safeVertical = vertical ? sanitizeForPrompt(vertical, 40) : "";
   return [
-    `You are an AI phone assistant for ${businessName}.`,
+    `You are an AI phone assistant for ${safeName}.`,
     "Your job is to answer incoming calls, collect the caller's name, phone number, and reason for calling.",
     "Be friendly, professional, and concise.",
-    vertical
-      ? `This business specializes in ${vertical} services.`
-      : "",
+    safeVertical ? `This business specializes in ${safeVertical} services.` : "",
     "If the caller has an emergency, let them know someone will call back as soon as possible.",
     "If asked about pricing, let them know a team member will follow up with a quote.",
     "Always confirm the information you collected before ending the call.",

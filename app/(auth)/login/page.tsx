@@ -68,12 +68,11 @@ export default function LoginPage() {
 
       const { data: account } = await supabase
         .from("accounts")
-        .select("onboarding_done_at, onboarding_completed_at, ghl_provisioning_status")
+        .select("onboarding_completed_at, ghl_provisioning_status")
         .eq("owner_user_id", signInData.user.id)
         .maybeSingle();
 
       const onboardingDone =
-        Boolean(account?.onboarding_done_at) ||
         Boolean(account?.onboarding_completed_at) ||
         account?.ghl_provisioning_status === "failed";
 
