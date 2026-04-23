@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const BATCH_LIMIT = 50;
+const MAX_ATTEMPTS = 3;
 
 type DueTriggerRow = {
   id: string;
@@ -30,6 +31,10 @@ async function listDueTriggers(nowIso: string): Promise<{ rows: DueTriggerRow[];
     .select("id, account_id, recipe_slug, payload, attempt_count")
     .eq("status", RECIPE_TRIGGER_CANONICAL_PENDING_STATUS)
     .lte("fire_at", nowIso)
+    // Drop out permanently-failing triggers so we stop burning cycles on them.
+    // markFailed() bumps attempt_count; once it hits MAX_ATTEMPTS we leave the
+    // row in status='failed' and never claim it again.
+    .lt("attempt_count", MAX_ATTEMPTS)
     .order("fire_at", { ascending: true })
     .limit(BATCH_LIMIT);
 

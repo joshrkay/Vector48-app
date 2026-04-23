@@ -118,6 +118,12 @@ export function authenticateGhlWebhook(
   const testSecret = options?.testSecret ?? process.env.GHL_WEBHOOK_TEST_SECRET;
   const providedTestSecret = headers.get("x-ghl-test-secret");
 
+  // Refuse the unsigned-test bypass in production no matter what env vars are set.
+  // A leaked GHL_WEBHOOK_ALLOW_UNSIGNED=true must never accept unsigned traffic in prod.
+  if (process.env.NODE_ENV === "production") {
+    return { ok: false, reason: "missing_signature" };
+  }
+
   if (
     allowUnsigned === "true" &&
     typeof testSecret === "string" &&

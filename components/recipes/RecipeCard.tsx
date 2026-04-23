@@ -157,6 +157,16 @@ export function RecipeCard({
                 Activate
               </Button>
             )}
+            {isComingSoon && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full cursor-not-allowed text-[var(--text-secondary)]"
+                disabled
+              >
+                Coming soon
+              </Button>
+            )}
           </div>
         </div>
       </div>

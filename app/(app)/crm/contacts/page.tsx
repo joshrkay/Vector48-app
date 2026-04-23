@@ -61,6 +61,16 @@ export default async function ContactsPage({
 
   const contacts =
     contactsResult.status === "fulfilled" ? (contactsResult.value.contacts ?? []) : [];
+
+  // Distinguish "not connected" from "connected but fetch failed" so the
+  // empty-state resolver can route the user to Settings vs. a retry CTA.
+  const ghlConnected = credentials !== null;
+  const ghlUnavailableReason =
+    credentials && contactsResult.status === "rejected"
+      ? contactsResult.reason instanceof Error
+        ? contactsResult.reason.message.slice(0, 160)
+        : String(contactsResult.reason).slice(0, 160)
+      : null;
   const aiPhones =
     activationsResult.status === "fulfilled"
       ? (activationsResult.value.data ?? [])
@@ -81,7 +91,8 @@ export default async function ContactsPage({
       aiPhones={aiPhones}
       filter={filter}
       accountId={account.id}
-      ghlUnavailableReason={null}
+      ghlConnected={ghlConnected}
+      ghlUnavailableReason={ghlUnavailableReason}
     />
   );
 }

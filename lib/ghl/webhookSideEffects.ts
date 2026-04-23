@@ -1,4 +1,5 @@
 import {
+  CALLBACK_KEYWORD_PATTERN,
   GHL_EVENT_TO_RECIPES,
   INBOUND_RECIPES,
   SCHEDULED_RECIPE_OFFSETS,
@@ -364,6 +365,40 @@ async function triggerRecipesFromGhlEvent(
   }
 }
 
+async function detectCallbackFromNote(
+  accountId: string,
+  event: AutomationEventInsert,
+  rawPayload: Record<string, unknown>,
+): Promise<void> {
+  if (event.ghl_event_type !== "NoteCreate") return;
+
+  const body =
+    typeof rawPayload.body === "string"
+      ? rawPayload.body
+      : typeof rawPayload.message === "string"
+        ? rawPayload.message
+        : "";
+
+  if (!CALLBACK_KEYWORD_PATTERN.test(body)) return;
+
+  const contactId = contactIdFrom(event, rawPayload);
+  if (!contactId) return;
+
+  // Dynamic import avoids a circular dependency between callback.ts and
+  // webhookSideEffects.ts (callback.ts imports processSideEffects from here).
+  const { markCallbackNeeded } = await import("@/lib/recipes/callback");
+
+  await markCallbackNeeded({
+    accountId,
+    contactId,
+    reason: body.slice(0, 500),
+    source: "ghl_note",
+    contactPhone: event.contact_phone,
+    contactName: event.contact_name,
+    sourceEventId: event.ghl_event_id,
+  });
+}
+
 async function runSideEffect(
   label: string,
   task: () => Promise<void>,
@@ -398,6 +433,9 @@ export async function processSideEffects(
     ),
     runSideEffect("negative call alert", () =>
       flagNegativeCalls(accountId, event, rawPayload),
+    ),
+    runSideEffect("callback detection from note", () =>
+      detectCallbackFromNote(accountId, event, rawPayload),
     ),
     runSideEffect("recipe event triggers", () =>
       triggerRecipesFromGhlEvent(accountId, event, rawPayload, activeRecipes),

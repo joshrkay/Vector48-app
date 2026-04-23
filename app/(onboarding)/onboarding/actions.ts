@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { track } from "@/lib/analytics/posthog";
 
 // Maps WizardShell currentStep (0 = Welcome) to DB columns that step updates
 const STEP_COLUMN_MAP: Record<number, string[]> = {
@@ -86,6 +87,11 @@ export async function saveOnboardingStep(
     return { error: error.message };
   }
 
+  track(accountId, "onboarding_step_completed", {
+    step,
+    vertical: typeof data.vertical === "string" ? data.vertical : null,
+  });
+
   return { success: true };
 }
 
@@ -147,6 +153,10 @@ export async function completeOnboarding(
   }
 
   console.log("GHL provisioning job queued for", accountId);
+
+  track(accountId, "onboarding_completed", {
+    activated_recipe: activateRecipe,
+  });
 
   return { success: true };
 }

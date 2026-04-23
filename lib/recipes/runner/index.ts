@@ -22,6 +22,7 @@ import {
   type RunnerDeps,
   type TenantAgent,
 } from "./context.ts";
+import { track } from "../../analytics/posthog.ts";
 import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering.ts";
 import { createMissedCallTextBackHandler } from "./recipes/missedCallTextBack.ts";
 import { createReviewRequestHandler } from "./recipes/reviewRequest.ts";
@@ -31,6 +32,13 @@ import { createNewLeadInstantResponseHandler } from "./recipes/newLeadInstantRes
 import { createGoogleReviewBoosterHandler } from "./recipes/googleReviewBooster.ts";
 import { createTechOnTheWayHandler } from "./recipes/techOnTheWay.ts";
 import { createPostJobUpsellHandler } from "./recipes/postJobUpsell.ts";
+import { createCustomerReactivationHandler } from "./recipes/customerReactivation.ts";
+import { createMaintenancePlanEnrollmentHandler } from "./recipes/maintenancePlanEnrollment.ts";
+import { createSeasonalDemandOutreachHandler } from "./recipes/seasonalDemandOutreach.ts";
+import { createUnsoldEstimateReactivationHandler } from "./recipes/unsoldEstimateReactivation.ts";
+import { createWeatherEventOutreachHandler } from "./recipes/weatherEventOutreach.ts";
+import { createSeasonalCampaignHandler } from "./recipes/seasonalCampaign.ts";
+import { createLeadQualificationHandler } from "./recipes/leadQualification.ts";
 
 /**
  * Supabase-shaped interface loadActiveAgent uses. Identical to the
@@ -100,6 +108,13 @@ export const RECIPE_HANDLERS: Record<string, RecipeHandler> = {
   "google-review-booster": createGoogleReviewBoosterHandler() as RecipeHandler,
   "tech-on-the-way": createTechOnTheWayHandler() as RecipeHandler,
   "post-job-upsell": createPostJobUpsellHandler() as RecipeHandler,
+  "customer-reactivation": createCustomerReactivationHandler() as RecipeHandler,
+  "maintenance-plan-enrollment": createMaintenancePlanEnrollmentHandler() as RecipeHandler,
+  "seasonal-demand-outreach": createSeasonalDemandOutreachHandler() as RecipeHandler,
+  "unsold-estimate-reactivation": createUnsoldEstimateReactivationHandler() as RecipeHandler,
+  "weather-event-outreach": createWeatherEventOutreachHandler() as RecipeHandler,
+  "seasonal-campaign": createSeasonalCampaignHandler() as RecipeHandler,
+  "lead-qualification": createLeadQualificationHandler() as RecipeHandler,
 };
 
 export interface RunRecipeOptions {
@@ -142,7 +157,32 @@ export async function runRecipe<TResult = unknown>(
     deps,
   });
 
-  return handler(ctx, trigger);
+  const startedAt = Date.now();
+  try {
+    const result = await handler(ctx, trigger);
+    track(accountId, "recipe_trigger_fired", {
+      slug: recipeSlug,
+      latency_ms: Date.now() - startedAt,
+      outcome: extractOutcome(result),
+    });
+    return result;
+  } catch (error) {
+    track(accountId, "recipe_trigger_failed", {
+      slug: recipeSlug,
+      latency_ms: Date.now() - startedAt,
+      error:
+        error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+    });
+    throw error;
+  }
+}
+
+function extractOutcome(result: unknown): string | null {
+  if (result && typeof result === "object" && "outcome" in result) {
+    const value = (result as { outcome?: unknown }).outcome;
+    if (typeof value === "string") return value;
+  }
+  return null;
 }
 
 /**

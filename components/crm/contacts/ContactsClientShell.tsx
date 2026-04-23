@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { seedContactsInCache } from "@/lib/crm/contactCache";
+import { resolveContactsEmptyState } from "@/lib/crm/contactsEmptyState";
 import { Button } from "@/components/ui/button";
 import { ContactsFilterBar } from "./ContactsFilterBar";
 import { ContactsTable } from "./ContactsTable";
@@ -18,6 +20,7 @@ interface ContactsClientShellProps {
   aiPhones: string[];
   filter: string;
   accountId: string;
+  ghlConnected?: boolean;
   ghlUnavailableReason?: string | null;
 }
 
@@ -26,6 +29,7 @@ export function ContactsClientShell({
   initialNextCursor,
   aiPhones,
   filter,
+  ghlConnected = true,
   ghlUnavailableReason = null,
 }: ContactsClientShellProps) {
   const searchParams = useSearchParams();
@@ -100,20 +104,44 @@ export function ContactsClientShell({
       </div>
 
       {/* Contact list */}
-      {ghlUnavailableReason && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          We couldn&apos;t load GoHighLevel contacts right now: {ghlUnavailableReason}
-        </div>
-      )}
-      {contacts.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          No contacts found.
-        </p>
-      ) : isDesktop ? (
-        <ContactsTable contacts={contacts} aiPhones={aiSet} />
-      ) : (
-        <ContactsCardList contacts={contacts} aiPhones={aiSet} />
-      )}
+      {(() => {
+        if (contacts.length > 0) {
+          return isDesktop ? (
+            <ContactsTable contacts={contacts} aiPhones={aiSet} />
+          ) : (
+            <ContactsCardList contacts={contacts} aiPhones={aiSet} />
+          );
+        }
+
+        const emptyState = resolveContactsEmptyState({
+          contactsCount: 0,
+          ghlConnected,
+          ghlUnavailableReason,
+        });
+        if (emptyState.variant === "hidden") return null;
+
+        const isEmptySynced = emptyState.variant === "empty_synced";
+        return (
+          <div
+            className={`rounded-xl border p-6 text-center text-sm ${
+              isEmptySynced
+                ? "border-[var(--v48-border)] bg-white"
+                : "border-amber-200 bg-amber-50 text-amber-900"
+            }`}
+          >
+            <h3 className="font-heading text-base font-semibold">{emptyState.title}</h3>
+            <p className="mx-auto mt-2 max-w-md text-[var(--text-secondary)]">{emptyState.body}</p>
+            {emptyState.variant !== "empty_synced" ? (
+              <Link
+                href={emptyState.ctaHref}
+                className="mt-4 inline-flex items-center rounded-full bg-[var(--v48-accent)] px-4 py-2 text-xs font-semibold text-white hover:opacity-90"
+              >
+                {emptyState.ctaLabel}
+              </Link>
+            ) : null}
+          </div>
+        );
+      })()}
 
       {/* Infinite scroll sentinel */}
       <div ref={sentinelRef} className="h-4" aria-hidden />

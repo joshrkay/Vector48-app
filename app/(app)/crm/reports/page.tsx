@@ -46,7 +46,15 @@ export default async function ReportsPage() {
 
   if (!account) redirect("/login");
 
-  const data = await getReportData(account.id);
+  let data: Awaited<ReturnType<typeof getReportData>> | null = null;
+  let loadError: string | null = null;
+  try {
+    data = await getReportData(account.id);
+  } catch (error) {
+    console.error("[reports-page]", error);
+    loadError =
+      "We couldn't load your reports right now. Please try again in a moment.";
+  }
 
   return (
     <div className="space-y-4">
@@ -57,27 +65,35 @@ export default async function ReportsPage() {
         </p>
       </div>
 
-      <SectionCard title="Recipe Performance (Last 30 Days)">
-        <RecipePerformanceTable rows={data.recipePerformance} />
-      </SectionCard>
+      {loadError ? (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          {loadError}
+        </div>
+      ) : data ? (
+        <>
+          <SectionCard title="Recipe Performance (Last 30 Days)">
+            <RecipePerformanceTable rows={data.recipePerformance} />
+          </SectionCard>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <SectionCard title="Lead Source Breakdown">
-          <LeadSourceChart data={data.leadSources} />
-        </SectionCard>
+          <div className="grid gap-4 md:grid-cols-2">
+            <SectionCard title="Lead Source Breakdown">
+              <LeadSourceChart data={data.leadSources} />
+            </SectionCard>
 
-        <SectionCard title="Pipeline Conversion Funnel">
-          <PipelineFunnel stages={data.pipelineFunnel} />
-        </SectionCard>
-      </div>
+            <SectionCard title="Pipeline Conversion Funnel">
+              <PipelineFunnel stages={data.pipelineFunnel} />
+            </SectionCard>
+          </div>
 
-      <SectionCard title="Contact Growth (Last 12 Weeks)">
-        <ContactGrowthChart data={data.contactGrowth} />
-      </SectionCard>
+          <SectionCard title="Contact Growth (Last 12 Weeks)">
+            <ContactGrowthChart data={data.contactGrowth} />
+          </SectionCard>
 
-      <SectionCard title="Response Time Distribution (Last 30 Days)">
-        <ResponseTimeChart data={data.responseTimes} />
-      </SectionCard>
+          <SectionCard title="Response Time Distribution (Last 30 Days)">
+            <ResponseTimeChart data={data.responseTimes} />
+          </SectionCard>
+        </>
+      ) : null}
     </div>
   );
 }

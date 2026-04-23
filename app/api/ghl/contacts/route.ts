@@ -24,17 +24,25 @@ export async function GET(req: NextRequest) {
   const filter = url.searchParams.get("filter") ?? "all";
   const q = url.searchParams.get("q") ?? undefined;
 
-  const { contacts } = await cachedGHLClient(session.accountId).getContacts({
-    limit: 20,
-    startAfterId: cursor,
-    tag: TAG_MAP[filter],
-    query: q,
-  });
+  try {
+    const { contacts } = await cachedGHLClient(session.accountId).getContacts({
+      limit: 20,
+      startAfterId: cursor,
+      tag: TAG_MAP[filter],
+      query: q,
+    });
 
-  const nextCursor =
-    contacts.length === 20 ? contacts[contacts.length - 1].id : null;
+    const nextCursor =
+      contacts.length === 20 ? contacts[contacts.length - 1].id : null;
 
-  return NextResponse.json({ contacts, nextCursor });
+    return NextResponse.json({ contacts, nextCursor });
+  } catch (error) {
+    console.error("[ghl-contacts-list]", error);
+    return NextResponse.json(
+      { error: "Failed to load contacts", contacts: [], nextCursor: null },
+      { status: 502 },
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {

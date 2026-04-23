@@ -17,6 +17,7 @@ import type {
 import { createWebhook, listWebhooks } from "@/lib/ghl/webhooks";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
+import { track } from "@/lib/analytics/posthog";
 
 type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
 type AccountsUpdate = Database["public"]["Tables"]["accounts"]["Update"];
@@ -283,6 +284,11 @@ async function failProvisioning(
   } catch (writeError) {
     console.error("[provisionGHL] failed to write failure state", writeError);
   }
+
+  track(accountId, "provisioning_failed", {
+    step: failedStep,
+    error_code: message.slice(0, 200),
+  });
 
   return {
     success: false,
@@ -562,6 +568,7 @@ export async function provisionGHL(accountId: string): Promise<ProvisionResult> 
       ghl_provisioning_error: null,
       ...buildCompletionCompatFields(),
     });
+    track(accountId, "provisioning_completed", {});
     return { success: true };
   } catch (error) {
     return failProvisioning(accountId, "mark_complete", error);
