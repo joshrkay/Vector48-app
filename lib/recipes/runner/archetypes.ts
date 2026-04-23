@@ -14,10 +14,20 @@
 
 import { aiPhoneAnsweringArchetype } from "./archetypes/ai-phone-answering.ts";
 import { appointmentReminderArchetype } from "./archetypes/appointment-reminder.ts";
+import { customerReactivationArchetype } from "./archetypes/customer-reactivation.ts";
 import { estimateFollowUpArchetype } from "./archetypes/estimate-follow-up.ts";
+import { googleReviewBoosterArchetype } from "./archetypes/google-review-booster.ts";
 import { leadQualificationArchetype } from "./archetypes/lead-qualification.ts";
+import { maintenancePlanEnrollmentArchetype } from "./archetypes/maintenance-plan-enrollment.ts";
 import { missedCallTextBackArchetype } from "./archetypes/missed-call-text-back.ts";
+import { newLeadInstantResponseArchetype } from "./archetypes/new-lead-instant-response.ts";
+import { postJobUpsellArchetype } from "./archetypes/post-job-upsell.ts";
 import { reviewRequestArchetype } from "./archetypes/review-request.ts";
+import { seasonalCampaignArchetype } from "./archetypes/seasonal-campaign.ts";
+import { seasonalDemandOutreachArchetype } from "./archetypes/seasonal-demand-outreach.ts";
+import { techOnTheWayArchetype } from "./archetypes/tech-on-the-way.ts";
+import { unsoldEstimateReactivationArchetype } from "./archetypes/unsold-estimate-reactivation.ts";
+import { weatherEventOutreachArchetype } from "./archetypes/weather-event-outreach.ts";
 
 export interface RecipeArchetype {
   /** Recipe slug — must match lib/recipes/catalog.ts. */
@@ -51,6 +61,16 @@ const ARCHETYPES: Record<string, RecipeArchetype> = {
   [estimateFollowUpArchetype.slug]: estimateFollowUpArchetype,
   [appointmentReminderArchetype.slug]: appointmentReminderArchetype,
   [leadQualificationArchetype.slug]: leadQualificationArchetype,
+  [googleReviewBoosterArchetype.slug]: googleReviewBoosterArchetype,
+  [techOnTheWayArchetype.slug]: techOnTheWayArchetype,
+  [postJobUpsellArchetype.slug]: postJobUpsellArchetype,
+  [newLeadInstantResponseArchetype.slug]: newLeadInstantResponseArchetype,
+  [customerReactivationArchetype.slug]: customerReactivationArchetype,
+  [maintenancePlanEnrollmentArchetype.slug]: maintenancePlanEnrollmentArchetype,
+  [seasonalDemandOutreachArchetype.slug]: seasonalDemandOutreachArchetype,
+  [unsoldEstimateReactivationArchetype.slug]: unsoldEstimateReactivationArchetype,
+  [weatherEventOutreachArchetype.slug]: weatherEventOutreachArchetype,
+  [seasonalCampaignArchetype.slug]: seasonalCampaignArchetype,
 };
 
 export function getArchetype(slug: string): RecipeArchetype | null {

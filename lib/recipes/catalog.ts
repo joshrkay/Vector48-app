@@ -15,61 +15,126 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
     slug: "google-review-booster",
     name: "Google Review Booster",
     description:
-      "Automatically request Google reviews after completed jobs to build your online reputation and attract new customers.",
+      "Turn every completed job into a Google review. Sends a short, polite request with a one-tap review link.",
     detailedDescription:
-      "After jobs are marked complete, customers receive a timely, polite request to leave a Google review with a direct link.",
+      "When a job is marked complete, the recipe waits a configurable window, then texts the customer a short message with a direct link to leave a Google review. You choose the tone, the delay, and whether to follow up with customers who open but don't post. More 5-star reviews mean higher local search rank and more inbound leads.",
     funnelStage: "awareness",
     releasePhase: "ga",
-    icon: "star",
+    icon: "Star",
     stageColor: "sky-100",
-    trigger: "Job or appointment marked complete in your connected systems.",
-    output: "Customer receives a review request with a link to your Google Business profile.",
+    trigger: "A job or appointment is marked complete in your connected CRM.",
+    output:
+      "An SMS is sent with your Google review link and an optional one-line thank-you.",
     requiredIntegrations: [],
-    optionalIntegrations: [],
-    configFields: [],
+    optionalIntegrations: ["google_business"],
+    configFields: [
+      {
+        name: "googleReviewLink",
+        label: "Google Review Link",
+        type: "text",
+        required: true,
+        placeholder: "https://g.page/r/your-business/review",
+        helperText:
+          "Paste your Google Business review URL. Find it in your Google Business profile → Reviews → Get more reviews.",
+      },
+      {
+        name: "reviewDelayHours",
+        label: "Hours After Job to Send",
+        type: "number",
+        required: false,
+        helperText:
+          "How long to wait after the job is marked complete. 2 hours is a good default.",
+      },
+      {
+        name: "reviewMessage",
+        label: "Custom Review Request (optional)",
+        type: "textarea",
+        required: false,
+        helperText:
+          "Leave blank to use our vertical-tuned default. Keep under 280 characters and include {{review_link}} where you want the link.",
+      },
+    ],
     vertical: null,
     verticalMessages: {
-      hvac: "Thanks for choosing {{business_name}}! We'd love a quick Google review if you're happy with our work.",
+      hvac: "Thanks for choosing {{business_name}}! If we got your system running right, a quick Google review really helps us — {{review_link}}",
       plumbing:
-        "Thanks for trusting {{business_name}} with your plumbing needs. A short Google review helps neighbors find us.",
+        "Thanks for trusting {{business_name}} with your plumbing! A short Google review helps neighbors find us: {{review_link}}",
       electrical:
-        "We appreciate your business at {{business_name}}. If we did well, a Google review means a lot.",
+        "We appreciate your business at {{business_name}}. If we did well, a quick Google review means a lot: {{review_link}}",
       roofing:
-        "Thank you from {{business_name}}! A Google review helps other homeowners choose a roofer they can trust.",
+        "Thank you from {{business_name}}! A Google review helps other homeowners choose a roofer they can trust: {{review_link}}",
       landscaping:
-        "Thanks for working with {{business_name}}! A quick Google review helps us grow.",
+        "Thanks for working with {{business_name}}! If you love the results, a quick Google review goes a long way: {{review_link}}",
     },
-    estimatedROI: "More 5-star reviews improve local search visibility",
+    estimatedROI: "More 5-star reviews improve local search visibility and inbound lead flow.",
+    outcomeMetric: "3–5× more Google reviews per month",
   },
   {
     slug: "seasonal-campaign",
     name: "Seasonal Campaign",
     description:
-      "Send targeted seasonal promotions to past customers — AC tune-ups in spring, furnace checks in fall, and more.",
+      "Scheduled seasonal pushes to past customers — AC tune-ups in spring, furnace checks in fall, storm-prep in winter.",
     detailedDescription:
-      "Scheduled campaigns text or email past customers with seasonal offers (e.g. AC tune-ups, furnace checks) based on rules you configure.",
+      "Pick a season, a start date, and a target segment. On the start date the recipe sends a personalized SMS to everyone in that segment with the offer you configured. Great for filling quiet periods and reactivating past customers without blasting your whole list at once.",
     funnelStage: "awareness",
     releasePhase: "coming_soon",
-    icon: "megaphone",
+    icon: "Megaphone",
     stageColor: "sky-100",
-    trigger: "Seasonal schedule or list segment reaches campaign send window.",
-    output: "Customers receive the configured seasonal promotion message.",
+    trigger:
+      "The campaign start date is reached for the configured customer segment.",
+    output:
+      "Each customer in the target segment receives one SMS with your seasonal offer.",
     requiredIntegrations: [],
     optionalIntegrations: [],
-    configFields: [],
+    configFields: [
+      {
+        name: "campaignName",
+        label: "Campaign Name",
+        type: "text",
+        required: true,
+        placeholder: "Spring AC Tune-Up 2025",
+        helperText: "Internal label — shows up in the Dashboard.",
+      },
+      {
+        name: "campaignStartDate",
+        label: "Send Date",
+        type: "text",
+        required: true,
+        placeholder: "YYYY-MM-DD",
+        helperText: "ISO date (YYYY-MM-DD). Sends start at 9:00 AM local time.",
+      },
+      {
+        name: "campaignMessage",
+        label: "Campaign Message",
+        type: "textarea",
+        required: true,
+        helperText:
+          "Keep under 320 characters. {{contact_name}} and {{business_name}} merge in automatically.",
+      },
+      {
+        name: "targetSegment",
+        label: "Target Segment",
+        type: "select",
+        required: true,
+        options: ["all_past_customers", "inactive_90d", "maintenance_plan", "estimated_not_booked"],
+        helperText: "Which customer group to send to.",
+      },
+    ],
     vertical: "hvac",
     verticalMessages: {
-      hvac: "Seasonal special from {{business_name}} — book your tune-up before peak season fills up.",
+      hvac: "Hey {{contact_name}}, {{business_name}} here — our spring AC tune-up is back. Book before {{campaign_start_date}} and save 15% before peak season. Reply YES to schedule.",
       plumbing:
-        "A quick note from {{business_name}}: seasonal maintenance offer for past customers.",
+        "Hey {{contact_name}}, {{business_name}} — our seasonal plumbing check is back. Inspect the water heater, shut-offs, and outdoor spigots before the weather turns. Reply YES for a slot.",
       electrical:
-        "{{business_name}} — limited-time seasonal offer for customers like you.",
+        "Hey {{contact_name}}, {{business_name}} — our seasonal electrical safety check is on. Book before {{campaign_start_date}} for our returning-customer rate. Reply YES to schedule.",
       roofing:
-        "{{business_name}} — schedule a seasonal roof check before storm season.",
+        "Hey {{contact_name}}, {{business_name}} — storm season is coming. We're offering free roof check-ups through {{campaign_start_date}}. Reply YES and we'll hold a spot.",
       landscaping:
-        "{{business_name}} — spring/fall service slots are open for past customers.",
+        "Hey {{contact_name}}, {{business_name}} — spring cleanup slots are filling up. Book by {{campaign_start_date}} and save on your first visit. Reply YES to schedule.",
     },
-    estimatedROI: "Repeat business from past customers",
+    estimatedROI:
+      "Fills schedule gaps with repeat business at a fraction of new-lead cost.",
+    outcomeMetric: "10–20% of segment books a service",
   },
 
   // ── Capture (4) ────────────────────────────────────────────
@@ -130,7 +195,8 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hi, thanks for calling {{business_name}}! I'm the AI assistant. Are you interested in a landscaping quote or scheduling a regular service?",
     },
-    estimatedROI: "Recovers 30-40% of missed calls",
+    estimatedROI: "Recovers 30-40% of missed calls that would otherwise go cold.",
+    outcomeMetric: "Recovers 30–40% of missed calls",
   },
 
   {
@@ -174,7 +240,8 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}, sorry we missed your call! We'll get back to you shortly. — {{business_name}}",
     },
-    estimatedROI: "Recovers 20-30% of missed call leads",
+    estimatedROI: "Recovers 20-30% of missed call leads who would otherwise call a competitor.",
+    outcomeMetric: "Recovers 20–30% of missed call leads",
   },
 
   // ── ENGAGE ─────────────────────────────────────────────────────────────────
@@ -220,7 +287,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}! Thanks for reaching out to {{business_name}}. We'd love to help with your landscaping needs. What are you looking for?",
     },
-    estimatedROI: "Increases lead conversion by 30-50%",
+    estimatedROI:
+      "Speed-to-lead is the #1 factor in conversion — responding within 5 minutes increases booking rate by 30-50%.",
+    outcomeMetric: "30–50% higher lead conversion",
   },
 
   {
@@ -271,7 +340,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Thanks! A few quick questions: Are you looking for a one-time project or ongoing maintenance? What's the approximate size of the area?",
     },
-    estimatedROI: "Saves 5-10 hours/week on manual lead screening",
+    estimatedROI:
+      "Saves 5-10 hours per week on manual lead screening and lets your team focus on qualified bookings.",
+    outcomeMetric: "5–10 hrs/week saved on lead screening",
   },
 
   // ── CLOSE ──────────────────────────────────────────────────────────────────
@@ -318,7 +389,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}, following up on the landscaping estimate we sent. Any questions or ready to get started? — {{business_name}}",
     },
-    estimatedROI: "Improves estimate close rate by 15-25%",
+    estimatedROI:
+      "A single well-timed follow-up lifts estimate close rate 15-25% with zero extra headcount.",
+    outcomeMetric: "15–25% higher estimate close rate",
   },
 
   {
@@ -369,7 +442,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}! Spring is here and it's the perfect time to refresh your yard. Want to schedule a spring cleanup? — {{business_name}}",
     },
-    estimatedROI: "Fills 20-30% of off-peak schedule gaps",
+    estimatedROI:
+      "Fills 20-30% of off-peak schedule gaps at a cost per booked job far below new-lead acquisition.",
+    outcomeMetric: "Fills 20–30% of off-peak gaps",
   },
 
   // ── DELIVER ────────────────────────────────────────────────────────────────
@@ -416,7 +491,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Reminder: Your landscaping appointment with {{business_name}} is tomorrow at {{appointment_time}}. Please make sure gates are unlocked. Reply C to confirm or R to reschedule.",
     },
-    estimatedROI: "Reduces no-shows by 30-50%",
+    estimatedROI:
+      "A well-timed reminder cuts no-shows 30-50%, keeping your techs billable instead of idle.",
+    outcomeMetric: "30–50% fewer no-shows",
   },
 
   {
@@ -461,7 +538,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Good news! Your landscaping crew lead {{tech_name}} is on the way and should arrive in about {{eta}} minutes. — {{business_name}}",
     },
-    estimatedROI: "Reduces 'where's my tech' calls by 60%",
+    estimatedROI:
+      "Eliminates 60% of 'where's my tech?' calls and lifts post-job NPS. Lets dispatch focus on booked work, not status updates.",
+    outcomeMetric: "60% fewer status calls to dispatch",
   },
 
   // ── RETAIN ─────────────────────────────────────────────────────────────────
@@ -515,7 +594,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}, thanks for choosing {{business_name}} for your landscaping! If you love how things look, we'd appreciate a review: {{review_link}}",
     },
-    estimatedROI: "Increases reviews by 3-5x",
+    estimatedROI:
+      "A timed ask after a completed job lifts review volume 3-5x, compounding local-search ranking over months.",
+    outcomeMetric: "3–5× more reviews per month",
   },
 
   {
@@ -560,7 +641,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}, now that your yard looks great, have you considered an irrigation system or outdoor lighting? — {{business_name}}",
     },
-    estimatedROI: "Increases repeat revenue by 15-20%",
+    estimatedROI:
+      "Adds 15-20% to repeat revenue by nudging a complementary service at the moment customers trust you most.",
+    outcomeMetric: "+15–20% repeat revenue",
   },
 
   {
@@ -611,7 +694,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}, our recurring maintenance plan covers weekly mowing, seasonal cleanup, and priority scheduling. Plans start at $149/mo. — {{business_name}}",
     },
-    estimatedROI: "Converts 10-15% of one-time customers to recurring",
+    estimatedROI:
+      "Converts 10-15% of one-time customers to recurring plans — predictable revenue with near-zero acquisition cost.",
+    outcomeMetric: "10–15% convert to recurring plans",
   },
 
   // ── REACTIVATE ─────────────────────────────────────────────────────────────
@@ -658,7 +743,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}, it's been a while! Your yard might need some love. Book this month and get 10% off any service. — {{business_name}}",
     },
-    estimatedROI: "Reactivates 10-20% of dormant customers",
+    estimatedROI:
+      "Wakes up 10-20% of dormant customers — a fraction of the cost of acquiring a new lead.",
+    outcomeMetric: "Reactivates 10–20% of dormant customers",
   },
 
   {
@@ -703,7 +790,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}, you got a landscaping estimate from us a while back. Still interested? Spring's a great time to get started. — {{business_name}}",
     },
-    estimatedROI: "Recovers 10-15% of stale estimates",
+    estimatedROI:
+      "Recovers 10-15% of stale estimates that would otherwise walk — pure upside on work already quoted.",
+    outcomeMetric: "Recovers 10–15% of stale estimates",
   },
 
   {
@@ -749,7 +838,9 @@ export const RECIPE_CATALOG: RecipeDefinition[] = [
       landscaping:
         "Hey {{contact_name}}, after the recent {{weather_event}}, your yard may need some cleanup. We're offering storm cleanup services — want us to come by? — {{business_name}}",
     },
-    estimatedROI: "Captures 40-60% of post-storm demand",
+    estimatedROI:
+      "Captures 40-60% of post-storm demand by being first to reach affected customers.",
+    outcomeMetric: "Captures 40–60% of post-storm demand",
   },
 ];
 

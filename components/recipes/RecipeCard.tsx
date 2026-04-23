@@ -6,19 +6,30 @@ import { cn } from "@/lib/utils";
 import { STAGE_STYLES } from "@/lib/recipes/stages";
 import type { RecipeWithStatus } from "@/lib/recipes/types";
 import type { AccountProfileSlice } from "@/lib/recipes/activationValidator";
+import type { Vertical } from "@/types/recipes";
 import { RecipeStageTag } from "./RecipeStageTag";
 import { ActivationSheet } from "./ActivationSheet";
 import { getRecipeLucideIcon } from "./recipeIcons";
 import { Button } from "@/components/ui/button";
-import { Clock } from "lucide-react";
+import { Clock, TrendingUp } from "lucide-react";
 import type { RecipeStatus } from "@/lib/recipes/types";
 
 const STATUS_LABELS: Record<RecipeStatus, string> = {
   active: "Active",
   paused: "Paused",
-  error: "Error",
+  error: "Needs attention",
   available: "Available",
-  coming_soon: "Coming Soon",
+  coming_soon: "Coming soon",
+};
+
+const STAGE_RAIL: Record<string, string> = {
+  awareness: "bg-sky-500",
+  capture: "bg-teal-500",
+  engage: "bg-violet-500",
+  close: "bg-amber-500",
+  deliver: "bg-green-500",
+  retain: "bg-rose-500",
+  reactivate: "bg-orange-500",
 };
 
 function formatLastTriggered(iso: string): string {
@@ -48,12 +59,14 @@ export interface RecipeCardProps {
   recipe: RecipeWithStatus;
   profile: AccountProfileSlice | null;
   connectedProviders: string[];
+  accountVertical?: Vertical | null;
 }
 
 export function RecipeCard({
   recipe,
   profile,
   connectedProviders,
+  accountVertical,
 }: RecipeCardProps) {
   const [activateOpen, setActivateOpen] = useState(false);
   const Icon = getRecipeLucideIcon(recipe.icon);
@@ -67,70 +80,113 @@ export function RecipeCard({
     <>
       <div
         className={cn(
-          "relative flex flex-col rounded-2xl border border-[var(--v48-border)] bg-white shadow-sm transition-shadow hover:shadow-md",
-          "md:min-h-[280px]",
-          isActive && "border-t-4 border-t-[var(--v48-accent)]",
-          isPaused && "border-t-4 border-t-amber-400",
-          isError && "border-t-4 border-t-red-400",
-          isComingSoon && "opacity-50",
+          "group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm",
+          "transition-all duration-150 ease-out",
+          !isComingSoon && "hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg",
+          "min-h-[260px]",
+          isComingSoon && "opacity-60",
         )}
       >
-        <div className="flex flex-1 flex-col p-5">
-          <div className="flex items-start justify-between">
+        {/* Stage rail — Monday-style left edge */}
+        <div
+          aria-hidden
+          className={cn(
+            "absolute inset-y-0 left-0 w-1",
+            STAGE_RAIL[recipe.funnelStage] ?? "bg-slate-300",
+          )}
+        />
+
+        <div className="flex flex-1 flex-col gap-4 p-5 pl-6">
+          {/* Header row — icon + status */}
+          <div className="flex items-start justify-between gap-3">
             <div
               className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-xl",
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
                 stageStyle.bg,
               )}
             >
-              <Icon className={cn("h-6 w-6", stageStyle.icon)} strokeWidth={1.5} />
+              <Icon
+                className={cn("h-5 w-5", stageStyle.icon)}
+                strokeWidth={1.75}
+              />
             </div>
 
             <span
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
-                isActive && "bg-[var(--v48-accent)] text-white",
-                isPaused && "bg-amber-100 text-amber-700",
-                isError && "bg-red-100 text-red-700",
-                recipe.status === "available" && "bg-gray-100 text-gray-600",
-                isComingSoon && "bg-gray-50 text-gray-400",
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide",
+                isActive && "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
+                isPaused && "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20",
+                isError && "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20",
+                recipe.status === "available" &&
+                  "bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200",
+                isComingSoon &&
+                  "bg-slate-50 text-slate-400 ring-1 ring-inset ring-slate-200",
               )}
             >
               {isActive && (
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-                </span>
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                />
               )}
               {STATUS_LABELS[recipe.status]}
             </span>
           </div>
 
-          <h3 className="mt-4 font-heading text-lg font-semibold leading-tight">
-            {recipe.name}
-          </h3>
-
-          <p className="mt-1.5 line-clamp-2 text-sm text-[var(--text-secondary)]">
-            {recipe.description}
-          </p>
-
-          <div className="mt-3">
-            <RecipeStageTag stage={recipe.funnelStage} />
+          {/* Title + description */}
+          <div>
+            <h3 className="font-heading text-[17px] font-semibold leading-snug tracking-[-0.01em] text-slate-900">
+              {recipe.name}
+            </h3>
+            <p className="mt-1.5 line-clamp-3 text-[14px] leading-[1.55] text-slate-600">
+              {recipe.description}
+            </p>
           </div>
 
+          {/* Stage + outcome metric */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <RecipeStageTag stage={recipe.funnelStage} />
+            {recipe.outcomeMetric && (
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium text-slate-700">
+                <TrendingUp
+                  className="h-3.5 w-3.5 text-slate-400"
+                  strokeWidth={2}
+                />
+                {recipe.outcomeMetric}
+              </span>
+            )}
+          </div>
+
+          {/* Meta strip — trigger / sends */}
+          <dl className="mt-auto space-y-1 border-t border-slate-100 pt-3 text-[12px] leading-snug">
+            <div className="flex gap-2">
+              <dt className="w-16 shrink-0 font-medium uppercase tracking-wide text-slate-400">
+                Trigger
+              </dt>
+              <dd className="line-clamp-2 text-slate-600">{recipe.trigger}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-16 shrink-0 font-medium uppercase tracking-wide text-slate-400">
+                Sends
+              </dt>
+              <dd className="line-clamp-2 text-slate-600">{recipe.output}</dd>
+            </div>
+          </dl>
+
           {isActive && recipe.lastTriggeredAt && (
-            <div className="mt-2 flex items-center gap-1 text-xs text-[var(--text-secondary)]">
-              <Clock className="h-3 w-3" />
-              <span>Last triggered {formatLastTriggered(recipe.lastTriggeredAt)}</span>
+            <div className="flex items-center gap-1 text-[11px] text-slate-500">
+              <Clock className="h-3 w-3" strokeWidth={2} />
+              <span>Last run {formatLastTriggered(recipe.lastTriggeredAt)}</span>
             </div>
           )}
 
-          <div className="flex-1" />
-
-          <div className="mt-4">
+          {/* Action */}
+          <div>
             {isActive && (
               <Button variant="outline" size="sm" className="w-full" asChild>
-                <Link href={`/dashboard?recipe=${recipe.slug}`}>View Activity</Link>
+                <Link href={`/dashboard?recipe=${recipe.slug}`}>
+                  View activity
+                </Link>
               </Button>
             )}
             {isPaused && (
@@ -142,7 +198,7 @@ export function RecipeCard({
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full"
+                className="w-full border-red-200 text-red-700 hover:bg-red-50"
                 onClick={() => setActivateOpen(true)}
               >
                 Retry setup
@@ -151,7 +207,7 @@ export function RecipeCard({
             {recipe.status === "available" && (
               <Button
                 size="sm"
-                className="w-full bg-[var(--v48-accent)] text-white hover:opacity-90"
+                className="w-full bg-slate-900 text-white hover:bg-slate-800"
                 onClick={() => setActivateOpen(true)}
               >
                 Activate
@@ -161,7 +217,7 @@ export function RecipeCard({
               <Button
                 size="sm"
                 variant="outline"
-                className="w-full cursor-not-allowed text-[var(--text-secondary)]"
+                className="w-full cursor-not-allowed text-slate-400"
                 disabled
               >
                 Coming soon
@@ -177,6 +233,7 @@ export function RecipeCard({
         recipe={recipe}
         profile={profile}
         connectedProviders={connectedProviders}
+        accountVertical={accountVertical}
       />
     </>
   );

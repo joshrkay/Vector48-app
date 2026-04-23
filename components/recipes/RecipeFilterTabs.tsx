@@ -23,7 +23,7 @@ export function RecipeFilterTabs({
   return (
     <div
       role="tablist"
-      className="inline-flex items-center gap-1 rounded-full bg-gray-100 p-1"
+      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm"
     >
       {tabs.map((tab) => (
         <button
@@ -32,10 +32,10 @@ export function RecipeFilterTabs({
           aria-selected={value === tab.key}
           onClick={() => onChange(tab.key)}
           className={cn(
-            "rounded-full px-4 py-1.5 text-sm font-medium transition-all",
+            "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
             value === tab.key
-              ? "bg-white text-[var(--text-primary)] shadow-sm"
-              : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+              ? "bg-slate-900 text-white"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
           )}
         >
           {tab.label}

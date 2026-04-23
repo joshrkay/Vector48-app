@@ -3,9 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock,
+  Loader2,
+  MessageSquare,
+  Plug,
+  Send,
+  TrendingUp,
+} from "lucide-react";
 import type { RecipeWithStatus } from "@/lib/recipes/types";
 import type { AccountProfileSlice } from "@/lib/recipes/activationValidator";
+import type { Vertical } from "@/types/recipes";
 import { catalogIntegrationToDbProvider } from "@/lib/recipes/catalogIntegrationMap";
 import {
   getAccountProfileValue,
@@ -71,6 +80,8 @@ export interface ActivationSheetProps {
   connectedProviders: string[];
   /** Optional CRM contact defaults (e.g. normalized phone) for editable config fields. */
   contactPrefill?: Record<string, unknown>;
+  /** Current account's vertical — used to pick the sample message to preview. */
+  accountVertical?: Vertical | null;
 }
 
 export function ActivationSheet({
@@ -80,6 +91,7 @@ export function ActivationSheet({
   profile,
   connectedProviders,
   contactPrefill,
+  accountVertical,
 }: ActivationSheetProps) {
   const router = useRouter();
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -202,30 +214,121 @@ export function ActivationSheet({
   const descriptionText =
     recipe.detailedDescription?.trim() || recipe.description;
 
+  const sampleMessage = useMemo(() => {
+    const v = accountVertical ?? "hvac";
+    return recipe.verticalMessages?.[v] ?? null;
+  }, [accountVertical, recipe.verticalMessages]);
+
   const body = (
-    <div className="flex max-h-[min(70vh,560px)] flex-col gap-4 overflow-y-auto pr-1">
+    <div className="flex max-h-[min(72vh,620px)] flex-col gap-6 overflow-y-auto pr-1">
       {phase === "success" ? (
         <ActivationSuccess onComplete={onSuccessComplete} />
       ) : (
         <>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-              What this does
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-[var(--text-primary)]">
+          {/* ─── Section 1: How it works ─────────────────────────────── */}
+          <Section title="How it works">
+            <p className="text-[14px] leading-relaxed text-slate-700">
               {descriptionText}
             </p>
-          </div>
 
+            <dl className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 text-[13px] sm:grid-cols-2">
+              <MetaRow
+                icon={<Clock className="h-4 w-4 text-slate-400" />}
+                label="Trigger"
+                value={recipe.trigger}
+              />
+              <MetaRow
+                icon={<Send className="h-4 w-4 text-slate-400" />}
+                label="Sends"
+                value={recipe.output}
+              />
+              {recipe.outcomeMetric && (
+                <MetaRow
+                  icon={<TrendingUp className="h-4 w-4 text-slate-400" />}
+                  label="Impact"
+                  value={recipe.outcomeMetric}
+                />
+              )}
+              {recipe.requiredIntegrations.length > 0 && (
+                <MetaRow
+                  icon={<Plug className="h-4 w-4 text-slate-400" />}
+                  label="Needs"
+                  value={recipe.requiredIntegrations
+                    .map(integrationDisplayName)
+                    .join(", ")}
+                />
+              )}
+            </dl>
+
+            {sampleMessage && (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <MessageSquare
+                    className="h-3.5 w-3.5"
+                    strokeWidth={2}
+                  />
+                  Sample message
+                </p>
+                <p className="mt-2 text-[13px] leading-relaxed text-slate-700">
+                  {sampleMessage}
+                </p>
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Claude personalizes each send using this template as a guide.
+                </p>
+              </div>
+            )}
+          </Section>
+
+          {/* ─── Section 2: What you'll configure ───────────────────── */}
+          {(missingIntegrations.length > 0 ||
+            recipe.configFields.length > 0) && (
+            <Section title="What you'll configure">
+              {missingIntegrations.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  {missingIntegrations.map((key) => (
+                    <div
+                      key={key}
+                      className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900"
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div>
+                        <p>
+                          Connect your{" "}
+                          <strong>{integrationDisplayName(key)}</strong> account
+                          first — the recipe needs it to send.
+                        </p>
+                        <Link
+                          href="/settings?tab=integrations"
+                          className="mt-1 inline-block font-semibold text-amber-900 underline underline-offset-2"
+                        >
+                          Connect now →
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <RecipeConfigForm
+                configFields={recipe.configFields}
+                profile={profile}
+                formId={FORM_ID}
+                onSubmit={onConfigSubmit}
+                contactPrefill={contactPrefill}
+              />
+            </Section>
+          )}
+
+          {/* ─── Status alerts ──────────────────────────────────────── */}
           {phase === "plan_limit" && planMessage && (
             <div
-              className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+              className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-950"
               role="status"
             >
               <p>{planMessage.message}</p>
               <Link
                 href={planMessage.upgradeHref}
-                className="mt-2 inline-block font-semibold text-amber-900 underline"
+                className="mt-2 inline-block font-semibold text-amber-900 underline underline-offset-2"
               >
                 Upgrade →
               </Link>
@@ -234,46 +337,12 @@ export function ActivationSheet({
 
           {phase === "error" && errorMessage && (
             <div
-              className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"
+              className="rounded-lg border border-red-200 bg-red-50 p-3 text-[13px] text-red-900"
               role="alert"
             >
               {errorMessage}
             </div>
           )}
-
-          {missingIntegrations.length > 0 && (
-            <div className="space-y-2">
-              {missingIntegrations.map((key) => (
-                <div
-                  key={key}
-                  className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
-                >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div>
-                    <p>
-                      This recipe needs your{" "}
-                      <strong>{integrationDisplayName(key)}</strong> account
-                      connected.
-                    </p>
-                    <Link
-                      href="/settings?tab=integrations"
-                      className="mt-1 inline-block font-semibold text-amber-900 underline"
-                    >
-                      Connect now →
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <RecipeConfigForm
-            configFields={recipe.configFields}
-            profile={profile}
-            formId={FORM_ID}
-            onSubmit={onConfigSubmit}
-            contactPrefill={contactPrefill}
-          />
         </>
       )}
     </div>
@@ -283,7 +352,7 @@ export function ActivationSheet({
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <button
         type="button"
-        className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        className="text-sm text-slate-500 hover:text-slate-800"
         onClick={() => handleOpenChange(false)}
         disabled={phase === "loading"}
       >
@@ -311,7 +380,7 @@ export function ActivationSheet({
               missingIntegrations.length > 0 ||
               phase === "plan_limit"
             }
-            className="bg-[var(--v48-accent)] text-white hover:opacity-90"
+            className="bg-slate-900 text-white hover:bg-slate-800"
           >
             {phase === "loading" ? (
               <>
@@ -319,7 +388,7 @@ export function ActivationSheet({
                 Setting up…
               </>
             ) : (
-              "Activate Recipe"
+              "Activate recipe"
             )}
           </Button>
         )}
@@ -379,7 +448,7 @@ export function ActivationSheet({
               )}
             >
               <Icon
-                className="h-6 w-6 text-[var(--text-primary)]"
+                className="h-6 w-6 text-slate-700"
                 strokeWidth={1.5}
               />
             </div>
@@ -387,8 +456,10 @@ export function ActivationSheet({
               <SheetTitle className="text-left font-heading text-xl">
                 {recipe.name}
               </SheetTitle>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                {prefilledCount} of {totalFields} fields pre-filled
+              <p className="mt-1 text-sm text-slate-500">
+                {totalFields === 0
+                  ? "No configuration needed"
+                  : `${prefilledCount} of ${totalFields} fields pre-filled`}
               </p>
             </div>
           </div>
@@ -402,5 +473,46 @@ export function ActivationSheet({
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function MetaRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <div className="mt-0.5 shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+          {label}
+        </dt>
+        <dd className="mt-0.5 text-[13px] leading-snug text-slate-700">
+          {value}
+        </dd>
+      </div>
+    </div>
   );
 }

@@ -60,6 +60,10 @@ export interface RecipeConfigField {
   defaultFromProfile?: string;
   /** Available choices for 'select' type fields */
   options?: string[];
+  /** Short inline guidance rendered under the field in the activation form. */
+  helperText?: string;
+  /** Placeholder text shown inside empty text/textarea inputs. */
+  placeholder?: string;
 }
 
 // ── Recipe Definition (static catalog entry) ───────────────────────────────
@@ -85,6 +89,12 @@ export interface RecipeDefinition {
   /** Sample customer-facing message per vertical */
   verticalMessages: Record<Vertical, string>;
   estimatedROI: string;
+  /**
+   * Short, scannable impact stat surfaced on the recipe card
+   * (e.g. "Recovers 30-40% of missed calls"). If omitted, the UI falls
+   * back to truncating `estimatedROI`.
+   */
+  outcomeMetric?: string;
 }
 
 // ── Activation Status ──────────────────────────────────────────────────────
