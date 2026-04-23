@@ -1,4 +1,4 @@
-import { createSmsRecipeHandler } from "./_smsHandler";
+import { createSmsRecipeHandler } from "./_smsHandler.ts";
 
 interface UnsoldEstimateConfig extends Record<string, unknown> {
   reactivationMessage?: string;
