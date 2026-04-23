@@ -24,7 +24,25 @@ export const GHL_EVENT_TO_RECIPES: Record<string, string[]> = {
   // Recipe 5 — Appointment Reminder (scheduled)
   AppointmentCreate: ["appointment-reminder"],
   AppointmentUpdate: ["appointment-reminder"],
+
+  // Callback-needed synthetic event — fires when a contact is flagged as
+  // needing a callback via any of three sources (NoteCreate webhook with
+  // callback keyword, operator UI button, or Voice AI transcript classifier).
+  // Normalized through lib/recipes/callback.ts markCallbackNeeded().
+  CallbackNeeded: ["missed-call-text-back", "new-lead-instant-response"],
 };
+
+/**
+ * Keyword regex that detects callback intent in free-text fields (note
+ * bodies, call transcripts). Kept here so both the webhook handler and
+ * the Voice AI classifier share one source of truth.
+ */
+export const CALLBACK_KEYWORD_PATTERN = /\b(call\s*me\s*back|callback|please\s*call)\b/i;
+
+export function textImpliesCallback(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return CALLBACK_KEYWORD_PATTERN.test(text);
+}
 
 /**
  * For scheduled (Pattern B) recipes, defines the delay offsets from the

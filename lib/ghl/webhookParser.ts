@@ -15,6 +15,8 @@ const SUPPORTED_EVENT_TYPES: Record<string, AutomationEventInsert["event_type"]>
   AppointmentStatusUpdate: "appointment_updated",
   ConversationUnreadUpdate: "conversation_unread",
   ConversationUnread: "conversation_unread",
+  NoteCreate: "note_created",
+  TagUpdate: "tag_updated",
 };
 
 const SECRET_KEYS = new Set([
@@ -196,6 +198,10 @@ function extractEntityId(payload: Record<string, unknown>, ghlEventType: string)
     case "AppointmentCreate":
     case "AppointmentStatusUpdate":
       return pickString(payload, ["appointmentId", "appointment_id", "id"]);
+    case "NoteCreate":
+      return pickString(payload, ["noteId", "note_id", "id"]);
+    case "TagUpdate":
+      return pickString(payload, ["contactId", "contact_id", "id"]);
     default:
       return pickString(payload, ["id"]);
   }
@@ -272,6 +278,19 @@ function summaryForEvent(ghlEventType: string, payload: Record<string, unknown>)
     case "ConversationUnread":
     case "ConversationUnreadUpdate":
       return `Conversation has unread messages from ${who}`;
+    case "NoteCreate": {
+      const preview = messagePreview(payload);
+      return preview ? `Note added for ${who} — "${preview}"` : `Note added for ${who}`;
+    }
+    case "TagUpdate": {
+      const added = Array.isArray(payload.addedTags)
+        ? (payload.addedTags as unknown[]).filter((t): t is string => typeof t === "string")
+        : [];
+      if (added.length > 0) {
+        return `Tag added for ${who}: ${added.join(", ")}`;
+      }
+      return `Tags updated for ${who}`;
+    }
     default:
       return "Customer activity received";
   }

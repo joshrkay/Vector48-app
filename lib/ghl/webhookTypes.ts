@@ -8,7 +8,9 @@ export type GHLWebhookEventType =
   | "AppointmentCreate"
   | "AppointmentStatusUpdate"
   | "ConversationUnreadUpdate"
-  | "ConversationUnread";
+  | "ConversationUnread"
+  | "NoteCreate"
+  | "TagUpdate";
 
 export type AutomationEventType =
   | "call_completed"
@@ -20,6 +22,9 @@ export type AutomationEventType =
   | "appointment_created"
   | "appointment_updated"
   | "conversation_unread"
+  | "note_created"
+  | "tag_updated"
+  | "callback_needed"
   | "sequence_paused"
   | "rebook_triggered"
   | "alert";
@@ -182,6 +187,27 @@ export interface GHLWebhookConversationUnread extends GHLWebhookBase {
   contact?: GHLWebhookContactRef;
 }
 
+export interface GHLWebhookNoteCreate extends GHLWebhookBase {
+  type?: "NoteCreate";
+  noteId?: string;
+  note_id?: string;
+  contactId?: string;
+  contact_id?: string;
+  body?: string;
+  userId?: string;
+  contact?: GHLWebhookContactRef;
+}
+
+export interface GHLWebhookTagUpdate extends GHLWebhookBase {
+  type?: "TagUpdate";
+  contactId?: string;
+  contact_id?: string;
+  tags?: string[];
+  addedTags?: string[];
+  removedTags?: string[];
+  contact?: GHLWebhookContactRef;
+}
+
 export type GHLWebhookPayload =
   | GHLWebhookCallCompleted
   | GHLWebhookInboundMessage
@@ -192,7 +218,9 @@ export type GHLWebhookPayload =
   | GHLWebhookAppointmentCreate
   | GHLWebhookAppointmentStatusUpdate
   | GHLWebhookConversationUnreadUpdate
-  | GHLWebhookConversationUnread;
+  | GHLWebhookConversationUnread
+  | GHLWebhookNoteCreate
+  | GHLWebhookTagUpdate;
 
 export interface AutomationEventInsert {
   account_id: string;

@@ -31,6 +31,13 @@ import { createNewLeadInstantResponseHandler } from "./recipes/newLeadInstantRes
 import { createGoogleReviewBoosterHandler } from "./recipes/googleReviewBooster.ts";
 import { createTechOnTheWayHandler } from "./recipes/techOnTheWay.ts";
 import { createPostJobUpsellHandler } from "./recipes/postJobUpsell.ts";
+import { createCustomerReactivationHandler } from "./recipes/customerReactivation.ts";
+import { createMaintenancePlanEnrollmentHandler } from "./recipes/maintenancePlanEnrollment.ts";
+import { createSeasonalDemandOutreachHandler } from "./recipes/seasonalDemandOutreach.ts";
+import { createUnsoldEstimateReactivationHandler } from "./recipes/unsoldEstimateReactivation.ts";
+import { createWeatherEventOutreachHandler } from "./recipes/weatherEventOutreach.ts";
+import { createSeasonalCampaignHandler } from "./recipes/seasonalCampaign.ts";
+import { createLeadQualificationHandler } from "./recipes/leadQualification.ts";
 
 /**
  * Supabase-shaped interface loadActiveAgent uses. Identical to the
@@ -100,6 +107,13 @@ export const RECIPE_HANDLERS: Record<string, RecipeHandler> = {
   "google-review-booster": createGoogleReviewBoosterHandler() as RecipeHandler,
   "tech-on-the-way": createTechOnTheWayHandler() as RecipeHandler,
   "post-job-upsell": createPostJobUpsellHandler() as RecipeHandler,
+  "customer-reactivation": createCustomerReactivationHandler() as RecipeHandler,
+  "maintenance-plan-enrollment": createMaintenancePlanEnrollmentHandler() as RecipeHandler,
+  "seasonal-demand-outreach": createSeasonalDemandOutreachHandler() as RecipeHandler,
+  "unsold-estimate-reactivation": createUnsoldEstimateReactivationHandler() as RecipeHandler,
+  "weather-event-outreach": createWeatherEventOutreachHandler() as RecipeHandler,
+  "seasonal-campaign": createSeasonalCampaignHandler() as RecipeHandler,
+  "lead-qualification": createLeadQualificationHandler() as RecipeHandler,
 };
 
 export interface RunRecipeOptions {
