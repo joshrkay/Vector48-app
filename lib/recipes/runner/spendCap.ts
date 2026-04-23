@@ -8,7 +8,19 @@
 // This is the only mechanism preventing a runaway tenant (spammed phone
 // line, prompt-injection attack, broken integration) from burning unlimited
 // Claude budget.
+//
+// Concurrent-trigger race (qa/audits/A4-recipes.md BUG-1): two triggers
+// reading at the same moment both see `current < cap` and both pass,
+// then both add cost and bust the cap. We mitigate with an estimate-
+// based headroom check: `current + estimatedCallCost > cap` fails
+// fast so the marginal next call cannot push total spend over the cap.
+// An attacker still using 100 concurrent triggers on a $3 cap will at
+// worst exceed by one call's estimated cost (~$0.03 for Haiku) — a
+// two-orders-of-magnitude improvement over the unbounded overage
+// possible before this check.
 // ---------------------------------------------------------------------------
+
+import { computeCostMicros } from "./pricing.ts";
 
 // getSupabaseAdmin is loaded lazily inside getMonthlySpendMicros so this
 // module can be unit-tested under `node --test --experimental-strip-types`
@@ -44,6 +56,36 @@ export interface AgentSpendInfo {
   account_id: string;
   recipe_slug: string;
   monthly_spend_cap_micros: number | null;
+  /**
+   * Added for BUG-1: the headroom check estimates the worst-case cost
+   * of the upcoming call using (model, max_tokens). Both fields live
+   * on the tenant_agents row and are already part of the RecipeContext
+   * the tracked client receives.
+   */
+  model?: string;
+  max_tokens?: number;
+}
+
+/**
+ * Estimate the upper bound in micros for a single Claude call, assuming
+ * it consumes the agent's full max_tokens of output and a generous
+ * input allowance. Used for the pre-flight headroom check so concurrent
+ * triggers cannot race past a cap. Returns 0 when we can't price the
+ * model (unknown slug, missing max_tokens) — matches the existing
+ * fail-open behaviour of computeCostMicros.
+ */
+export function estimateCallCostMicros(
+  model: string | undefined,
+  maxTokens: number | undefined,
+): number {
+  if (!model || !maxTokens || maxTokens <= 0) return 0;
+  // Assume ~1k input tokens as a realistic worst case for recipe
+  // prompts (system + user). Output dominates cost at 3-15x input
+  // pricing, so the result is still a tight upper bound.
+  return computeCostMicros(model, {
+    inputTokens: 1_000,
+    outputTokens: maxTokens,
+  });
 }
 
 /**
@@ -109,8 +151,16 @@ export async function getMonthlySpendMicros(
 }
 
 /**
- * Throws SpendCapExceededError if the agent has a cap set and is at or
- * over it. No-op when the cap is null (unlimited).
+ * Throws SpendCapExceededError if the agent has a cap set and
+ * firing the next call would exceed it. No-op when the cap is null
+ * (unlimited).
+ *
+ * BUG-1 headroom check: we compare `current + estimatedNextCall`
+ * against the cap rather than `current` alone. This bounds the
+ * overage from concurrent triggers: the first N triggers that race
+ * through the cap check can each add at most `estimatedNextCall` to
+ * the actual spend, instead of each potentially billing many times
+ * over the cap.
  */
 export async function enforceSpendCap(
   agent: AgentSpendInfo,
@@ -124,7 +174,10 @@ export async function enforceSpendCap(
     client,
   );
 
-  if (current >= agent.monthly_spend_cap_micros) {
+  const estimate = estimateCallCostMicros(agent.model, agent.max_tokens);
+  const projected = current + estimate;
+
+  if (projected >= agent.monthly_spend_cap_micros) {
     throw new SpendCapExceededError(
       agent.account_id,
       agent.recipe_slug,

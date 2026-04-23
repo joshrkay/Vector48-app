@@ -18,10 +18,12 @@
 
 import {
   buildRecipeContext,
+  RecipeMissingGhlCredsError,
   type RecipeContext,
   type RunnerDeps,
   type TenantAgent,
 } from "./context.ts";
+import { extractContactId, isContactPaused } from "./pauseGate.ts";
 import { track } from "../../analytics/posthog.ts";
 import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering.ts";
 import { createMissedCallTextBackHandler } from "./recipes/missedCallTextBack.ts";
@@ -60,6 +62,22 @@ export interface RunnerSupabaseClient {
       };
     };
   };
+}
+
+/** Re-exported for callers that catch errors at the runner boundary. */
+export { RecipeMissingGhlCredsError };
+
+/**
+ * Outcome returned when the runner short-circuits before dispatching
+ * to a handler. Matches the shape of `{ outcome: string, ... }` that
+ * handlers return so analytics and automation_events logging keep
+ * working unchanged.
+ */
+export interface RecipeSkippedResult {
+  outcome:
+    | "skipped_no_ghl_creds"
+    | "skipped_paused_for_contact";
+  reason?: string;
 }
 
 export class RecipeAgentNotFoundError extends Error {
@@ -150,12 +168,59 @@ export async function runRecipe<TResult = unknown>(
     deps?.supabase as unknown as RunnerSupabaseClient | undefined,
   );
 
-  const ctx = await buildRecipeContext({
-    accountId,
-    agent,
-    triggerId: triggerId ?? null,
-    deps,
-  });
+  // Pause-for-contact gate (A4 audit BUG-3). If the trigger carries a
+  // contact id and the operator has paused automation for that contact
+  // via /api/recipes/pause-for-contact, short-circuit before we spend
+  // budget or double-SMS the customer. Missing contact id is fine —
+  // schedule-driven triggers (seasonal campaigns) don't have one.
+  const contactId = extractContactId(trigger);
+  if (contactId) {
+    const paused = await isContactPaused(
+      accountId,
+      recipeSlug,
+      contactId,
+      deps?.supabase as unknown as Parameters<typeof isContactPaused>[3],
+    );
+    if (paused) {
+      const skipped: RecipeSkippedResult = {
+        outcome: "skipped_paused_for_contact",
+        reason: `contact_id=${contactId}`,
+      };
+      track(accountId, "recipe_trigger_fired", {
+        slug: recipeSlug,
+        latency_ms: 0,
+        outcome: skipped.outcome,
+      });
+      return skipped as unknown as TResult;
+    }
+  }
+
+  let ctx: RecipeContext;
+  try {
+    ctx = await buildRecipeContext({
+      accountId,
+      agent,
+      triggerId: triggerId ?? null,
+      deps,
+    });
+  } catch (error) {
+    // Graceful skip on missing GHL connection (A4 audit BUG-2). This
+    // covers never-connected, revoked-mid-flight, and decrypt failures
+    // that surface as "no GHL credentials".
+    if (error instanceof RecipeMissingGhlCredsError) {
+      const skipped: RecipeSkippedResult = {
+        outcome: "skipped_no_ghl_creds",
+        reason: `account=${accountId}`,
+      };
+      track(accountId, "recipe_trigger_fired", {
+        slug: recipeSlug,
+        latency_ms: 0,
+        outcome: skipped.outcome,
+      });
+      return skipped as unknown as TResult;
+    }
+    throw error;
+  }
 
   const startedAt = Date.now();
   try {

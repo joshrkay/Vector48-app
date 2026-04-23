@@ -22,6 +22,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 import type { GHLWebhookCallCompleted } from "@/lib/ghl/webhookTypes";
 
 export interface PhoneAnsweringTrigger {
@@ -158,14 +159,21 @@ function buildUserMessage(
   call: GHLWebhookCallCompleted,
   transcript: string,
 ): string {
-  const caller =
+  const rawCaller =
     call.contact?.firstName ??
     call.contact?.name ??
     call.contact?.contactName ??
     "an unknown caller";
+  const caller =
+    sanitizeForPrompt(rawCaller, { maxLen: 120 }) || "an unknown caller";
+  // Transcripts can carry user speech so they must be scrubbed of role
+  // markers and control chars, but they're allowed to be longer than a
+  // config field — bump the cap accordingly.
+  const safeTranscript =
+    sanitizeForPrompt(transcript, { maxLen: 4000 }) || "(empty transcript)";
   const duration = call.callDuration ?? call.duration;
   const meta = duration ? `\nCall duration: ${duration}s` : "";
-  return `Caller: ${caller}${meta}\n\nTranscript:\n${transcript}`;
+  return `Caller: ${caller}${meta}\n\nTranscript:\n${safeTranscript}`;
 }
 
 function extractText(message: Message): string {

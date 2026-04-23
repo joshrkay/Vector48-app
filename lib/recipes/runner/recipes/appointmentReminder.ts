@@ -17,6 +17,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 
 export interface AppointmentReminderTrigger {
   account_id: string;
@@ -127,14 +128,21 @@ export function createAppointmentReminderHandler(
       };
     }
 
-    const contactName = appointment.contact.name ??
+    const rawContactName = appointment.contact.name ??
       appointment.contact.firstName ?? "Customer";
+    const contactName =
+      sanitizeForPrompt(rawContactName, { maxLen: 120 }) || "Customer";
 
-    const template = reminder_type === "24h"
-      ? activationConfig.reminder24h
-      : activationConfig.reminder2h;
+    const template = sanitizeForPrompt(
+      reminder_type === "24h"
+        ? activationConfig.reminder24h
+        : activationConfig.reminder2h,
+      { maxLen: 500 },
+    );
 
-    const businessName = activationConfig.businessName;
+    const businessName = sanitizeForPrompt(activationConfig.businessName, {
+      maxLen: 120,
+    });
 
     const smsBody = await generateReminderMessage(
       ctx,

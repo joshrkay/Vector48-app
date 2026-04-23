@@ -18,6 +18,23 @@ import {
   type TrackedClientSupabase,
 } from "./trackedClient.ts";
 
+/**
+ * Raised by buildRecipeContext when the account has no GHL OAuth
+ * connection (revoked, never connected, mid-flight disconnect). The
+ * runner catches this and converts it to a `skipped_no_ghl_creds`
+ * outcome so the trigger row records the miss without a 500. See
+ * qa/audits/A4-recipes.md BUG-2.
+ */
+export class RecipeMissingGhlCredsError extends Error {
+  readonly accountId: string;
+
+  constructor(accountId: string) {
+    super(`No GHL credentials for account ${accountId}`);
+    this.name = "RecipeMissingGhlCredsError";
+    this.accountId = accountId;
+  }
+}
+
 export interface TenantAgent {
   id: string;
   account_id: string;
@@ -160,11 +177,25 @@ export async function buildRecipeContext(
       const { getAccountGhlCredentials } = await import("@/lib/ghl/token");
       const creds = await getAccountGhlCredentials(id);
       if (!creds) {
-        throw new Error(`No GHL credentials for account ${id}`);
+        throw new RecipeMissingGhlCredsError(id);
       }
       return { locationId: creds.locationId, accessToken: creds.accessToken };
     });
-  const ghl = await getGhlCredentials(accountId);
+
+  let ghl: { locationId: string; accessToken: string };
+  try {
+    ghl = await getGhlCredentials(accountId);
+  } catch (err) {
+    // Rethrow as the typed error so runRecipe can swallow it into a
+    // graceful skipped outcome instead of bubbling a 500. Unexpected
+    // errors (network, decrypt) still propagate.
+    if (err instanceof RecipeMissingGhlCredsError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/no ghl credentials/i.test(msg)) {
+      throw new RecipeMissingGhlCredsError(accountId);
+    }
+    throw err;
+  }
 
   const ai = createTrackedAnthropic({
     accountId,

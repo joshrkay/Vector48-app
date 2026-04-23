@@ -16,6 +16,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 
 export interface GoogleReviewBoosterTrigger {
   account_id: string;
@@ -226,9 +227,17 @@ async function generateReviewRequest(
   googleReviewLink: string,
   businessName?: string,
 ): Promise<string | null> {
-  const business = businessName ? ` from ${businessName}` : "";
+  const safeName =
+    sanitizeForPrompt(callerContact.firstName ?? callerContact.name, {
+      maxLen: 120,
+    }) || "Customer";
+  const safeBusiness = sanitizeForPrompt(businessName, { maxLen: 120 });
+  const business = safeBusiness ? ` from ${safeBusiness}` : "";
+  // The review link is substituted as-is — a URL can contain marker
+  // characters but we don't sanitize it here because the tenant just
+  // wrote it in Settings and truncation would corrupt the redirect.
 
-  const userMessage = `Write a friendly Google review request${business} for ${callerContact.firstName ?? callerContact.name}. ` +
+  const userMessage = `Write a friendly Google review request${business} for ${safeName}. ` +
     `Thank them for their business and kindly ask for a Google review. ` +
     `Include this link: ${googleReviewLink}. ` +
     "Keep it under 300 characters, warm and appreciative.";

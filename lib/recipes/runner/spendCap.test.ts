@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   enforceSpendCap,
+  estimateCallCostMicros,
   getMonthlySpendMicros,
   SpendCapExceededError,
   type AgentSpendInfo,
@@ -132,5 +133,68 @@ describe("enforceSpendCap", () => {
       client,
     );
     assert.equal(called, false);
+  });
+
+  // BUG-1 headroom check: enforceSpendCap blocks when the PROJECTED
+  // next call would push over the cap, not just when current spend
+  // already exceeds it. This bounds overage from concurrent triggers.
+  it("blocks when current + estimated next call exceeds the cap", async () => {
+    // Cap $1. Current $0.98. Haiku call with 200 max_tokens costs
+    // roughly 1 * 1000 + 5 * 200 = 2000 micros ($0.002) — but we use
+    // 1000 input tokens, so estimate = 1000 * 1 + 200 * 5 = 2000.
+    // 980_000 + 2_000 = 982_000 which is still under $1, so this
+    // first case should PASS.
+    const agent: AgentSpendInfo = {
+      ...baseAgent,
+      model: "claude-haiku-4-5",
+      max_tokens: 200,
+    };
+    const belowCap = fakeClient(980_000);
+    await enforceSpendCap(agent, belowCap);
+
+    // Bigger agent: Haiku at 10k max_tokens costs 1000*1 + 10000*5 =
+    // 51_000 micros. 980_000 + 51_000 = 1_031_000 > 1_000_000 cap → block.
+    const bigAgent: AgentSpendInfo = {
+      ...baseAgent,
+      model: "claude-haiku-4-5",
+      max_tokens: 10_000,
+    };
+    await assert.rejects(
+      () => enforceSpendCap(bigAgent, fakeClient(980_000)),
+      SpendCapExceededError,
+    );
+  });
+
+  it("falls back to legacy behaviour when model/max_tokens are missing", async () => {
+    // No model or max_tokens → estimate = 0, so only current >= cap triggers.
+    const agent: AgentSpendInfo = { ...baseAgent };
+    const under = fakeClient(999_999);
+    await enforceSpendCap(agent, under);
+    await assert.rejects(
+      () => enforceSpendCap(agent, fakeClient(1_000_000)),
+      SpendCapExceededError,
+    );
+  });
+});
+
+describe("estimateCallCostMicros", () => {
+  it("returns 0 for unknown model", () => {
+    const cost = estimateCallCostMicros("unknown-model", 200);
+    assert.equal(cost, 0);
+  });
+
+  it("returns 0 when max_tokens is missing or zero", () => {
+    assert.equal(estimateCallCostMicros("claude-haiku-4-5", 0), 0);
+    assert.equal(estimateCallCostMicros("claude-haiku-4-5", undefined), 0);
+  });
+
+  it("returns output-dominant estimate for Haiku 4.5", () => {
+    // 1000 input * 1 + 200 output * 5 = 2000 micros
+    assert.equal(estimateCallCostMicros("claude-haiku-4-5", 200), 2000);
+  });
+
+  it("returns higher estimate for Sonnet 4.6 (3:15 pricing)", () => {
+    // 1000 * 3 + 1024 * 15 = 18_360 micros
+    assert.equal(estimateCallCostMicros("claude-sonnet-4-6", 1024), 18_360);
   });
 });

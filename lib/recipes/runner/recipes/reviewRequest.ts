@@ -17,6 +17,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 
 export interface ReviewRequestTrigger {
   account_id: string;
@@ -229,7 +230,12 @@ async function generateReviewRequest(
   callerContact: { name: string; firstName?: string },
   reviewLink: string,
 ): Promise<string | null> {
-  const userMessage = `Write a friendly review request message for ${callerContact.firstName ?? callerContact.name}. ` +
+  const safeName =
+    sanitizeForPrompt(callerContact.firstName ?? callerContact.name, {
+      maxLen: 120,
+    }) || "Customer";
+
+  const userMessage = `Write a friendly review request message for ${safeName}. ` +
     `Include the literal token ${REVIEW_LINK_PLACEHOLDER} where the review link should go. ` +
     `Keep the message under 300 characters, warm and grateful, no emojis.`;
 

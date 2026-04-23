@@ -17,6 +17,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 
 export interface EstimateFollowUpTrigger {
   account_id: string;
@@ -249,16 +250,19 @@ async function generateFollowUpMessage(
   businessName?: string,
   followUpAttempt: number = 1,
 ): Promise<string | null> {
+  const safeName = sanitizeForPrompt(contactName, { maxLen: 120 }) || "Customer";
+  const safeBusiness = sanitizeForPrompt(businessName, { maxLen: 120 });
+  const safeFollowUp = sanitizeForPrompt(followUpMessage, { maxLen: 500 });
   const tone = followUpAttempt === 1
     ? "friendly and warm"
     : "slightly more direct but still polite";
 
-  const business = businessName ? ` from ${businessName}` : "";
+  const business = safeBusiness ? ` from ${safeBusiness}` : "";
 
-  const userMessage = followUpMessage
-    ? `Write a ${tone} follow-up message${business} for ${contactName}. ` +
-      `Include this: "${followUpMessage}". Keep it under 300 characters.`
-    : `Write a ${tone} follow-up message${business} for ${contactName} ` +
+  const userMessage = safeFollowUp
+    ? `Write a ${tone} follow-up message${business} for ${safeName}. ` +
+      `Include this: "${safeFollowUp}". Keep it under 300 characters.`
+    : `Write a ${tone} follow-up message${business} for ${safeName} ` +
       `about their recent estimate. Keep it under 300 characters.`;
 
   const response: Message = await ctx.ai.messages.create({

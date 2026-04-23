@@ -13,6 +13,7 @@
 
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt, sanitizeStrings } from "../promptSanitize.ts";
 
 export type GhlPostFn = <T>(
   path: string,
@@ -101,9 +102,23 @@ export function createSmsRecipeHandler<TConfig extends Record<string, unknown>>(
       };
     }
 
+    // BUG-9: scrub role-override tokens, control chars, and oversize
+    // strings out of config + contact before they reach the prompt.
+    // Every catalog handler calls buildPrompt via this factory, so
+    // sanitising here covers all 16 recipes in one place.
+    const safeConfig = sanitizeStrings(config) as TConfig;
+    const safeContact: CallerContact = {
+      name: sanitizeForPrompt(contact.name, { maxLen: 120 }) || "Customer",
+      firstName: contact.firstName
+        ? sanitizeForPrompt(contact.firstName, { maxLen: 80 })
+        : undefined,
+      // Phone is only used for SMS delivery, not prompt interpolation.
+      phone: contact.phone,
+    };
+
     const userMessage = options.buildPrompt({
-      contact,
-      config: config as TConfig,
+      contact: safeContact,
+      config: safeConfig,
       trigger,
       ctx,
     });

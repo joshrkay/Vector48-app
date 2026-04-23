@@ -14,6 +14,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 
 export interface TechOnTheWayTrigger {
   account_id: string;
@@ -229,17 +230,24 @@ async function generateNotification(
   eta?: number,
   includeTechName: boolean = true,
 ): Promise<string | null> {
-  const business = businessName ? ` from ${businessName}` : "";
-  const techInfo = includeTechName && techName
-    ? `Your technician ${techName} `
+  const safeName =
+    sanitizeForPrompt(callerContact.firstName ?? callerContact.name, {
+      maxLen: 120,
+    }) || "Customer";
+  const safeBusiness = sanitizeForPrompt(businessName, { maxLen: 120 });
+  const safeTech = sanitizeForPrompt(techName, { maxLen: 80 });
+  const safeTemplate = sanitizeForPrompt(templateMessage, { maxLen: 500 });
+  const business = safeBusiness ? ` from ${safeBusiness}` : "";
+  const techInfo = includeTechName && safeTech
+    ? `Your technician ${safeTech} `
     : "Your technician ";
   const etaInfo = eta ? `is on the way and should arrive in about ${eta} minutes.` : "is on the way.";
 
-  const userMessage = templateMessage
-    ? `Write a notification${business} for ${callerContact.firstName ?? callerContact.name}. ` +
-      `Include: "${templateMessage}". ` +
+  const userMessage = safeTemplate
+    ? `Write a notification${business} for ${safeName}. ` +
+      `Include: "${safeTemplate}". ` +
       "Keep it under 300 characters, friendly and informative."
-    : `Write a friendly notification${business} for ${callerContact.firstName ?? callerContact.name}. ` +
+    : `Write a friendly notification${business} for ${safeName}. ` +
       `Say ${techInfo}${etaInfo} ` +
       "Keep it under 300 characters.";
 

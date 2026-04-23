@@ -18,6 +18,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 
 export interface MissedCallTextBackTrigger {
   /** Account UUID */
@@ -241,9 +242,17 @@ async function generateTextBack(
   callerContact: { name: string; firstName?: string },
   customTemplate?: string,
 ): Promise<string | null> {
-  const userMessage = customTemplate
-    ? `Caller: ${callerContact.name}\n\n${customTemplate}`
-    : `Write a text-back message for a missed call from ${callerContact.firstName ?? callerContact.name}. Keep it under 160 characters, warm and professional, no emojis.`;
+  const safeName =
+    sanitizeForPrompt(callerContact.firstName ?? callerContact.name, {
+      maxLen: 120,
+    }) || "Customer";
+  const safeFullName =
+    sanitizeForPrompt(callerContact.name, { maxLen: 120 }) || "Customer";
+  const safeTemplate = sanitizeForPrompt(customTemplate, { maxLen: 500 });
+
+  const userMessage = safeTemplate
+    ? `Caller: ${safeFullName}\n\n${safeTemplate}`
+    : `Write a text-back message for a missed call from ${safeName}. Keep it under 160 characters, warm and professional, no emojis.`;
 
   const response: Message = await ctx.ai.messages.create({
     model: ctx.agent.model,

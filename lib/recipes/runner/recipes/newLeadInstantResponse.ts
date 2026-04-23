@@ -16,6 +16,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 
 export interface NewLeadInstantResponseTrigger {
   account_id: string;
@@ -221,13 +222,19 @@ async function generateResponse(
   templateMessage?: string,
   businessName?: string,
 ): Promise<string | null> {
-  const business = businessName ? ` from ${businessName}` : "";
+  const safeName =
+    sanitizeForPrompt(callerContact.firstName ?? callerContact.name, {
+      maxLen: 120,
+    }) || "Customer";
+  const safeBusiness = sanitizeForPrompt(businessName, { maxLen: 120 });
+  const safeTemplate = sanitizeForPrompt(templateMessage, { maxLen: 500 });
+  const business = safeBusiness ? ` from ${safeBusiness}` : "";
 
-  const userMessage = templateMessage
-    ? `Write a friendly welcome message${business} for ${callerContact.firstName ?? callerContact.name}. ` +
-      `Include this message: "${templateMessage}". ` +
+  const userMessage = safeTemplate
+    ? `Write a friendly welcome message${business} for ${safeName}. ` +
+      `Include this message: "${safeTemplate}". ` +
       "Keep it under 300 characters, warm and professional."
-    : `Write a friendly welcome message${business} for ${callerContact.firstName ?? callerContact.name}. ` +
+    : `Write a friendly welcome message${business} for ${safeName}. ` +
       "Introduce your business and ask how you can help. " +
       "Keep it under 300 characters, warm and professional.";
 

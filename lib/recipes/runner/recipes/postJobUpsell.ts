@@ -16,6 +16,7 @@
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 
 import type { RecipeContext } from "../context.ts";
+import { sanitizeForPrompt } from "../promptSanitize.ts";
 
 export interface PostJobUpsellTrigger {
   account_id: string;
@@ -224,14 +225,21 @@ async function generateUpsell(
   businessName?: string,
   jobType?: string,
 ): Promise<string | null> {
-  const business = businessName ? ` from ${businessName}` : "";
-  const jobContext = jobType ? ` related to ${jobType}` : "";
+  const safeName =
+    sanitizeForPrompt(callerContact.firstName ?? callerContact.name, {
+      maxLen: 120,
+    }) || "Customer";
+  const safeBusiness = sanitizeForPrompt(businessName, { maxLen: 120 });
+  const safeJob = sanitizeForPrompt(jobType, { maxLen: 80 });
+  const safeTemplate = sanitizeForPrompt(templateMessage, { maxLen: 500 });
+  const business = safeBusiness ? ` from ${safeBusiness}` : "";
+  const jobContext = safeJob ? ` related to ${safeJob}` : "";
 
-  const userMessage = templateMessage
-    ? `Write a friendly upsell message${business} for ${callerContact.firstName ?? callerContact.name}${jobContext}. ` +
-      `Include this: "${templateMessage}". ` +
+  const userMessage = safeTemplate
+    ? `Write a friendly upsell message${business} for ${safeName}${jobContext}. ` +
+      `Include this: "${safeTemplate}". ` +
       "Keep it under 300 characters, helpful not salesy."
-    : `Write a friendly post-job upsell message${business} for ${callerContact.firstName ?? callerContact.name}${jobContext}. ` +
+    : `Write a friendly post-job upsell message${business} for ${safeName}${jobContext}. ` +
       `Suggest related services they might need. ` +
       "Keep it under 300 characters, helpful not salesy.";
 
