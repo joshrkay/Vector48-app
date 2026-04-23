@@ -216,11 +216,11 @@ async function generateSms(
     messages: [{ role: "user", content: userMessage }],
   });
 
-  const text = response.content
-    .filter((block): block is { type: "text"; text: string } => block.type === "text")
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
+  const parts: string[] = [];
+  for (const block of response.content) {
+    if (block.type === "text") parts.push(block.text);
+  }
+  const text = parts.join("\n").trim();
 
   if (!text) return null;
   if (text.length > maxChars) {

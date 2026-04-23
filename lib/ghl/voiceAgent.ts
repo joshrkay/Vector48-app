@@ -25,13 +25,17 @@ interface BuildVoiceAgentPayloadOptions {
  * Strip characters that could be used for prompt injection when a user-chosen
  * businessName is interpolated into a system prompt. Newlines, quotes, braces,
  * and angle-brackets are the typical breakouts; instruction keywords get
- * defanged with a zero-width join so they remain readable but can't match.
+ * defanged with a zero-width joiner so they remain readable but can't match.
  */
 function sanitizeForPrompt(value: string, maxLength = 100): string {
   const cleaned = value
-    .replace(/[\n\r\t  ]+/g, " ")
+    // Collapse any Unicode whitespace (incl. U+2028 / U+2029) so newlines
+    // cannot be smuggled into the system prompt as fake conversation turns.
+    .replace(/\s+/g, " ")
     .replace(/["'`<>{}\\]/g, "")
-    .replace(/\b(ignore|disregard|override|system|assistant|user):/gi, "$1​:")
+    // Defang instruction keywords by inserting a zero-width joiner (‍)
+    // between the keyword and the colon. Human-readable, LLM-unreachable.
+    .replace(/\b(ignore|disregard|override|system|assistant|user):/gi, "$1‍:")
     .trim();
   return cleaned.length > maxLength ? cleaned.slice(0, maxLength) : cleaned || "the business";
 }
