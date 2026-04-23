@@ -10,6 +10,7 @@ import {
 import { AGENT_SDK_RECIPE_SLUGS } from "@/lib/recipes/runner/archetypes";
 import { seedAgentFromArchetype } from "@/lib/recipes/runner/seedAgent";
 import { createServerClient } from "@/lib/supabase/server";
+import { track } from "@/lib/analytics/posthog";
 
 const bodySchema = z.object({
   recipeSlug: z.string().min(1),
@@ -141,6 +142,10 @@ export async function POST(request: Request) {
       // not on this path being infallible.
     }
   }
+
+  track(session.accountId, "recipe_activated", {
+    slug: recipe.slug,
+  });
 
   return NextResponse.json({ success: true, activationId: inserted.id });
 }

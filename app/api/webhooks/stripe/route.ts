@@ -3,6 +3,8 @@ import type Stripe from "stripe";
 
 import { stripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { flush, track } from "@/lib/analytics/posthog";
+import { recordWebhookFailure } from "@/lib/observability/webhookFailures";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,11 @@ export async function POST(request: Request) {
     );
   } catch (err) {
     console.error("[webhooks/stripe] Invalid signature:", err);
+    void recordWebhookFailure({
+      provider: "stripe",
+      reason: err instanceof Error ? err.message : "invalid_signature",
+      rawBody: body,
+    });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -45,6 +52,10 @@ export async function POST(request: Request) {
     // Always return 200 on handler errors — Stripe retries otherwise
     console.error("[webhooks/stripe] Handler error for", event.type, ":", err);
   }
+
+  // Serverless runtimes may freeze the lambda immediately after the response,
+  // dropping queued PostHog events. Flush before returning.
+  await flush();
 
   return NextResponse.json({ received: true });
 }
@@ -79,6 +90,10 @@ async function handleStripeEvent(event: Stripe.Event, supabase: AdminClient) {
           trial_ends_at: null,
         })
         .eq("id", accountId);
+
+      track(accountId, "subscription_activated", {
+        plan_slug: planSlug,
+      });
 
       break;
     }

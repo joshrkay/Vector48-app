@@ -5,6 +5,7 @@ import { parseGHLWebhook } from "@/lib/ghl/webhookParser";
 import { processSideEffects } from "@/lib/ghl/webhookSideEffects";
 import type { GHLWebhookPayload } from "@/lib/ghl/webhookTypes";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { recordWebhookFailure } from "@/lib/observability/webhookFailures";
 
 import { authenticateGhlWebhook } from "./signatureVerification";
 
@@ -80,6 +81,13 @@ export async function POST(req: Request) {
     console.warn("[ghl-webhook] webhook authentication failed", {
       reason: authResult.reason,
       locationId,
+    });
+    void recordWebhookFailure({
+      provider: "ghl",
+      reason: authResult.reason,
+      accountId: account.id,
+      eventType: typeof payload.type === "string" ? payload.type : null,
+      rawBody,
     });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

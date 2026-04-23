@@ -22,6 +22,7 @@ import {
   type RunnerDeps,
   type TenantAgent,
 } from "./context.ts";
+import { track } from "../../analytics/posthog.ts";
 import { createAiPhoneAnsweringHandler } from "./recipes/aiPhoneAnswering.ts";
 import { createMissedCallTextBackHandler } from "./recipes/missedCallTextBack.ts";
 import { createReviewRequestHandler } from "./recipes/reviewRequest.ts";
@@ -156,7 +157,32 @@ export async function runRecipe<TResult = unknown>(
     deps,
   });
 
-  return handler(ctx, trigger);
+  const startedAt = Date.now();
+  try {
+    const result = await handler(ctx, trigger);
+    track(accountId, "recipe_trigger_fired", {
+      slug: recipeSlug,
+      latency_ms: Date.now() - startedAt,
+      outcome: extractOutcome(result),
+    });
+    return result;
+  } catch (error) {
+    track(accountId, "recipe_trigger_failed", {
+      slug: recipeSlug,
+      latency_ms: Date.now() - startedAt,
+      error:
+        error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+    });
+    throw error;
+  }
+}
+
+function extractOutcome(result: unknown): string | null {
+  if (result && typeof result === "object" && "outcome" in result) {
+    const value = (result as { outcome?: unknown }).outcome;
+    if (typeof value === "string") return value;
+  }
+  return null;
 }
 
 /**
