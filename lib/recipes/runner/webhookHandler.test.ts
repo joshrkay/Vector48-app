@@ -328,3 +328,198 @@ describe("handleRecipeWebhook", () => {
     }
   });
 });
+
+// ── lead-qualification dispatch ────────────────────────────────────────────
+//
+// Different trigger shape: GHLWebhookInboundMessage → LeadQualificationTrigger.
+// These tests confirm SUPPORTED_SLUGS allows the slug, the body parser pulls
+// the right fields, and the automation_events detail{} captures the
+// multi-tool result shape (toolCalls, finalText, iterations).
+
+const inboundBody = {
+  type: "InboundMessage",
+  locationId: "loc-local",
+  contactId: "ghl-contact-9",
+  conversationId: "conv-1",
+  body: "Hi, my AC is broken",
+};
+
+describe("handleRecipeWebhook → lead-qualification", () => {
+  it("dispatches with a LeadQualificationTrigger and logs the multi-tool result", async () => {
+    let capturedTrigger: unknown;
+    const { deps, state } = buildDeps({
+      runRecipe: async (options) => {
+        capturedTrigger = options.trigger;
+        return {
+          outcome: "qualification_message_sent",
+          iterations: 2,
+          toolCalls: [
+            { name: "conversations_send-a-new-message", ok: true },
+          ],
+          finalText: "Asked for the address.",
+        };
+      },
+    });
+
+    const res = await handleRecipeWebhook(
+      new Request(
+        "http://localhost/api/recipes/webhook/lead-qualification/acct-1",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(inboundBody),
+        },
+      ),
+      { slug: "lead-qualification", accountId: "acct-1" },
+      deps,
+    );
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(capturedTrigger, {
+      contactId: "ghl-contact-9",
+      conversationId: "conv-1",
+      inboundText: "Hi, my AC is broken",
+    });
+
+    assert.equal(state.eventInserts.length, 1);
+    const event = state.eventInserts[0];
+    assert.equal(event.recipe_slug, "lead-qualification");
+    assert.equal(event.summary, "lead-qualification: qualification_message_sent");
+    const detail = event.detail as Record<string, unknown>;
+    assert.equal(detail.outcome, "qualification_message_sent");
+    assert.equal(detail.iterations, 2);
+    assert.equal(detail.final_text, "Asked for the address.");
+    assert.deepEqual(detail.tool_calls, [
+      { name: "conversations_send-a-new-message", ok: true },
+    ]);
+    // sms_message_id must NOT appear for non-PhoneAnswering results.
+    assert.equal("sms_message_id" in detail, false);
+  });
+
+  it("returns 400 when the InboundMessage body is missing contactId", async () => {
+    let runCalled = false;
+    const { deps } = buildDeps({
+      runRecipe: async () => {
+        runCalled = true;
+        return {};
+      },
+    });
+
+    const res = await handleRecipeWebhook(
+      new Request(
+        "http://localhost/api/recipes/webhook/lead-qualification/acct-1",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            type: "InboundMessage",
+            locationId: "loc-local",
+            body: "Hi there",
+          }),
+        },
+      ),
+      { slug: "lead-qualification", accountId: "acct-1" },
+      deps,
+    );
+
+    assert.equal(res.status, 400);
+    assert.equal(runCalled, false);
+  });
+
+  it("returns 400 when the InboundMessage body has no text", async () => {
+    let runCalled = false;
+    const { deps } = buildDeps({
+      runRecipe: async () => {
+        runCalled = true;
+        return {};
+      },
+    });
+
+    const res = await handleRecipeWebhook(
+      new Request(
+        "http://localhost/api/recipes/webhook/lead-qualification/acct-1",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            type: "InboundMessage",
+            locationId: "loc-local",
+            contactId: "ghl-9",
+            body: "   ",
+          }),
+        },
+      ),
+      { slug: "lead-qualification", accountId: "acct-1" },
+      deps,
+    );
+
+    assert.equal(res.status, 400);
+    assert.equal(runCalled, false);
+  });
+
+  it("accepts contact_id (snake_case) and message (alt field) variants", async () => {
+    let capturedTrigger: unknown;
+    const { deps } = buildDeps({
+      runRecipe: async (options) => {
+        capturedTrigger = options.trigger;
+        return { outcome: "qualification_message_sent" };
+      },
+    });
+
+    const res = await handleRecipeWebhook(
+      new Request(
+        "http://localhost/api/recipes/webhook/lead-qualification/acct-1",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            type: "InboundMessage",
+            locationId: "loc-local",
+            contact_id: "ghl-9",
+            message: "Need help today",
+          }),
+        },
+      ),
+      { slug: "lead-qualification", accountId: "acct-1" },
+      deps,
+    );
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(capturedTrigger, {
+      contactId: "ghl-9",
+      conversationId: null,
+      inboundText: "Need help today",
+    });
+  });
+
+  it("rejects with 403 when InboundMessage locationId doesn't match the account", async () => {
+    const { deps } = buildDeps({
+      state: {
+        account: { id: "acct-1", ghl_location_id: "loc-legit" },
+        eventInserts: [],
+      },
+    });
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      const res = await handleRecipeWebhook(
+        new Request(
+          "http://localhost/api/recipes/webhook/lead-qualification/acct-1",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...inboundBody,
+              locationId: "loc-attacker",
+            }),
+          },
+        ),
+        { slug: "lead-qualification", accountId: "acct-1" },
+        deps,
+      );
+      assert.equal(res.status, 403);
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+});

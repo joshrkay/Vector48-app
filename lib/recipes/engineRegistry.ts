@@ -22,9 +22,7 @@ const ENGINE_MAP: Record<string, RecipeEngine> = {
   "google-review-booster": "agent-sdk",
   "tech-on-the-way": "agent-sdk",
   "post-job-upsell": "agent-sdk",
-
-  // ── n8n (workflow templates, no handler yet) ───────────────────────────────
-  "lead-qualification": "n8n", // requires AI conversation
+  "lead-qualification": "agent-sdk", // multi-turn agent over GHL MCP
 
   // ── GHL-native (direct SMS via GHL API) ─────────────────────────────────
   "seasonal-demand-outreach": "ghl-native",

@@ -1,0 +1,128 @@
+{
+  "generatedAt": "2026-04-27T21:16:33.263Z",
+  "branch": "claude/evaluate-mcp-ghl-integration-g2GHu",
+  "summary": {
+    "scenariosRun": 3,
+    "scenariosPassed": 3,
+    "allPass": true
+  },
+  "traces": [
+    {
+      "scenario": "1. cold-start: no prior history → agent sends qualification SMS",
+      "status": "ok",
+      "error": null,
+      "expected": {
+        "outcome": "qualification_message_sent",
+        "toolCalls": [
+          "conversations_send-a-new-message"
+        ],
+        "historyFetched": true
+      },
+      "actual": {
+        "outcome": "qualification_message_sent",
+        "iterations": 2,
+        "toolCalls": [
+          {
+            "name": "conversations_send-a-new-message",
+            "ok": true
+          }
+        ],
+        "finalText": "Sent the qualification SMS.",
+        "historyFetched": true,
+        "mcpCallCount": 2,
+        "mcpCallNames": [
+          "conversations_get-messages",
+          "conversations_send-a-new-message"
+        ],
+        "aiCallCount": 2,
+        "aiToolsExposed": [
+          "calendars_get-calendar-events",
+          "contacts_create-task",
+          "contacts_get-contact",
+          "conversations_send-a-new-message"
+        ],
+        "aiFirstCallMessageCount": 1,
+        "llmUsageEventsRecorded": 2
+      },
+      "pass": true
+    },
+    {
+      "scenario": "2. mid-conversation: history loaded, agent asks next question",
+      "status": "ok",
+      "error": null,
+      "expected": {
+        "outcome": "qualification_message_sent",
+        "toolCalls": [
+          "conversations_send-a-new-message"
+        ],
+        "historyFetched": true
+      },
+      "actual": {
+        "outcome": "qualification_message_sent",
+        "iterations": 2,
+        "toolCalls": [
+          {
+            "name": "conversations_send-a-new-message",
+            "ok": true
+          }
+        ],
+        "finalText": "Asked for the address.",
+        "historyFetched": true,
+        "mcpCallCount": 2,
+        "mcpCallNames": [
+          "conversations_get-messages",
+          "conversations_send-a-new-message"
+        ],
+        "aiCallCount": 2,
+        "aiToolsExposed": [
+          "calendars_get-calendar-events",
+          "contacts_create-task",
+          "contacts_get-contact",
+          "conversations_send-a-new-message"
+        ],
+        "aiFirstCallMessageCount": 3,
+        "llmUsageEventsRecorded": 2
+      },
+      "pass": true
+    },
+    {
+      "scenario": "3. completion: agent has 4 facts → creates qualification task",
+      "status": "ok",
+      "error": null,
+      "expected": {
+        "outcome": "qualification_completed",
+        "toolCalls": [
+          "contacts_create-task"
+        ],
+        "historyFetched": true
+      },
+      "actual": {
+        "outcome": "qualification_completed",
+        "iterations": 2,
+        "toolCalls": [
+          {
+            "name": "contacts_create-task",
+            "ok": true
+          }
+        ],
+        "finalText": "Lead qualified and task created.",
+        "historyFetched": true,
+        "mcpCallCount": 2,
+        "mcpCallNames": [
+          "conversations_get-messages",
+          "contacts_create-task"
+        ],
+        "aiCallCount": 2,
+        "aiToolsExposed": [
+          "calendars_get-calendar-events",
+          "contacts_create-task",
+          "contacts_get-contact",
+          "conversations_send-a-new-message"
+        ],
+        "aiFirstCallMessageCount": 3,
+        "llmUsageEventsRecorded": 2
+      },
+      "pass": true
+    }
+  ]
+}

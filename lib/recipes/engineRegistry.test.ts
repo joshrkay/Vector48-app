@@ -18,10 +18,7 @@ describe("engineRegistry", () => {
       expect(getRecipeEngine("google-review-booster")).toBe("agent-sdk");
       expect(getRecipeEngine("tech-on-the-way")).toBe("agent-sdk");
       expect(getRecipeEngine("post-job-upsell")).toBe("agent-sdk");
-    });
-
-    it("returns 'n8n' for recipes with n8n templates", () => {
-      expect(getRecipeEngine("lead-qualification")).toBe("n8n");
+      expect(getRecipeEngine("lead-qualification")).toBe("agent-sdk");
     });
 
     it("returns 'ghl-native' for GHL-native recipes", () => {
@@ -53,9 +50,6 @@ describe("engineRegistry", () => {
       expect(isGhlNative("google-review-booster")).toBe(false);
       expect(isGhlNative("tech-on-the-way")).toBe(false);
       expect(isGhlNative("post-job-upsell")).toBe(false);
-    });
-
-    it("returns false for n8n recipes", () => {
       expect(isGhlNative("lead-qualification")).toBe(false);
     });
 
@@ -69,8 +63,8 @@ describe("engineRegistry", () => {
       expect(GHL_NATIVE_SLUGS).toHaveLength(5);
     });
 
-    it("has 1 n8n slug", () => {
-      expect(N8N_SLUGS).toHaveLength(1);
+    it("has zero n8n slugs after migrating lead-qualification", () => {
+      expect(N8N_SLUGS).toHaveLength(0);
     });
 
     it("has no overlap between n8n and ghl-native slugs", () => {
