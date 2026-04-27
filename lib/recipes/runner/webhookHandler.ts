@@ -193,6 +193,11 @@ export async function handleRecipeWebhook(
   try {
     const outcome =
       (result as { outcome?: string } | undefined)?.outcome ?? "completed";
+    const skipReason =
+      outcome === "skipped_no_ghl_creds"
+        ? (result as { reason?: string } | undefined)?.reason ??
+          "missing_ghl_credentials"
+        : null;
     const smsMessageId =
       (result as { smsMessageId?: string | null } | undefined)?.smsMessageId ??
       null;
@@ -202,9 +207,13 @@ export async function handleRecipeWebhook(
         account_id: accountId,
         recipe_slug: slug,
         event_type: "recipe_run",
-        summary: `${slug}: ${outcome}`,
+        summary:
+          outcome === "skipped_no_ghl_creds"
+            ? `${slug}: skipped (missing GHL credentials)`
+            : `${slug}: ${outcome}`,
         detail: {
           outcome,
+          skip_reason: skipReason,
           sms_message_id: smsMessageId,
         },
       });

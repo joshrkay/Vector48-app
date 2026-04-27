@@ -56,6 +56,22 @@ export interface RecipeContext {
   triggerId: string | null;
 }
 
+export interface RecipeSkippedNoGhlCredsResult {
+  ok: false;
+  outcome: "skipped_no_ghl_creds";
+  accountId: string;
+  reason: "missing_ghl_credentials";
+}
+
+export interface RecipeContextReadyResult {
+  ok: true;
+  context: RecipeContext;
+}
+
+export type BuildRecipeContextResult =
+  | RecipeContextReadyResult
+  | RecipeSkippedNoGhlCredsResult;
+
 /**
  * Dependencies the context builder uses to reach the outside world.
  * Production code passes none of these (default implementations in
@@ -118,9 +134,16 @@ export interface BuildContextOptions {
   deps?: RunnerDeps;
 }
 
+class MissingGhlCredentialsError extends Error {
+  constructor(accountId: string) {
+    super(`No GHL credentials for account ${accountId}`);
+    this.name = "MissingGhlCredentialsError";
+  }
+}
+
 export async function buildRecipeContext(
   options: BuildContextOptions,
-): Promise<RecipeContext> {
+): Promise<BuildRecipeContextResult> {
   const { accountId, agent } = options;
 
   if (agent.account_id !== accountId) {
@@ -160,11 +183,28 @@ export async function buildRecipeContext(
       const { getAccountGhlCredentials } = await import("@/lib/ghl/token");
       const creds = await getAccountGhlCredentials(id);
       if (!creds) {
-        throw new Error(`No GHL credentials for account ${id}`);
+        throw new MissingGhlCredentialsError(id);
       }
       return { locationId: creds.locationId, accessToken: creds.accessToken };
     });
-  const ghl = await getGhlCredentials(accountId);
+  const ghl = await getGhlCredentials(accountId).catch((error: unknown) => {
+    if (
+      error instanceof MissingGhlCredentialsError ||
+      (error instanceof Error &&
+        error.message === `No GHL credentials for account ${accountId}`)
+    ) {
+      return null;
+    }
+    throw error;
+  });
+  if (!ghl) {
+    return {
+      ok: false,
+      outcome: "skipped_no_ghl_creds",
+      accountId,
+      reason: "missing_ghl_credentials",
+    };
+  }
 
   const ai = createTrackedAnthropic({
     accountId,
@@ -185,14 +225,17 @@ export async function buildRecipeContext(
   });
 
   return {
-    accountId,
-    agent,
-    account: account as unknown as AccountSnapshot,
-    ghl: {
-      locationId: ghl.locationId,
-      accessToken: ghl.accessToken,
+    ok: true,
+    context: {
+      accountId,
+      agent,
+      account: account as unknown as AccountSnapshot,
+      ghl: {
+        locationId: ghl.locationId,
+        accessToken: ghl.accessToken,
+      },
+      ai,
+      triggerId: options.triggerId ?? null,
     },
-    ai,
-    triggerId: options.triggerId ?? null,
   };
 }
