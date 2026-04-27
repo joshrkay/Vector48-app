@@ -120,7 +120,14 @@ export function authenticateGhlWebhook(
 
   // Refuse the unsigned-test bypass in production no matter what env vars are set.
   // A leaked GHL_WEBHOOK_ALLOW_UNSIGNED=true must never accept unsigned traffic in prod.
-  if (process.env.NODE_ENV === "production") {
+  //
+  // Vercel sets NODE_ENV=production for both production AND preview deploys, so
+  // gating on NODE_ENV alone would block synthetic webhook tests against preview
+  // URLs. VERCEL_ENV differentiates: "production" only on the prod domain,
+  // "preview" on PR/branch deploys, "development" on `vercel dev`. Prefer it
+  // when set; fall back to NODE_ENV outside Vercel.
+  const effectiveEnv = process.env.VERCEL_ENV ?? process.env.NODE_ENV;
+  if (effectiveEnv === "production") {
     return { ok: false, reason: "missing_signature" };
   }
 

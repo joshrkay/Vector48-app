@@ -73,3 +73,121 @@ test("allows unsigned test request only with explicit flag and test secret", () 
 
   assert.deepEqual(result, { ok: true, mode: "unsigned_test" });
 });
+
+// ── production-environment matrix ─────────────────────────────────────────
+//
+// The unsigned-test bypass must be available on Vercel preview deploys (so
+// the synthetic webhook tester can run against any preview URL) but blocked
+// on the actual production domain. Vercel sets NODE_ENV=production for both,
+// so we gate on VERCEL_ENV when present.
+//
+// Each test snapshots and restores both env vars to avoid leaking state.
+
+function withEnv(
+  vars: Record<string, string | undefined>,
+  fn: () => void,
+): void {
+  const original: Record<string, string | undefined> = {};
+  for (const key of Object.keys(vars)) {
+    original[key] = process.env[key];
+    if (vars[key] === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = vars[key];
+    }
+  }
+  try {
+    fn();
+  } finally {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+const validUnsignedRequest = () => {
+  const payload = JSON.stringify({ event: "InboundMessage", locationId: "loc" });
+  const headers = new Headers({ "x-ghl-test-secret": "secret" });
+  return { payload, headers };
+};
+
+test("Vercel production blocks the unsigned bypass even with valid test secret", () => {
+  withEnv(
+    { NODE_ENV: "production", VERCEL_ENV: "production" },
+    () => {
+      const { payload, headers } = validUnsignedRequest();
+      const result = authenticateGhlWebhook(payload, headers, {
+        allowUnsigned: "true",
+        testSecret: "secret",
+      });
+      assert.deepEqual(result, { ok: false, reason: "missing_signature" });
+    },
+  );
+});
+
+test("Vercel preview allows the unsigned bypass with valid test secret", () => {
+  withEnv(
+    { NODE_ENV: "production", VERCEL_ENV: "preview" },
+    () => {
+      const { payload, headers } = validUnsignedRequest();
+      const result = authenticateGhlWebhook(payload, headers, {
+        allowUnsigned: "true",
+        testSecret: "secret",
+      });
+      assert.deepEqual(result, { ok: true, mode: "unsigned_test" });
+    },
+  );
+});
+
+test("Vercel preview rejects the unsigned bypass with a wrong test secret", () => {
+  withEnv(
+    { NODE_ENV: "production", VERCEL_ENV: "preview" },
+    () => {
+      const payload = JSON.stringify({ event: "InboundMessage" });
+      const headers = new Headers({ "x-ghl-test-secret": "wrong" });
+      const result = authenticateGhlWebhook(payload, headers, {
+        allowUnsigned: "true",
+        testSecret: "secret",
+      });
+      assert.equal(result.ok, false);
+      // Header was provided but didn't match — the guard treats it the same
+      // as no header at all rather than leaking which knob is wrong.
+      assert.equal(
+        (result as { reason: string }).reason,
+        "unsigned_test_not_allowed",
+      );
+    },
+  );
+});
+
+test("Non-Vercel CI (NODE_ENV=test, VERCEL_ENV unset) allows the unsigned bypass", () => {
+  withEnv(
+    { NODE_ENV: "test", VERCEL_ENV: undefined },
+    () => {
+      const { payload, headers } = validUnsignedRequest();
+      const result = authenticateGhlWebhook(payload, headers, {
+        allowUnsigned: "true",
+        testSecret: "secret",
+      });
+      assert.deepEqual(result, { ok: true, mode: "unsigned_test" });
+    },
+  );
+});
+
+test("Non-Vercel production (e.g. self-hosted) still blocks via NODE_ENV fallback", () => {
+  withEnv(
+    { NODE_ENV: "production", VERCEL_ENV: undefined },
+    () => {
+      const { payload, headers } = validUnsignedRequest();
+      const result = authenticateGhlWebhook(payload, headers, {
+        allowUnsigned: "true",
+        testSecret: "secret",
+      });
+      assert.deepEqual(result, { ok: false, reason: "missing_signature" });
+    },
+  );
+});
