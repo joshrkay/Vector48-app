@@ -28,13 +28,17 @@
 //      never failures the response.
 // ---------------------------------------------------------------------------
 
-import type { GHLWebhookCallCompleted } from "@/lib/ghl/webhookTypes";
+import type {
+  GHLWebhookCallCompleted,
+  GHLWebhookInboundMessage,
+} from "@/lib/ghl/webhookTypes";
 import {
   RecipeAgentNotFoundError,
   RecipeHandlerNotRegisteredError,
   type RunRecipeOptions,
 } from "./index.ts";
 import type { PhoneAnsweringTrigger } from "./recipes/aiPhoneAnswering.ts";
+import type { LeadQualificationTrigger } from "./recipes/leadQualification.ts";
 
 const SUPPORTED_SLUGS = new Set<string>([
   "ai-phone-answering",
@@ -46,7 +50,16 @@ const SUPPORTED_SLUGS = new Set<string>([
   "google-review-booster",
   "tech-on-the-way",
   "post-job-upsell",
+  "lead-qualification",
 ]);
+
+/**
+ * Slugs whose trigger is built from a GHL InboundMessage webhook body
+ * rather than the default CallCompleted shape. Today only
+ * lead-qualification consumes inbound SMS; if a future recipe needs the
+ * same payload, add its slug here.
+ */
+const INBOUND_MESSAGE_SLUGS = new Set<string>(["lead-qualification"]);
 
 /**
  * Supabase-shaped client the handler uses for tenant-binding lookup
@@ -119,9 +132,11 @@ export async function handleRecipeWebhook(
     return json({ error: "webhook_unauthorized", reason: auth.reason }, 401);
   }
 
-  let body: GHLWebhookCallCompleted;
+  let body: GHLWebhookCallCompleted | GHLWebhookInboundMessage;
   try {
-    body = JSON.parse(rawBody) as GHLWebhookCallCompleted;
+    body = JSON.parse(rawBody) as
+      | GHLWebhookCallCompleted
+      | GHLWebhookInboundMessage;
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
@@ -161,7 +176,28 @@ export async function handleRecipeWebhook(
     return json({ error: "tenant_binding_mismatch" }, 403);
   }
 
-  const trigger: PhoneAnsweringTrigger = { call: body };
+  // Build the trigger shape the handler expects. Different recipes
+  // consume different webhook payloads; today only lead-qualification
+  // takes InboundMessage, the other 9 take CallCompleted-like bodies.
+  let trigger: PhoneAnsweringTrigger | LeadQualificationTrigger;
+  if (INBOUND_MESSAGE_SLUGS.has(slug)) {
+    const inbound = body as GHLWebhookInboundMessage;
+    const contactId = inbound.contactId ?? inbound.contact_id ?? "";
+    const inboundText = (inbound.body ?? inbound.message ?? "").trim();
+    if (!contactId || !inboundText) {
+      return json(
+        { error: "invalid_inbound_message_payload" },
+        400,
+      );
+    }
+    trigger = {
+      contactId,
+      conversationId: inbound.conversationId ?? null,
+      inboundText,
+    };
+  } else {
+    trigger = { call: body as GHLWebhookCallCompleted };
+  }
 
   let result: unknown;
   try {
@@ -188,14 +224,24 @@ export async function handleRecipeWebhook(
   // Best-effort automation_events write so the feed reflects the run.
   // Column shape from 001_initial_schema.sql:
   //   account_id, recipe_slug, event_type, summary (NOT NULL), detail JSONB
-  // The detail JSONB is currently tied to PhoneAnsweringResult; move
-  // serialisation into each handler when the second recipe lands.
+  // detail{} is union-typed across recipe results so both PhoneAnswering
+  // (smsMessageId) and LeadQualification (toolCalls, finalText) round-trip
+  // into the activity feed without losing information.
   try {
-    const outcome =
-      (result as { outcome?: string } | undefined)?.outcome ?? "completed";
-    const smsMessageId =
-      (result as { smsMessageId?: string | null } | undefined)?.smsMessageId ??
-      null;
+    const r = (result ?? {}) as {
+      outcome?: string;
+      smsMessageId?: string | null;
+      toolCalls?: Array<{ name: string; ok: boolean }>;
+      finalText?: string | null;
+      iterations?: number;
+    };
+    const outcome = r.outcome ?? "completed";
+    const detail: Record<string, unknown> = { outcome };
+    if (r.smsMessageId !== undefined) detail.sms_message_id = r.smsMessageId;
+    if (r.toolCalls !== undefined) detail.tool_calls = r.toolCalls;
+    if (r.finalText !== undefined) detail.final_text = r.finalText;
+    if (r.iterations !== undefined) detail.iterations = r.iterations;
+
     const { error: logErr } = await deps.supabase
       .from("automation_events")
       .insert({
@@ -203,10 +249,7 @@ export async function handleRecipeWebhook(
         recipe_slug: slug,
         event_type: "recipe_run",
         summary: `${slug}: ${outcome}`,
-        detail: {
-          outcome,
-          sms_message_id: smsMessageId,
-        },
+        detail,
       });
     if (logErr) {
       // eslint-disable-next-line no-console
@@ -227,9 +270,12 @@ export async function handleRecipeWebhook(
 }
 
 function extractLocationId(
-  body: GHLWebhookCallCompleted,
+  body: GHLWebhookCallCompleted | GHLWebhookInboundMessage,
 ): string | null {
-  const bodyWithExtras = body as GHLWebhookCallCompleted & {
+  const bodyWithExtras = body as (
+    | GHLWebhookCallCompleted
+    | GHLWebhookInboundMessage
+  ) & {
     location_id?: string;
   };
   return body.locationId ?? bodyWithExtras.location_id ?? null;
