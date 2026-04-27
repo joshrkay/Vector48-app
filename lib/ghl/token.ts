@@ -245,3 +245,62 @@ export async function getAgencyClient(): Promise<GHLClient> {
   const token = await getAgencyAccessToken();
   return GHLClient.forAgency(token);
 }
+
+// ---------------------------------------------------------------------------
+// Private Integration Tokens (PITs) for GHL MCP
+// ---------------------------------------------------------------------------
+
+export class GhlPitNotConfiguredError extends Error {
+  constructor(accountId: string) {
+    super(`Account ${accountId} has no GHL Private Integration Token installed`);
+    this.name = "GhlPitNotConfiguredError";
+  }
+}
+
+export interface GhlPit {
+  pit: string;
+  locationId: string;
+  scopes: string | null;
+}
+
+export async function getAccountPit(accountId: string): Promise<GhlPit> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("accounts")
+    .select("ghl_location_id, ghl_pit_encrypted, ghl_pit_scopes")
+    .eq("id", accountId)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error(`GHL account credentials not found for account ${accountId}`);
+  }
+  if (!data.ghl_location_id || !data.ghl_pit_encrypted) {
+    throw new GhlPitNotConfiguredError(accountId);
+  }
+
+  return {
+    pit: decryptToken(data.ghl_pit_encrypted),
+    locationId: data.ghl_location_id,
+    scopes: data.ghl_pit_scopes ?? null,
+  };
+}
+
+export async function setAccountPit(
+  accountId: string,
+  pit: string,
+  scopes: string | null,
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("accounts")
+    .update({
+      ghl_pit_encrypted: encryptToken(pit),
+      ghl_pit_scopes: scopes,
+      ghl_pit_updated_at: new Date().toISOString(),
+    })
+    .eq("id", accountId);
+
+  if (error) {
+    throw new Error(`Failed to store GHL PIT for ${accountId}: ${error.message}`);
+  }
+}
