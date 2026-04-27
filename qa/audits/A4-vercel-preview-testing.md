@@ -2,22 +2,25 @@
 
 After this branch lands, every Vercel preview deploy can run the lead-qualification synthetic webhook test against the deployed URL — no `npm run dev` needed.
 
-The auth bypass that makes this possible now gates on `VERCEL_ENV` instead of `NODE_ENV`:
+The auth bypass that makes this possible reads `VERCEL_ENV` only when `VERCEL=1` is also set (Vercel's platform-set marker that can't be overridden in normal config). Outside Vercel it falls back to `NODE_ENV`. The full matrix:
 
-| Environment | NODE_ENV | VERCEL_ENV | Unsigned bypass |
-|---|---|---|---|
-| Vercel **production** | production | production | ✗ blocked |
-| Vercel **preview** | production | preview | ✓ allowed if env vars set |
-| Local `npm run dev` | development | (unset) | ✓ allowed if env vars set |
-| CI test runs | test | (unset) | ✓ allowed if env vars set |
+| Environment | VERCEL | NODE_ENV | VERCEL_ENV | effectiveEnv | Unsigned bypass |
+|---|---|---|---|---|---|
+| Vercel **production** | 1 | production | production | production | ✗ blocked |
+| Vercel **preview** | 1 | production | preview | preview | ✓ allowed if env vars set |
+| Local `npm run dev` | (unset) | development | (unset) | development | ✓ allowed if env vars set |
+| CI test runs | (unset) | test | (unset) | test | ✓ allowed if env vars set |
+| Self-hosted prod | (unset) | production | (unset) | production | ✗ blocked |
+| Self-hosted prod with leaked `VERCEL_ENV=preview` | (unset) | production | preview | production | ✗ blocked (NODE_ENV wins) |
 
-Defense-in-depth: code change alone doesn't open prod up. Three things must all line up before unsigned traffic is accepted on preview:
+Defense-in-depth: code change alone doesn't open prod up. Four things must all line up before unsigned traffic is accepted on a preview:
 
-1. `VERCEL_ENV !== "production"` (Vercel sets this, you don't)
-2. `GHL_WEBHOOK_ALLOW_UNSIGNED=true` env var on the deployment
-3. `GHL_WEBHOOK_TEST_SECRET=<secret>` env var on the deployment AND matching `x-ghl-test-secret` header on the request
+1. `VERCEL=1` (set automatically by the Vercel platform on every Vercel runtime; not user-configurable)
+2. `VERCEL_ENV !== "production"` (Vercel sets this; "preview" on PR/branch deploys, "production" only on the prod domain)
+3. `GHL_WEBHOOK_ALLOW_UNSIGNED=true` env var on the deployment
+4. `GHL_WEBHOOK_TEST_SECRET=<secret>` env var on the deployment AND matching `x-ghl-test-secret` header on the request
 
-A leaked `GHL_WEBHOOK_ALLOW_UNSIGNED=true` accidentally promoted to production is still inert because `VERCEL_ENV=production` short-circuits the bypass before any other checks.
+A leaked `GHL_WEBHOOK_ALLOW_UNSIGNED=true` accidentally promoted to production is still inert because `VERCEL_ENV=production` short-circuits the bypass. A leaked `VERCEL_ENV=preview` on a non-Vercel deployment is also inert because `VERCEL=1` is not set, so `NODE_ENV=production` wins.
 
 ## One-time setup on Vercel
 
