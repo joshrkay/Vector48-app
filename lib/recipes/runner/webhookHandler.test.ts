@@ -113,6 +113,7 @@ describe("handleRecipeWebhook", () => {
     assert.equal(event.summary, "ai-phone-answering: summary_sent");
     assert.deepEqual(event.detail, {
       outcome: "summary_sent",
+      skip_reason: null,
       sms_message_id: "msg-42",
     });
   });
@@ -277,6 +278,40 @@ describe("handleRecipeWebhook", () => {
       deps,
     );
     assert.equal(res.status, 501);
+  });
+
+  it("returns 200 (not internal_error) when runRecipe reports missing GHL credentials as a skip", async () => {
+    const { deps, state } = buildDeps({
+      runRecipe: async () => ({
+        ok: false,
+        outcome: "skipped_no_ghl_creds",
+        accountId: "acct-1",
+        reason: "missing_ghl_credentials",
+      }),
+    });
+    const res = await handleRecipeWebhook(
+      buildRequest(happyBody),
+      { slug: "ai-phone-answering", accountId: "acct-1" },
+      deps,
+    );
+    assert.equal(res.status, 200);
+    const payload = (await res.json()) as {
+      ok: boolean;
+      result: { outcome: string; reason: string };
+    };
+    assert.equal(payload.ok, true);
+    assert.equal(payload.result.outcome, "skipped_no_ghl_creds");
+    assert.equal(payload.result.reason, "missing_ghl_credentials");
+    assert.equal(state.eventInserts.length, 1);
+    assert.equal(
+      state.eventInserts[0].summary,
+      "ai-phone-answering: skipped (missing GHL credentials)",
+    );
+    assert.deepEqual(state.eventInserts[0].detail, {
+      outcome: "skipped_no_ghl_creds",
+      skip_reason: "missing_ghl_credentials",
+      sms_message_id: null,
+    });
   });
 
   it("returns a generic 500 on unexpected runRecipe errors (does NOT leak err.message)", async () => {
