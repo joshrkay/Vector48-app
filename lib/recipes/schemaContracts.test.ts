@@ -32,6 +32,7 @@ test("canonical contract columns remain stable", () => {
     "fire_at",
     "payload",
     "attempt_count",
+    "max_attempts",
     "last_error",
     "processed_at",
     "created_at",
@@ -49,6 +50,7 @@ test("supabase types include canonical recipe columns", () => {
   assert.match(types, /recipe_triggers:[\s\S]*recipe_slug: string;/);
   assert.match(types, /recipe_triggers:[\s\S]*status: "queued" \| "processing" \| "completed" \| "failed" \| "cancelled"/);
   assert.match(types, /recipe_triggers:[\s\S]*payload: Record<string, unknown> \| null;/);
+  assert.match(types, /recipe_triggers:[\s\S]*max_attempts: number;/);
 });
 
 test("migration assertions enforce recipe contracts", () => {

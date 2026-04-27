@@ -5,6 +5,7 @@ import {
   buildRecipeTriggerPostBody,
   verifyCronBearer,
 } from "@/lib/cron/recipeTriggerDelivery";
+import { resolveRecipeTriggerMaxAttempts } from "@/lib/cron/retryPolicy";
 import { isGhlNative } from "@/lib/recipes/engineRegistry";
 import { executeGhlNativeRecipe } from "@/lib/recipes/ghlExecutor";
 import { RECIPE_TRIGGER_CANONICAL_PENDING_STATUS } from "@/lib/recipes/schemaContracts";
@@ -13,7 +14,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const BATCH_LIMIT = 50;
-const MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_ATTEMPTS = 3;
+const LIST_LIMIT = BATCH_LIMIT * 4;
 
 type DueTriggerRow = {
   id: string;
@@ -21,6 +23,7 @@ type DueTriggerRow = {
   recipe_slug: string;
   payload: Record<string, unknown> | null;
   attempt_count: number;
+  max_attempts: number | null;
 };
 
 async function listDueTriggers(nowIso: string): Promise<{ rows: DueTriggerRow[]; error: string | null }> {
@@ -28,18 +31,17 @@ async function listDueTriggers(nowIso: string): Promise<{ rows: DueTriggerRow[];
 
   const canonical = await supabase
     .from("recipe_triggers")
-    .select("id, account_id, recipe_slug, payload, attempt_count")
+    .select("id, account_id, recipe_slug, payload, attempt_count, max_attempts")
     .eq("status", RECIPE_TRIGGER_CANONICAL_PENDING_STATUS)
     .lte("fire_at", nowIso)
-    // Drop out permanently-failing triggers so we stop burning cycles on them.
-    // markFailed() bumps attempt_count; once it hits MAX_ATTEMPTS we leave the
-    // row in status='failed' and never claim it again.
-    .lt("attempt_count", MAX_ATTEMPTS)
     .order("fire_at", { ascending: true })
-    .limit(BATCH_LIMIT);
+    .limit(LIST_LIMIT);
 
   if (!canonical.error) {
-    return { rows: (canonical.data ?? []) as DueTriggerRow[], error: null };
+    const rows = ((canonical.data ?? []) as DueTriggerRow[])
+      .filter((row) => row.attempt_count < resolveRecipeTriggerMaxAttempts(row.max_attempts, DEFAULT_MAX_ATTEMPTS))
+      .slice(0, BATCH_LIMIT);
+    return { rows, error: null };
   }
 
   // Compatibility path for rollback windows where recipe_triggers still uses
@@ -63,6 +65,7 @@ async function listDueTriggers(nowIso: string): Promise<{ rows: DueTriggerRow[];
       recipe_slug: row.recipe_id ?? "",
       payload: row.payload,
       attempt_count: row.attempt_count ?? 0,
+      max_attempts: null,
     })),
     error: null,
   };
