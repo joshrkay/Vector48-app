@@ -18,6 +18,7 @@
 
 import {
   buildRecipeContext,
+  type BuildRecipeContextResult,
   type RecipeContext,
   type RunnerDeps,
   type TenantAgent,
@@ -134,7 +135,7 @@ export interface RunRecipeOptions {
 
 export async function runRecipe<TResult = unknown>(
   options: RunRecipeOptions,
-): Promise<TResult> {
+): Promise<TResult | Extract<BuildRecipeContextResult, { ok: false }>> {
   const { accountId, recipeSlug, trigger, triggerId, deps } = options;
 
   const handler = RECIPE_HANDLERS[recipeSlug] as
@@ -149,15 +150,23 @@ export async function runRecipe<TResult = unknown>(
     recipeSlug,
     deps?.supabase as unknown as RunnerSupabaseClient | undefined,
   );
+  const startedAt = Date.now();
 
-  const ctx = await buildRecipeContext({
+  const contextResult = await buildRecipeContext({
     accountId,
     agent,
     triggerId: triggerId ?? null,
     deps,
   });
-
-  const startedAt = Date.now();
+  if (!contextResult.ok) {
+    track(accountId, "recipe_trigger_fired", {
+      slug: recipeSlug,
+      latency_ms: Date.now() - startedAt,
+      outcome: contextResult.outcome,
+    });
+    return contextResult;
+  }
+  const ctx = contextResult.context;
   try {
     const result = await handler(ctx, trigger);
     track(accountId, "recipe_trigger_fired", {
