@@ -13,6 +13,7 @@ import type {
 } from "@/lib/ghl/mcp";
 import {
   createLeadQualificationHandler,
+  findMcpTool,
   selectExposedTools,
   type LeadQualificationTrigger,
   type McpToolHost,
@@ -76,23 +77,42 @@ const MCP_TOOLS: McpToolDescriptor[] = [
     },
   },
   {
+    name: "conversations_get-messages",
+    description: "Fetch messages on a conversation",
+    inputSchema: {
+      type: "object",
+      properties: {
+        conversationId: { type: "string" },
+        limit: { type: "number" },
+      },
+      required: ["conversationId"],
+    },
+  },
+  {
     name: "unrelated_tool",
     description: "Should never be exposed to Claude",
     inputSchema: { type: "object" },
   },
 ];
 
+// Variant without the history tool — used to test graceful degradation when
+// GHL hasn't shipped or hasn't authorized that tool for the location.
+const MCP_TOOLS_NO_HISTORY: McpToolDescriptor[] = MCP_TOOLS.filter(
+  (t) => !t.name.includes("get-messages"),
+);
+
 interface FakeMcpOptions {
   toolResults?: Record<string, McpToolCallResult>;
   callsOut?: Array<{ name: string; args: Record<string, unknown> }>;
   throwOn?: string;
+  tools?: McpToolDescriptor[];
 }
 
 function fakeMcp(options: FakeMcpOptions = {}): McpToolHost {
   const calls = options.callsOut ?? [];
   return {
     async listTools() {
-      return MCP_TOOLS;
+      return options.tools ?? MCP_TOOLS;
     },
     async callTool(name, args) {
       calls.push({ name, args });
@@ -342,9 +362,11 @@ describe("leadQualification handler", () => {
     assert.equal(result.toolCalls[0].name, "conversations_send-a-new-message");
     assert.equal(result.toolCalls[0].ok, true);
 
-    // MCP got the tool call.
-    assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0], {
+    // MCP got the tool call. Filter out the history pre-load call —
+    // tested separately below; existing assertions cover the agent loop.
+    const agentCalls = calls.filter((c) => !c.name.includes("get-messages"));
+    assert.equal(agentCalls.length, 1);
+    assert.deepEqual(agentCalls[0], {
       name: "conversations_send-a-new-message",
       args: { contactId: "ghl-contact-9", message: "What's the address?" },
     });
@@ -464,5 +486,224 @@ describe("leadQualification handler", () => {
     assert.equal(result.outcome, "halted_max_iterations");
     assert.equal(result.iterations, 5);
     assert.equal(result.toolCalls.length, 5);
+  });
+});
+
+// ── conversation history pre-load ─────────────────────────────────────────
+
+function historyToolResult(messages: unknown[]): McpToolCallResult {
+  return {
+    content: [{ type: "text", text: JSON.stringify({ messages }) }],
+  };
+}
+
+describe("findMcpTool", () => {
+  it("matches the first tool whose name contains a known pattern", () => {
+    const found = findMcpTool(MCP_TOOLS, "conversationHistory");
+    assert.equal(found?.name, "conversations_get-messages");
+  });
+
+  it("returns null when no MCP tool matches the logical name", () => {
+    const found = findMcpTool(MCP_TOOLS_NO_HISTORY, "conversationHistory");
+    assert.equal(found, null);
+  });
+
+  it("returns null for unknown logical names", () => {
+    const found = findMcpTool(MCP_TOOLS, "totally-unknown-tool");
+    assert.equal(found, null);
+  });
+});
+
+describe("leadQualification handler — history pre-load", () => {
+  it("seeds messages with prior conversation turns when GHL returns history", async () => {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const handler = createLeadQualificationHandler({
+      deps: {
+        getMcpClient: async () =>
+          fakeMcp({
+            callsOut: calls,
+            toolResults: {
+              "conversations_get-messages": historyToolResult([
+                {
+                  body: "Hi, I need AC service",
+                  direction: "inbound",
+                  dateAdded: "2026-04-26T10:00:00Z",
+                },
+                {
+                  body: "Sure — when's a good time?",
+                  direction: "outbound",
+                  dateAdded: "2026-04-26T10:01:00Z",
+                },
+                {
+                  body: "Tomorrow morning?",
+                  direction: "inbound",
+                  dateAdded: "2026-04-26T10:02:00Z",
+                },
+              ]),
+            },
+          }),
+      },
+    });
+
+    const { ctx, aiCalls } = fakeCtx({
+      ai: {
+        scripted: [assistantTextMessage("Got it — what's the address?")],
+      },
+    });
+
+    const result = await handler(ctx as unknown as RecipeContext, trigger);
+    assert.equal(result.iterations, 1);
+    assert.equal(result.outcome, "qualification_message_sent");
+
+    // Pre-load fired with the conversationId.
+    const historyCall = calls.find((c) => c.name === "conversations_get-messages");
+    assert.ok(historyCall, "history pre-load should fire");
+    assert.equal(historyCall!.args.conversationId, "conv-1");
+
+    // First AI call must include the three history turns BEFORE the
+    // current-turn user message.
+    const firstCall = aiCalls[0];
+    assert.equal(firstCall.messages.length, 4); // 3 history + 1 framing user
+    assert.equal(firstCall.messages[0].role, "user");
+    assert.equal(firstCall.messages[0].content, "Hi, I need AC service");
+    assert.equal(firstCall.messages[1].role, "assistant");
+    assert.equal(firstCall.messages[1].content, "Sure — when's a good time?");
+    assert.equal(firstCall.messages[2].role, "user");
+    assert.equal(firstCall.messages[2].content, "Tomorrow morning?");
+    assert.equal(firstCall.messages[3].role, "user");
+    // Framing message references "Prior conversation messages are above"
+    assert.match(
+      firstCall.messages[3].content as string,
+      /Prior conversation messages are above/,
+    );
+  });
+
+  it("strips the trailing history entry when it duplicates the inbound text", async () => {
+    const handler = createLeadQualificationHandler({
+      deps: {
+        getMcpClient: async () =>
+          fakeMcp({
+            toolResults: {
+              "conversations_get-messages": historyToolResult([
+                {
+                  body: "Hi, I need help",
+                  direction: "inbound",
+                  dateAdded: "2026-04-26T09:00:00Z",
+                },
+                // GHL has already persisted the latest inbound by the time
+                // the webhook fires, so it'd appear here too.
+                {
+                  body: trigger.inboundText,
+                  direction: "inbound",
+                  dateAdded: "2026-04-26T10:00:00Z",
+                },
+              ]),
+            },
+          }),
+      },
+    });
+
+    const { ctx, aiCalls } = fakeCtx({
+      ai: { scripted: [assistantTextMessage("Reply")] },
+    });
+
+    await handler(ctx as unknown as RecipeContext, trigger);
+
+    const firstCall = aiCalls[0];
+    // Only 1 history turn survives; the duplicate is stripped. Plus the
+    // framing user message → length 2.
+    assert.equal(firstCall.messages.length, 2);
+    assert.equal(firstCall.messages[0].content, "Hi, I need help");
+  });
+
+  it("proceeds without history when GHL hasn't shipped the messages tool", async () => {
+    const handler = createLeadQualificationHandler({
+      deps: {
+        getMcpClient: async () => fakeMcp({ tools: MCP_TOOLS_NO_HISTORY }),
+      },
+    });
+
+    const { ctx, aiCalls } = fakeCtx({
+      ai: { scripted: [assistantTextMessage("Reply")] },
+    });
+
+    const result = await handler(ctx as unknown as RecipeContext, trigger);
+    assert.equal(result.outcome, "qualification_message_sent");
+    // Single user message — no history, just the framing message.
+    assert.equal(aiCalls[0].messages.length, 1);
+    assert.match(
+      aiCalls[0].messages[0].content as string,
+      /Lead just said: Hi, my AC is broken/,
+    );
+    // Framing must NOT claim prior history exists when none was loaded.
+    assert.doesNotMatch(
+      aiCalls[0].messages[0].content as string,
+      /Prior conversation messages are above/,
+    );
+  });
+
+  it("proceeds without history when the pre-load tool call throws", async () => {
+    const handler = createLeadQualificationHandler({
+      deps: {
+        getMcpClient: async () =>
+          fakeMcp({ throwOn: "conversations_get-messages" }),
+      },
+    });
+
+    const { ctx, aiCalls } = fakeCtx({
+      ai: { scripted: [assistantTextMessage("Reply")] },
+    });
+
+    const result = await handler(ctx as unknown as RecipeContext, trigger);
+    assert.equal(result.outcome, "qualification_message_sent");
+    assert.equal(aiCalls[0].messages.length, 1);
+  });
+
+  it("proceeds without history when the trigger has no conversationId", async () => {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const handler = createLeadQualificationHandler({
+      deps: { getMcpClient: async () => fakeMcp({ callsOut: calls }) },
+    });
+
+    const { ctx, aiCalls } = fakeCtx({
+      ai: { scripted: [assistantTextMessage("Reply")] },
+    });
+
+    await handler(ctx as unknown as RecipeContext, {
+      ...trigger,
+      conversationId: null,
+    });
+
+    // No history call at all — we don't have a conversation to look up.
+    const historyCall = calls.find(
+      (c) => c.name === "conversations_get-messages",
+    );
+    assert.equal(historyCall, undefined);
+    assert.equal(aiCalls[0].messages.length, 1);
+  });
+
+  it("ignores non-JSON history responses and proceeds with no history", async () => {
+    const handler = createLeadQualificationHandler({
+      deps: {
+        getMcpClient: async () =>
+          fakeMcp({
+            toolResults: {
+              "conversations_get-messages": {
+                content: [
+                  { type: "text", text: "Not parseable as JSON, sorry" },
+                ],
+              },
+            },
+          }),
+      },
+    });
+
+    const { ctx, aiCalls } = fakeCtx({
+      ai: { scripted: [assistantTextMessage("Reply")] },
+    });
+
+    const result = await handler(ctx as unknown as RecipeContext, trigger);
+    assert.equal(result.outcome, "qualification_message_sent");
+    assert.equal(aiCalls[0].messages.length, 1);
   });
 });

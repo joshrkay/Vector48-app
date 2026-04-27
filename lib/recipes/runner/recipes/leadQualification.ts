@@ -59,6 +59,13 @@ const LOGICAL_TOOL_PATTERNS: Record<string, string[]> = {
   lookupContact: ["get-contact", "find-contact", "contact-get"],
   createTask: ["create-task", "task-create"],
   checkCalendar: ["get-calendar-events", "list-calendar-events", "calendar-events"],
+  // Used internally for history pre-load (not exposed to Claude as a tool).
+  conversationHistory: [
+    "get-messages",
+    "search-messages",
+    "conversation-messages",
+    "list-messages",
+  ],
 };
 
 export interface LeadQualificationTrigger {
@@ -131,10 +138,25 @@ export function createLeadQualificationHandler(
     }
 
     const tools: Tool[] = exposed.map(toAnthropicTool);
+
+    // Pre-load conversation history so the agent has context across webhook
+    // deliveries. Each InboundMessage webhook is one trigger; without
+    // pre-loading, the agent forgets prior turns and asks the same
+    // qualification questions repeatedly. Best-effort — if the history
+    // tool isn't available or the call fails, proceed with just the inbound.
+    const history = await loadConversationHistory({
+      mcp,
+      mcpTools,
+      conversationId: trigger.conversationId,
+      inboundText: trigger.inboundText,
+      limit: HISTORY_FETCH_LIMIT,
+    });
+
     const messages: MessageParam[] = [
+      ...history,
       {
         role: "user",
-        content: buildInitialUserMessage(trigger),
+        content: buildInitialUserMessage(trigger, history.length > 0),
       },
     ];
 
@@ -248,18 +270,160 @@ function toAnthropicTool(mcp: McpToolDescriptor): Tool {
   };
 }
 
-function buildInitialUserMessage(trigger: LeadQualificationTrigger): string {
+function buildInitialUserMessage(
+  trigger: LeadQualificationTrigger,
+  hasHistory: boolean,
+): string {
   const convo = trigger.conversationId
     ? `\nConversation: ${trigger.conversationId}`
     : "";
+  const intro = hasHistory
+    ? `New inbound SMS from contact ${trigger.contactId}. Prior conversation messages are above.${convo}`
+    : `New inbound SMS from contact ${trigger.contactId}.${convo}`;
   return (
-    `New inbound SMS from contact ${trigger.contactId}.${convo}\n\n` +
-    `Lead said: ${trigger.inboundText.trim()}\n\n` +
+    `${intro}\n\n` +
+    `Lead just said: ${trigger.inboundText.trim()}\n\n` +
     `Decide your next move. Use tools to look up the contact, send a ` +
     `qualification reply, check the calendar, or create a task summarizing ` +
     `qualification once you have the four facts (service, urgency, location, ` +
     `ready-to-book).`
   );
+}
+
+interface LoadHistoryArgs {
+  mcp: McpToolHost;
+  mcpTools: McpToolDescriptor[];
+  conversationId: string | null;
+  inboundText: string;
+  limit: number;
+}
+
+/**
+ * Best-effort fetch of the last `limit` SMS messages in the conversation.
+ * Returns them as Anthropic MessageParams (inbound → user, outbound →
+ * assistant). Returns [] on any failure or if no conversation tool is
+ * available; callers proceed with just the current inbound text.
+ *
+ * Strips the trailing message if its body matches the current inbound
+ * text — by the time the webhook fires, GHL may have already persisted
+ * the inbound, and we don't want to duplicate it as both history and the
+ * "lead just said" framing.
+ */
+async function loadConversationHistory(
+  args: LoadHistoryArgs,
+): Promise<MessageParam[]> {
+  if (!args.conversationId) return [];
+
+  const tool = findMcpTool(args.mcpTools, "conversationHistory");
+  if (!tool) return [];
+
+  let raw: McpToolCallResult;
+  try {
+    raw = await args.mcp.callTool(tool.name, {
+      conversationId: args.conversationId,
+      limit: args.limit,
+    });
+  } catch {
+    return [];
+  }
+  if (raw.isError) return [];
+
+  const messages = parseConversationMessages(raw, args.limit);
+  const inbound = args.inboundText.trim();
+  const lastIndex = messages.length - 1;
+  if (
+    lastIndex >= 0 &&
+    messages[lastIndex].role === "user" &&
+    typeof messages[lastIndex].content === "string" &&
+    (messages[lastIndex].content as string).trim() === inbound
+  ) {
+    messages.pop();
+  }
+  return messages;
+}
+
+export function findMcpTool(
+  tools: McpToolDescriptor[],
+  logical: string,
+): McpToolDescriptor | null {
+  const patterns = LOGICAL_TOOL_PATTERNS[logical] ?? [];
+  return (
+    tools.find((t) =>
+      patterns.some((p) => t.name.toLowerCase().includes(p)),
+    ) ?? null
+  );
+}
+
+interface RawGhlMessage {
+  body?: string;
+  message?: string;
+  text?: string;
+  direction?: string;
+  type?: string;
+  dateAdded?: string;
+  date_added?: string;
+}
+
+function parseConversationMessages(
+  result: McpToolCallResult,
+  limit: number,
+): MessageParam[] {
+  // GHL MCP responses are heterogeneous: tool may return text blocks
+  // wrapping JSON, or structuredContent, or a mix. Try structured first,
+  // then JSON-parse text blocks. Anything we can't parse → [].
+  const candidates: unknown[] = [];
+  if (result.structuredContent !== undefined) {
+    candidates.push(result.structuredContent);
+  }
+  for (const block of result.content ?? []) {
+    if (block.type === "text") {
+      try {
+        candidates.push(JSON.parse(block.text));
+      } catch {
+        // not JSON; ignore
+      }
+    }
+  }
+
+  const rawMessages = pickMessageArray(candidates);
+  if (rawMessages.length === 0) return [];
+
+  // Sort oldest → newest if a date field is present, then trim to limit.
+  const sorted = [...rawMessages].sort((a, b) => {
+    const da = Date.parse(a.dateAdded ?? a.date_added ?? "") || 0;
+    const db = Date.parse(b.dateAdded ?? b.date_added ?? "") || 0;
+    return da - db;
+  });
+
+  const trimmed = sorted.slice(-limit);
+
+  const out: MessageParam[] = [];
+  for (const m of trimmed) {
+    const text = (m.body ?? m.message ?? m.text ?? "").trim();
+    if (!text) continue;
+    const role: MessageParam["role"] =
+      (m.direction ?? "").toLowerCase() === "outbound" ? "assistant" : "user";
+    out.push({ role, content: text });
+  }
+  return out;
+}
+
+function pickMessageArray(candidates: unknown[]): RawGhlMessage[] {
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate as RawGhlMessage[];
+    }
+    if (candidate && typeof candidate === "object") {
+      const obj = candidate as Record<string, unknown>;
+      for (const key of ["messages", "data", "results", "items"]) {
+        const value = obj[key];
+        if (Array.isArray(value)) {
+          return value as RawGhlMessage[];
+        }
+      }
+    }
+  }
+  return [];
 }
 
 function extractText(message: Message): string {
