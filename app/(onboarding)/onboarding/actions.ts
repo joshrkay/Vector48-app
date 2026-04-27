@@ -3,16 +3,24 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { track } from "@/lib/analytics/posthog";
 
-// Maps WizardShell currentStep (0 = Welcome) to DB columns that step updates
+// Maps step index to the DB columns that step updates
+// Step 0: WelcomeStep      — no data
+// Step 1: BusinessNameStep — business_name
+// Step 2: PhoneStep        — phone
+// Step 3: VerticalStep     — vertical
+// Step 4: BusinessHoursStep— business_hours
+// Step 5: VoiceAIStep      — voice_gender, greeting_text
+// Step 6: NotificationsStep— notification_contact_name, notification_contact_phone
+// Step 7: ActivateRecipeStep — handled in completeOnboarding
 const STEP_COLUMN_MAP: Record<number, string[]> = {
-  0: [], // Welcome — no account fields
+  0: [],
   1: ["business_name"],
   2: ["phone"],
   3: ["vertical"],
-  4: ["business_hours"], // JSON built in step === 4 branch below
+  4: ["business_hours"],
   5: ["voice_gender", "greeting_text"],
   6: ["notification_contact_name", "notification_contact_phone"],
-  7: [], // Activate recipe — completeOnboarding handles finish
+  7: [],
 };
 
 // Maps camelCase form field names to snake_case DB columns
@@ -23,7 +31,6 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   businessHours: "business_hours",
   preset: "business_hours",
   voiceGender: "voice_gender",
-  voiceGreeting: "greeting_text",
   greetingText: "greeting_text",
   notificationContact: "notification_contact_name",
   notificationContactPhone: "notification_contact_phone",
@@ -75,7 +82,6 @@ export async function saveOnboardingStep(
         update[column] = value;
       }
     }
-
   }
 
   const { error } = await supabase
@@ -84,6 +90,7 @@ export async function saveOnboardingStep(
     .eq("id", accountId);
 
   if (error) {
+    console.error("[onboarding] failed to persist step", error.message);
     return { error: error.message };
   }
 
@@ -115,6 +122,7 @@ export async function completeOnboarding(
   const { error: updateError } = await supabase
     .from("accounts")
     .update({
+      onboarding_completed_at: new Date().toISOString(),
       onboarding_step: 8,
       activate_recipe_1: activateRecipe,
       onboarding_completed_at: completedAt,
