@@ -94,6 +94,7 @@ export function ActivationSheet({
   } | null>(null);
 
   const Icon = getRecipeLucideIcon(recipe.icon);
+  const isGated = recipe.activationState === "gated";
 
   const { prefilledCount, totalFields } = useMemo(() => {
     let n = 0;
@@ -149,6 +150,12 @@ export function ActivationSheet({
   };
 
   const onConfigSubmit = async (config: Record<string, unknown>) => {
+    if (isGated) {
+      setPhase("error");
+      setErrorMessage(recipe.gateReason ?? "This recipe is not available yet.");
+      return;
+    }
+
     setErrorMessage(null);
     setPlanMessage(null);
     setPhase("loading");
@@ -216,6 +223,15 @@ export function ActivationSheet({
               {descriptionText}
             </p>
           </div>
+
+          {isGated && (
+            <div
+              className="rounded-lg border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700"
+              role="status"
+            >
+              {recipe.gateReason ?? "This recipe is not available for activation yet."}
+            </div>
+          )}
 
           {phase === "plan_limit" && planMessage && (
             <div
@@ -309,7 +325,8 @@ export function ActivationSheet({
             disabled={
               phase === "loading" ||
               missingIntegrations.length > 0 ||
-              phase === "plan_limit"
+              phase === "plan_limit" ||
+              isGated
             }
             className="bg-[var(--v48-accent)] text-white hover:opacity-90"
           >
@@ -318,6 +335,8 @@ export function ActivationSheet({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Setting up…
               </>
+            ) : isGated ? (
+              "Unavailable"
             ) : (
               "Activate Recipe"
             )}

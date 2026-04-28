@@ -1,5 +1,7 @@
 import type { RecipeDefinition } from "@/types/recipes";
 import type { RecipeActivationRow, RecipeWithStatus, Vertical } from "./types";
+import { getRecipeEngine } from "./engineRegistry";
+import { getRecipeActivationState, getRecipeGateReason } from "./activationStateRegistry";
 
 /**
  * Merge the static recipe catalog with the customer's activation rows.
@@ -44,6 +46,9 @@ export function mergeRecipesWithActivations(
     return {
       ...entry,
       status,
+      engine: getRecipeEngine(entry.slug),
+      activationState: getRecipeActivationState(entry.slug) ?? "gated",
+      gateReason: getRecipeGateReason(entry.slug),
       lastTriggeredAt: activation?.last_triggered_at ?? null,
       activationId: activation?.id ?? null,
       config: activation?.config ?? null,

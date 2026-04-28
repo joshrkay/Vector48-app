@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { STAGE_STYLES } from "@/lib/recipes/stages";
-import type { RecipeWithStatus } from "@/lib/recipes/types";
 import type { AccountProfileSlice } from "@/lib/recipes/activationValidator";
+import type { RecipeStatus, RecipeWithStatus } from "@/lib/recipes/types";
+import { Button } from "@/components/ui/button";
 import { RecipeStageTag } from "./RecipeStageTag";
 import { ActivationSheet } from "./ActivationSheet";
 import { getRecipeLucideIcon } from "./recipeIcons";
-import { Button } from "@/components/ui/button";
-import { Clock } from "lucide-react";
-import type { RecipeStatus } from "@/lib/recipes/types";
 
 const STATUS_LABELS: Record<RecipeStatus, string> = {
   active: "Active",
@@ -19,6 +18,18 @@ const STATUS_LABELS: Record<RecipeStatus, string> = {
   error: "Error",
   available: "Available",
   coming_soon: "Coming Soon",
+};
+
+const ENGINE_LABELS: Record<RecipeWithStatus["engine"], string> = {
+  "agent-sdk": "Agent SDK",
+  n8n: "n8n",
+  "ghl-native": "GHL Native",
+};
+
+const ACTIVATION_STATE_LABELS: Record<RecipeWithStatus["activationState"], string> = {
+  fully_launchable: "Launchable",
+  gated: "Gated",
+  legacy_engine_only: "Legacy Engine",
 };
 
 function formatLastTriggered(iso: string): string {
@@ -62,6 +73,7 @@ export function RecipeCard({
   const isPaused = recipe.status === "paused";
   const isError = recipe.status === "error";
   const isComingSoon = recipe.status === "coming_soon";
+  const isGated = recipe.activationState === "gated";
 
   return (
     <>
@@ -72,7 +84,7 @@ export function RecipeCard({
           isActive && "border-t-4 border-t-[var(--v48-accent)]",
           isPaused && "border-t-4 border-t-amber-400",
           isError && "border-t-4 border-t-red-400",
-          isComingSoon && "opacity-50",
+          (isComingSoon || isGated) && "opacity-70",
         )}
       >
         <div className="flex flex-1 flex-col p-5">
@@ -114,9 +126,19 @@ export function RecipeCard({
             {recipe.description}
           </p>
 
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap gap-2">
             <RecipeStageTag stage={recipe.funnelStage} />
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+              {ENGINE_LABELS[recipe.engine]}
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+              {ACTIVATION_STATE_LABELS[recipe.activationState]}
+            </span>
           </div>
+
+          {isGated && recipe.gateReason && (
+            <p className="mt-2 text-xs text-[var(--text-secondary)]">{recipe.gateReason}</p>
+          )}
 
           {isActive && recipe.lastTriggeredAt && (
             <div className="mt-2 flex items-center gap-1 text-xs text-[var(--text-secondary)]">
@@ -148,13 +170,23 @@ export function RecipeCard({
                 Retry setup
               </Button>
             )}
-            {recipe.status === "available" && (
+            {recipe.status === "available" && !isGated && (
               <Button
                 size="sm"
                 className="w-full bg-[var(--v48-accent)] text-white hover:opacity-90"
                 onClick={() => setActivateOpen(true)}
               >
                 Activate
+              </Button>
+            )}
+            {recipe.status === "available" && isGated && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full cursor-not-allowed text-[var(--text-secondary)]"
+                disabled
+              >
+                Unavailable
               </Button>
             )}
             {isComingSoon && (
