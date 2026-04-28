@@ -11,6 +11,7 @@ import { AGENT_SDK_RECIPE_SLUGS } from "@/lib/recipes/runner/archetypes";
 import { seedAgentFromArchetype } from "@/lib/recipes/runner/seedAgent";
 import { createServerClient } from "@/lib/supabase/server";
 import { track } from "@/lib/analytics/posthog";
+import { getRecipeGateReason, isRecipeGated } from "@/lib/recipes/activationStateRegistry";
 
 const bodySchema = z.object({
   recipeSlug: z.string().min(1),
@@ -39,6 +40,16 @@ export async function POST(request: Request) {
   const recipe = getRecipeDefinitionOrThrow(parsed.data.recipeSlug);
   if (!recipe) {
     return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
+  }
+
+  if (isRecipeGated(recipe.slug)) {
+    return NextResponse.json(
+      {
+        error: getRecipeGateReason(recipe.slug) ?? "This recipe is not activatable yet.",
+        code: "RECIPE_GATED",
+      },
+      { status: 409 },
+    );
   }
 
   const validation = await validateActivationRequest(
