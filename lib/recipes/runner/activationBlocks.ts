@@ -7,38 +7,9 @@ export interface AgentSdkActivationBlockPolicy {
   action: string;
 }
 
-const BLOCKED_POLICIES: Partial<Record<string, AgentSdkActivationBlockPolicy>> = {
-  "google-review-booster": {
-    status: 409,
-    code: "RECIPE_NOT_LAUNCH_READY",
-    message:
-      "Google Review Booster is not launch-ready in the Agent SDK runner yet.",
-    action:
-      "Activate Review Request instead for now, or contact support to join the beta.",
-  },
-  "new-lead-instant-response": {
-    status: 409,
-    code: "RECIPE_NOT_LAUNCH_READY",
-    message:
-      "New Lead Instant Response is not launch-ready in the Agent SDK runner yet.",
-    action:
-      "Use Missed Call Text-Back today, or contact support to request early access.",
-  },
-  "post-job-upsell": {
-    status: 409,
-    code: "RECIPE_NOT_LAUNCH_READY",
-    message: "Post-Job Upsell is not launch-ready in the Agent SDK runner yet.",
-    action:
-      "Activate Estimate Follow-Up for now, or contact support to be notified when this launches.",
-  },
-  "tech-on-the-way": {
-    status: 409,
-    code: "RECIPE_NOT_LAUNCH_READY",
-    message: "Tech On The Way is not launch-ready in the Agent SDK runner yet.",
-    action:
-      "Activate Appointment Reminder for now, or contact support for a launch timeline.",
-  },
-};
+// Keep this map explicit. Add entries only when a launch-enabled Agent SDK
+// slug intentionally ships without an archetype and should be blocked.
+const BLOCKED_POLICIES: Partial<Record<string, AgentSdkActivationBlockPolicy>> = {};
 
 export const BLOCKED_AGENT_SDK_ACTIVATION_POLICIES = Object.fromEntries(
   Object.entries(BLOCKED_POLICIES).filter(([slug]) =>
