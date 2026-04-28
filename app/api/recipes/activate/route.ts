@@ -7,6 +7,10 @@ import {
   getRecipeDefinitionOrThrow,
   validateActivationRequest,
 } from "@/lib/recipes/activationValidator";
+import { getRecipeEngine } from "@/lib/recipes/engineRegistry";
+import {
+  getAgentSdkActivationBlockPolicy,
+} from "@/lib/recipes/runner/activationBlocks";
 import { AGENT_SDK_RECIPE_SLUGS } from "@/lib/recipes/runner/archetypes";
 import { seedAgentFromArchetype } from "@/lib/recipes/runner/seedAgent";
 import { createServerClient } from "@/lib/supabase/server";
@@ -39,6 +43,32 @@ export async function POST(request: Request) {
   const recipe = getRecipeDefinitionOrThrow(parsed.data.recipeSlug);
   if (!recipe) {
     return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
+  }
+
+  if (getRecipeEngine(recipe.slug) === "agent-sdk") {
+    const hasArchetype = AGENT_SDK_RECIPE_SLUGS.includes(recipe.slug);
+    if (!hasArchetype) {
+      const block = getAgentSdkActivationBlockPolicy(recipe.slug);
+      if (block) {
+        return NextResponse.json(
+          {
+            error: block.message,
+            code: block.code,
+            action: block.action,
+          },
+          { status: block.status },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: "This recipe is not launch-ready yet.",
+          code: "RECIPE_NOT_LAUNCH_READY",
+          action: "Please contact support to request access.",
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const validation = await validateActivationRequest(
