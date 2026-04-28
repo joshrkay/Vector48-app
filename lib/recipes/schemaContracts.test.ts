@@ -61,3 +61,13 @@ test("migration assertions enforce recipe contracts", () => {
   assert.match(sql, /SELECT assert_column_type\('recipe_triggers', 'status', 'recipe_trigger_status', 'NO'\);/);
   assert.match(sql, /SELECT assert_column_type\('recipe_triggers', 'payload', 'jsonb', 'YES'\);/);
 });
+
+test("retry policy migration defines due-trigger selector function", () => {
+  const migrationPath = path.join(REPO_ROOT, "supabase/migrations/017_recipe_trigger_retry_policy.sql");
+  const sql = fs.readFileSync(migrationPath, "utf8");
+
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS max_attempts integer;/);
+  assert.match(sql, /CHECK \(max_attempts >= 1\);/);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.get_due_recipe_triggers/);
+  assert.match(sql, /AND rt\.attempt_count < rt\.max_attempts/);
+});

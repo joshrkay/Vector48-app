@@ -15,7 +15,6 @@ export const maxDuration = 60;
 
 const BATCH_LIMIT = 50;
 const DEFAULT_MAX_ATTEMPTS = 3;
-const LIST_LIMIT = BATCH_LIMIT * 4;
 
 type DueTriggerRow = {
   id: string;
@@ -29,13 +28,21 @@ type DueTriggerRow = {
 async function listDueTriggers(nowIso: string): Promise<{ rows: DueTriggerRow[]; error: string | null }> {
   const supabase = getSupabaseAdmin();
 
+  const rpc = await supabase.rpc("get_due_recipe_triggers", {
+    p_now: nowIso,
+    p_limit: BATCH_LIMIT,
+  });
+  if (!rpc.error) {
+    return { rows: (rpc.data ?? []) as DueTriggerRow[], error: null };
+  }
+
   const canonical = await supabase
     .from("recipe_triggers")
     .select("id, account_id, recipe_slug, payload, attempt_count, max_attempts")
     .eq("status", RECIPE_TRIGGER_CANONICAL_PENDING_STATUS)
     .lte("fire_at", nowIso)
     .order("fire_at", { ascending: true })
-    .limit(LIST_LIMIT);
+    .limit(BATCH_LIMIT);
 
   if (!canonical.error) {
     const rows = ((canonical.data ?? []) as DueTriggerRow[])
