@@ -32,6 +32,7 @@ test("canonical contract columns remain stable", () => {
     "fire_at",
     "payload",
     "attempt_count",
+    "max_attempts",
     "last_error",
     "processed_at",
     "created_at",
@@ -49,6 +50,7 @@ test("supabase types include canonical recipe columns", () => {
   assert.match(types, /recipe_triggers:[\s\S]*recipe_slug: string;/);
   assert.match(types, /recipe_triggers:[\s\S]*status: "queued" \| "processing" \| "completed" \| "failed" \| "cancelled"/);
   assert.match(types, /recipe_triggers:[\s\S]*payload: Record<string, unknown> \| null;/);
+  assert.match(types, /recipe_triggers:[\s\S]*max_attempts: number;/);
 });
 
 test("migration assertions enforce recipe contracts", () => {
@@ -58,4 +60,14 @@ test("migration assertions enforce recipe contracts", () => {
   assert.match(sql, /SELECT assert_column_type\('recipe_activations', 'recipe_slug', 'text', 'NO'\);/);
   assert.match(sql, /SELECT assert_column_type\('recipe_triggers', 'status', 'recipe_trigger_status', 'NO'\);/);
   assert.match(sql, /SELECT assert_column_type\('recipe_triggers', 'payload', 'jsonb', 'YES'\);/);
+});
+
+test("retry policy migration defines due-trigger selector function", () => {
+  const migrationPath = path.join(REPO_ROOT, "supabase/migrations/017_recipe_trigger_retry_policy.sql");
+  const sql = fs.readFileSync(migrationPath, "utf8");
+
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS max_attempts integer;/);
+  assert.match(sql, /CHECK \(max_attempts >= 1\);/);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.get_due_recipe_triggers/);
+  assert.match(sql, /AND rt\.attempt_count < rt\.max_attempts/);
 });

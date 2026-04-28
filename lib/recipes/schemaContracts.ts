@@ -19,6 +19,7 @@ export const RECIPE_TRIGGERS_CANONICAL_COLUMNS = [
   "fire_at",
   "payload",
   "attempt_count",
+  "max_attempts",
   "last_error",
   "processed_at",
   "created_at",

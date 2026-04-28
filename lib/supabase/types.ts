@@ -250,6 +250,7 @@ export type Database = {
           status: "queued" | "processing" | "completed" | "failed" | "cancelled";
           payload: Record<string, unknown> | null;
           attempt_count: number;
+          max_attempts: number;
           last_error: string | null;
           processed_at: string | null;
           created_at: string;
@@ -268,6 +269,7 @@ export type Database = {
           status?: "queued" | "processing" | "completed" | "failed" | "cancelled";
           payload?: Record<string, unknown> | null;
           attempt_count?: number;
+          max_attempts?: number;
           last_error?: string | null;
           processed_at?: string | null;
           created_at?: string;
