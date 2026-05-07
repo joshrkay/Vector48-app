@@ -1,0 +1,31 @@
+name: Notify Paperclip on Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  notify:
+    name: Notify Paperclip Webhook
+    runs-on: ubuntu-latest
+    needs: []
+    # Only run after CI passes — use workflow_run trigger if needed,
+    # or rely on branch protection requiring ci.yml to pass first.
+    steps:
+      - name: Fire Paperclip deployment webhook
+        env:
+          PAPERCLIP_WEBHOOK_SECRET: ${{ secrets.PAPERCLIP_WEBHOOK_SECRET }}
+          PAPERCLIP_WEBHOOK_URL: ${{ secrets.PAPERCLIP_WEBHOOK_URL }}
+        run: |
+          if [ -z "$PAPERCLIP_WEBHOOK_URL" ]; then
+            echo "PAPERCLIP_WEBHOOK_URL secret not set — skipping Paperclip notification"
+            exit 0
+          fi
+          curl -f -X POST \
+            -H "Authorization: Bearer ${PAPERCLIP_WEBHOOK_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d "{\"ref\": \"${GITHUB_SHA}\", \"actor\": \"${GITHUB_ACTOR}\", \"repo\": \"${GITHUB_REPOSITORY}\"}" \
+            "${PAPERCLIP_WEBHOOK_URL}" \
+          && echo "Paperclip notified successfully" \
+          || echo "Paperclip notification failed (non-blocking)"
